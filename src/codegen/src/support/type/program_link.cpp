@@ -344,6 +344,18 @@ LinkedName LinkBuilder::defaultBinding(CompilationUnit& unit,
         }
         return missName("the default export has no value cp3 can use");
     }
+    if (ed.defaultExpr != nullptr && ed.defaultExpr->kind == NodeKind::ObjectLiteral) {
+        // The object literal is lowered to a stable module-scope binding of the
+        // unit's own namespace (emit/decl.cpp emitExport), reachable from any TU
+        // that imports it.
+        if (const SemaResult* sema = semaOf(unit.id)) {
+            LinkedName out;
+            out.cpp = qualified(unit.id, "__cp3_default_export");
+            if (const Type* t = sema->typeOf(ed.defaultExpr->nodeId)) out.type = *t;
+            return out;
+        }
+        return missName("the default export has no value cp3 can use");
+    }
     if (ed.defaultExpr != nullptr && ed.defaultExpr->kind == NodeKind::Identifier) {
         const std::string& name =
             static_cast<const Identifier&>(*ed.defaultExpr).name;

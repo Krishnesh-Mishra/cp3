@@ -191,13 +191,34 @@ void Generator::emitExport(const ExportDeclaration& ed, std::string& decls,
     if (ed.defaultExpr) {
         // A whole-program build: an identifier default export is exactly the
         // named binding the link table already exposes under its qualified
-        // C++ name. An anonymous value (arrow/object literal) has no C++ name
-        // to bind either; a use reports the link miss, so the declaration
-        // itself stays quiet.
+        // C++ name. An object literal default export is lowered here to a
+        // stable module-scope binding so importers can reach it through the
+        // link table (detail/program_link.cpp `__cp3_default_export`); the
+        // shape struct is spellable in every TU that uses it, so the
+        // importer can call its function members the same way. An arrow
+        // literal default has no stable storage to bind; a use reports the
+        // link miss, so the declaration itself stays quiet.
         if (programMode_) {
             const NodeKind kind = ed.defaultExpr->kind;
-            if (kind == NodeKind::Identifier || kind == NodeKind::ArrowFunction ||
-                kind == NodeKind::ObjectLiteral) {
+            if (kind == NodeKind::Identifier || kind == NodeKind::ArrowFunction) {
+                return;
+            }
+            if (kind == NodeKind::ObjectLiteral) {
+                const std::string rawName = "__cp3_default_export";
+                const std::string name = mapIdent(rawName);
+                const Type initType = effectiveType(*ed.defaultExpr);
+                const CppInfo ci = classify(initType);
+                if (ci.shape == Shape::Object) {
+                    const std::optional<Type> savedExpected = expected_;
+                    expected_ = ci.type;
+                    const std::string initText = expr(*ed.defaultExpr);
+                    expected_ = savedExpected;
+                    if (scaleMode_) line(decls, 1, "thread_local " + ci.cpp + " " + name + "{};");
+                    else line(decls, 1, ci.cpp + " " + name + "{};");
+                    line(mainBody, 1, moduleRef(rawName) + " = " + initText + ";");
+                    declare(rawName, std::optional<Type>(initType),
+                            /*cell=*/false, /*global=*/true);
+                }
                 return;
             }
         }
