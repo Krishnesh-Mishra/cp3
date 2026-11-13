@@ -30,6 +30,7 @@ set(cp3_cli_sources
     src/toolchain/probe/toolchain_wizard.cpp
     src/toolchain/toolchain/toolchain_install.cpp
     src/toolchain/runtime/diagnostics.cpp
+    src/toolchain/runtime/interface_hash.cpp
     src/toolchain/runtime/pipeline.cpp
     src/commands/run/common.cpp
     src/commands/run/arguments.cpp
