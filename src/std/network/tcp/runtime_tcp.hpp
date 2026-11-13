@@ -20,6 +20,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -168,13 +169,34 @@ struct TcpServerImpl {
     void emitError(const std::string& code, const std::string& message);
     void emitError(const std::string& message);
     /// Removes a retired socket from live/handles (called by finishSocket's
-    /// close path through tcpServerForget below).
-    void forget(TcpSocketImpl* raw);
+    /// close path through tcpServerForget below). Inline so the socket TU
+    /// always links it.
+    inline void forget(TcpSocketImpl* raw) {
+        live.erase(raw);
+        handles.erase(raw);
+    }
 };
 
+/// Shared registry of accepted impls -> owning server, so finishSocket's
+/// close path can forget the entry without the socket knowing its server.
+/// Same-loop only, like everything else in this module, so a plain map is
+/// safe (no locking). Inline and header-resident so the socket TU always
+/// links tcpServerForget, even when the server TU is not selected.
+inline std::unordered_map<TcpSocketImpl*, std::shared_ptr<TcpServerImpl>>&
+serverSocketRegistry() {
+    static std::unordered_map<TcpSocketImpl*, std::shared_ptr<TcpServerImpl>> map;
+    return map;
+}
+
 /// Drops `impl` from its owning server's live set (no-op for client sockets,
-/// which have no server). Defined in runtime_tcp_server.cpp.
-void tcpServerForget(TcpSocketImpl* raw);
+/// which have no server). Inline so a pure-client program always links.
+inline void tcpServerForget(TcpSocketImpl* raw) {
+    auto& map = serverSocketRegistry();
+    const auto it = map.find(raw);
+    if (it == map.end()) return;
+    it->second->forget(raw);
+    map.erase(it);
+}
 /// uv_listen connection callback for every REUSEPORT listener.
 void tcpServerAccept(uv_stream_t* listener, int status);
 

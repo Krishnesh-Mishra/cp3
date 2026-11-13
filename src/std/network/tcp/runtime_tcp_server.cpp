@@ -29,14 +29,10 @@
 namespace cp3::runtime::network::tcp::detail {
 namespace {
 
-// impl -> owning server, so finishSocket's close path can forget the entry
-// without the socket knowing its server. Same-loop only, like everything
-// else in this module, so a plain map is safe (no locking).
-std::unordered_map<TcpSocketImpl*, std::shared_ptr<TcpServerImpl>>& serverOf() {
-    static std::unordered_map<TcpSocketImpl*, std::shared_ptr<TcpServerImpl>> map;
-    return map;
-}
-
+// serverSocketRegistry() (runtime_tcp.hpp) is the shared live registry; it
+// also serves the socket TU's close path. serverOfHandle maps the listener
+// handle's data pointer back to the owning server. Same-loop only, like
+// everything else in this module, so a plain map is safe (no locking).
 std::shared_ptr<TcpServerImpl> serverOfHandle(const uv_handle_t* handle) {
     auto* holder = static_cast<std::shared_ptr<TcpServerImpl>*>(handle->data);
     return holder == nullptr ? nullptr : *holder;
@@ -73,7 +69,7 @@ void tcpServerAccept(uv_stream_t* listener, int /*status*/) {
     }
     impl->connected = true;
     refreshAddresses(*impl);
-    serverOf()[impl.get()] = server;
+    serverSocketRegistry()[impl.get()] = server;
     server->live.insert(impl.get());
     TcpSocket socket = TcpSocket::adopt(impl);
     TcpSocket& stored = *server->handles.emplace(impl.get(), std::make_unique<TcpSocket>(socket))
@@ -93,19 +89,6 @@ void TcpServerImpl::emitError(const std::string& code, const std::string& messag
 }
 
 void TcpServerImpl::emitError(const std::string& message) { emitError("", message); }
-
-void TcpServerImpl::forget(TcpSocketImpl* raw) {
-    live.erase(raw);
-    handles.erase(raw);
-}
-
-void tcpServerForget(TcpSocketImpl* raw) {
-    auto& map = serverOf();
-    const auto it = map.find(raw);
-    if (it == map.end()) return;
-    it->second->forget(raw);
-    map.erase(it);
-}
 
 }  // namespace cp3::runtime::network::tcp::detail
 
