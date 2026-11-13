@@ -15,6 +15,7 @@
 #include "cp3/cli.hpp"
 
 #include <cstdio>
+#include <filesystem>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -29,6 +30,8 @@
 #include "detail/toolchain/toolchain.hpp"
 #include "detail/pkg/update_banner.hpp"
 #include "detail/core/util.hpp"
+
+namespace fs = std::filesystem;
 
 namespace cp3 {
 namespace {
@@ -120,6 +123,17 @@ void printUsage(std::FILE* out) {
         "Exit codes:\n"
         "  0 success   1 compile error   2 usage error\n",
         out);
+}
+
+// The no-entry hint shared by run/build/check/dev/warm when no file is given
+// and no default can be found (no src/index.cp3 and no package.json main).
+void missingEntryHint(const char* command) {
+    std::error_code ec;
+    const fs::path cwd = fs::current_path(ec);
+    std::fprintf(stderr,
+                 "cp3c: no package.json found in '%s'; either give a file "
+                 "path for '%s', or run 'cp3 init' to initialise the project\n",
+                 cwd.string().c_str(), command);
 }
 
 bool startsWithDash(std::string_view s) { return !s.empty() && s[0] == '-'; }
@@ -278,22 +292,20 @@ int dispatchCommand(const std::string& command, cp3::cli::CliOptions& opt) {
 int dispatchBuiltin(const std::string& command, cp3::cli::CliOptions& opt) {
     if (command == "check") {
         if (opt.file.empty()) {
-            std::fprintf(stderr, "cp3c: check needs a .cp3 file\n");
-            printUsage(stderr);
-            return cp3::kExitUsageError;
+            opt.file = cp3::cli::defaultEntryFile();
+            if (opt.file.empty()) {
+                missingEntryHint("check");
+                return cp3::kExitUsageError;
+            }
         }
         return cp3::cli::cmdCheck(opt);
     }
 
     if (command == "run" || command == "build" || command == "warm") {
         if (opt.file.empty()) {
-            if (command == "build" || command == "warm") {
-                opt.file = cp3::cli::defaultEntryFile();
-            }
+            opt.file = cp3::cli::defaultEntryFile();
             if (opt.file.empty()) {
-                std::fprintf(stderr, "cp3c: %s needs a .cp3 file\n",
-                             command.c_str());
-                printUsage(stderr);
+                missingEntryHint(command.c_str());
                 return cp3::kExitUsageError;
             }
         }
@@ -312,6 +324,10 @@ int dispatchBuiltin(const std::string& command, cp3::cli::CliOptions& opt) {
     if (command == "dev") {
         if (opt.file.empty()) {
             opt.file = cp3::cli::defaultEntryFile();
+            if (opt.file.empty()) {
+                missingEntryHint("dev");
+                return cp3::kExitUsageError;
+            }
         }
         return cp3::cli::cmdDev(opt);
     }

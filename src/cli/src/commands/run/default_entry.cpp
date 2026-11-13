@@ -1,11 +1,12 @@
 // =============================================================================
-// src/cli/src/commands/default_entry.cpp - default entry lookup for `build`.
+// src/cli/src/commands/default_entry.cpp - default entry lookup for the
+// no-argument commands.
 //
 // OWNERSHIP: cli module (src/cli/**). Implements cp3::cli::defaultEntryFile.
 //
 // Split out of cli.cpp to keep the command dispatcher within the STYLE.md
-// source-file budget. Behaviour is unchanged: package.json "main" first, then
-// the conventional entry file names.
+// source-file budget. Search order: src/index.cp3, then package.json "main",
+// then the conventional entry names from previous releases.
 // =============================================================================
 #include <string>
 #include <system_error>
@@ -51,6 +52,12 @@ std::string extractJsonString(const std::string& json, const std::string& key) {
 std::string defaultEntryFile() {
     std::error_code ec;
     const fs::path cwd = fs::current_path(ec);
+
+    // The project convention entries win over the inferred manifest main:
+    // a bare `cp3 run/build/dev/check/warm` in a project directory reads
+    // src/index.cp3 first when that is the layout the user chose.
+    const fs::path conventional = cwd / "src/index.cp3";
+    if (fs::exists(conventional, ec)) return conventional.string();
 
     std::string pkg;
     if (readTextFile(cwd / "package.json", pkg)) {
