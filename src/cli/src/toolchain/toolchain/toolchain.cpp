@@ -141,12 +141,19 @@ std::vector<std::string> compileArgs(const Toolchain& tc, BuildProfile profile,
 // The object list in an argv is bounded by the platform's process-creation
 // command-line limit (_spawnv: 32767 on Windows). When the program is a large
 // module graph, hand the linker a response file (`@file`) instead; GNU ld,
-// lld and MSVC's link all read them.
+// lld and MSVC's link all read them. Backslashes are not safe inside a
+// response file: the LLVM command-line tokenizer eats them as escape
+// characters, so paths are written with forward slashes, which every
+// consumer on Windows accepts.
 bool writeObjectsResponseFile(const std::vector<fs::path>& objects,
                               const fs::path& path) {
     std::string text;
     for (const fs::path& obj : objects) {
-        text += obj.string();
+        std::string line = obj.string();
+        for (char& c : line) {
+            if (c == '\\') c = '/';
+        }
+        text += line;
         text += '\n';
     }
     return writeTextFile(path, text, nullptr);
