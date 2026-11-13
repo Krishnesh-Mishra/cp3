@@ -1,12 +1,15 @@
 import console from "std/console";
 import { createTcpServer, connectTcp } from "std/network";
 const server = createTcpServer();
+function buildTail(s: string): string {
+  return s + "!";
+}
 server.on("connection", (socket) => {
   socket.on("data", (chunk) => {
-    if (typeof chunk === "string" && chunk.length === 4) {
-      socket.write("guarded");
+    if (typeof chunk === "string") {
+      socket.write(buildTail(chunk));
     } else {
-      socket.write("unguarded");
+      socket.write("not-string");
     }
   });
 });

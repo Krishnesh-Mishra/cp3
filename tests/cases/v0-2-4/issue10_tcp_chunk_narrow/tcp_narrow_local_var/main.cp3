@@ -3,8 +3,11 @@ import { createTcpServer, connectTcp } from "std/network";
 const server = createTcpServer();
 server.on("connection", (socket) => {
   socket.on("data", (chunk) => {
-    const len = typeof chunk === "string" ? chunk.length : 0;
-    socket.write(`v:${len}`);
+    let tag = "unknown";
+    if (typeof chunk === "string") {
+      tag = "stringish";
+    }
+    socket.write(tag);
   });
 });
 server.listen(48254);

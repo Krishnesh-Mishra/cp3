@@ -1,5 +1,5 @@
 {
   "mode": "run",
-  "stdout": "guarded\n",
+  "stdout": "ping!\n",
   "exitCode": 0
 }

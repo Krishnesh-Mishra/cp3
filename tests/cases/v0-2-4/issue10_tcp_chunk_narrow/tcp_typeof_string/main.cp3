@@ -3,7 +3,6 @@ import { createTcpServer, connectTcp } from "std/network";
 const server = createTcpServer();
 server.on("connection", (socket) => {
   socket.on("data", (chunk) => {
-    console.log(`s:${typeof chunk === "string"}`);
     socket.write("echo:ping");
   });
 });
