@@ -141,6 +141,7 @@ TypePtr ParserImpl::parsePrimaryType() {
         auto lit = std::make_unique<LiteralType>(t.span);
         lit->literalKind = LiteralTypeKind::Number;
         lit->numberValue = t.numberValue;
+        lit->numberRaw = std::string(textOf(t));
         return lit;
     }
     if (check(TokenKind::KwTrue) || check(TokenKind::KwFalse)) {

@@ -1192,7 +1192,7 @@ Type Analyzer::resolveLiteralType(LiteralType& lt) {
         case LiteralTypeKind::String:
             return Type::stringLiteral(lt.stringValue);
         case LiteralTypeKind::Number:
-            return Type::numberLiteral(lt.numberValue);
+            return Type::numberLiteral(lt.numberValue, lt.numberRaw);
         case LiteralTypeKind::Bool:
             return Type::boolLiteral(lt.boolValue);
     }

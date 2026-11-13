@@ -1,3 +1,4 @@
+import console from "std/console";
 type T = "a" | "b";
 function f(x: T): string { return x; }
 console.log(f("a"));

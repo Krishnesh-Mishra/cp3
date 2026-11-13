@@ -201,7 +201,30 @@ Type Type::literalBaseType() const {
     }
 }
 
+// Number literals compare as exact integers when both spellings parse
+// (`2` vs `0x2` vs `1_0` reduce to one integer), falling back to the
+// double value otherwise (`2` vs `2.0` vs `1e0`). The exact-integer
+// comparison keeps distinct 64-bit twins (18446744073709551615 vs
+// 18446744073709551614) from collapsing, unlike a bare double compare.
+bool numberLiteralEquals(const Type& a, const Type& b) {
+    bool aNeg = false;
+    bool bNeg = false;
+    unsigned long long aMag = 0;
+    unsigned long long bMag = 0;
+    const bool aExact = parseExactIntegerLiteral(a.numberRaw, aNeg, aMag);
+    const bool bExact = parseExactIntegerLiteral(b.numberRaw, bNeg, bMag);
+    if (aExact && bExact) {
+        return aNeg == bNeg && aMag == bMag;
+    }
+    return a.numberValue == b.numberValue;
+}
+
 bool operator==(const Type& a, const Type& b) noexcept {
+    if (a.kind == TypeKind::Literal && b.kind == TypeKind::Literal &&
+        a.literalBase == TypeKind::Number && b.literalBase == TypeKind::Number) {
+        return a.parts == b.parts && a.name == b.name && a.kind == b.kind &&
+               numberLiteralEquals(a, b);
+    }
     return a.kind == b.kind && a.parts == b.parts && a.name == b.name &&
            a.literalBase == b.literalBase && a.numberValue == b.numberValue &&
            // The exact source spelling distinguishes two 64-bit literals

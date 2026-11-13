@@ -1,3 +1,4 @@
+import console from "std/console";
 type U = 1 | 2 | 3;
 const u: U = 2;
 console.log(u);

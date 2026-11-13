@@ -926,6 +926,7 @@ struct LiteralType : TypeNode {
     LiteralTypeKind literalKind = LiteralTypeKind::String;
     std::string stringValue;
     double numberValue = 0.0;
+    std::string numberRaw;  // the source spelling of a numeric literal (e.g. "0x2A", "1_000")
     bool boolValue = false;
     explicit LiteralType(SourceSpan s) : TypeNode(NodeKind::LiteralType, std::move(s)) {}
 };

@@ -1,3 +1,4 @@
+import console from "std/console";
 type U = 1 | 2;
 let u: U = 1;
 u = 2;

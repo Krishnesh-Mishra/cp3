@@ -1,3 +1,4 @@
+import console from "std/console";
 type B = false | true;
 function f(x: B): boolean { return x; }
 console.log(f(true));

@@ -1,3 +1,4 @@
+import console from "std/console";
 type U = 1 | 2;
 function f(x: U): number { return x; }
 console.log(f(2));
