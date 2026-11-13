@@ -31,9 +31,13 @@
 #include "detail/core/commands.hpp"
 #include "detail/core/diagnostics.hpp"
 #include "detail/pkg/package_json.hpp"
+#include "detail/toolchain/incremental.hpp"
 #include "detail/toolchain/pipeline.hpp"
+#include "detail/toolchain/toolchain.hpp"
 #include "detail/core/util.hpp"
 #include "detail/core/worker_module.hpp"
+
+#include <cstdlib>
 
 namespace cp3::cli {
 
@@ -61,6 +65,62 @@ struct FrontendResult {
     bool program = false;
     int exitCode = kExitSuccess;
 };
+
+#if defined(_WIN32)
+void setProcessEnv(const char* name, const char* value) { _putenv_s(name, value); }
+#else
+void setProcessEnv(const char* name, const char* value) {
+    if (value != nullptr && *value != '\0') setenv(name, value, 1);
+    else unsetenv(name);
+}
+#endif
+
+// v0.2.5 Phase 2: before the plural codegen of an Incremental build, prune
+// the per-unit fragment cache to the records whose key still matches and
+// pin the cache file into the process environment; the codegen assembly
+// reads it exactly once and reuses byte-identical fragments for unchanged
+// units. Returns true when the cache was pinned (the caller clears it
+// after codegen). Any failure disables reuse for this build only.
+bool pinIncrementalFragmentCache(const FrontendResult& frontend,
+                                 const fs::path& entryPath) {
+    const bool debug = std::getenv("CP3_INCREMENTAL_DEBUG") != nullptr;
+    std::string compilerKey;
+    try {
+        compilerKey = toolchainCacheKey(detectToolchain());
+    } catch (...) {
+        if (debug) std::fprintf(stderr, "incremental: detectToolchain threw\n");
+        return false;
+    }
+    if (compilerKey.empty()) {
+        if (debug) std::fprintf(stderr, "incremental: empty compiler key\n");
+        return false;
+    }
+    const fs::path projectRoot = findProjectRoot(entryPath);
+    const fs::path cacheDir = projectRoot / ".cp3" / "cache";
+    std::error_code ec;
+    fs::create_directories(cacheDir, ec);
+    const fs::path cachePath = cacheDir / kIncrementalCacheFile;
+    const auto ihOf = interfaceHashesForProgram(*frontend.graph, frontend.sema,
+                                                frontend.unitSemas);
+    const int kept = prepareIncrementalReuse(cachePath, *frontend.graph,
+                                             compilerKey, "incremental", ihOf);
+    if (debug) {
+        std::fprintf(stderr,
+                     "incremental: %zu units, %d kept, compilerKey %s\n",
+                     frontend.graph->units().size(), kept,
+                     compilerKey.c_str());
+    }
+    if (kept < 0) {
+        if (debug) std::fprintf(stderr, "incremental: reuse store failed\n");
+        return false;
+    }
+    setProcessEnv("CP3_INCREMENTAL_FRAGMENTS", cachePath.string().c_str());
+    return true;
+}
+
+void unpinIncrementalFragmentCache() {
+    setProcessEnv("CP3_INCREMENTAL_FRAGMENTS", "");
+}
 
 FrontendResult runFrontend(SourceManager& sm, SourceFile& file,
                           const BuildContext& ctx) {
@@ -424,6 +484,12 @@ options.importedInterfaces = importedInterfacesFor(*frontend.graph, *entry);
         options, extras, workerModules, workerStdModules);
     if (workerExit != kExitSuccess) return workerExit;
 
+    // v0.2.5 Phase 2: pin the fragment cache for the plural codegen (the
+    // Incremental profile only; every other profile/config never sees the
+    // variable and always emits fresh).
+    const bool incrementalReusePinned =
+        effective.compile.profile == BuildProfile::Incremental &&
+        pinIncrementalFragmentCache(frontend, entryPath);
     GeneratedModule mod;
     ProgramArtifacts programArtifacts;
     const int cgExit = frontend.program
@@ -431,6 +497,9 @@ options.importedInterfaces = importedInterfacesFor(*frontend.graph, *entry);
                                             &programArtifacts)
                            : codegenEntry(*entry, frontend.sema, ctx, options,
                                           mod);
+    if (incrementalReusePinned) {
+        unpinIncrementalFragmentCache();
+    }
     if (cgExit != kExitSuccess) return cgExit;
     // v0.2.5 plural pipeline: one TU per checked unit. They join the extras
     // compile alongside the worker TUs; the shared header is written by the

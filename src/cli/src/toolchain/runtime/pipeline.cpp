@@ -26,6 +26,8 @@
 #include "cp3/modules.hpp"
 #include "cp3/sema.hpp"
 
+#include "detail/toolchain/interface_hash.hpp"
+
 #include "detail/pkg/json.hpp"
 #include "detail/pkg/lockfile.hpp"
 #include "detail/pkg/package_json.hpp"
@@ -527,6 +529,88 @@ bool analyzeProgram(Program& program, SemaResult& out, DiagnosticSink& sink,
                     const ImportedBindings* imports) {
     SemanticAnalyzer analyzer(sink, compile, imports);
     return analyzer.analyze(program, out);
+}
+
+// Splits a "label\nmember\nmember" shape (the shapeText format the
+// interface_hash.hpp renderers emit) into the serializer's record struct.
+InterfaceClassShape splitShapeText(const std::string& text) {
+    InterfaceClassShape shape;
+    const std::size_t nl = text.find('\n');
+    if (nl == std::string::npos) {
+        shape.label = text;
+        return shape;
+    }
+    shape.label = text.substr(0, nl);
+    std::size_t at = nl + 1;
+    while (at < text.size()) {
+        const std::size_t end = text.find('\n', at);
+        if (end == std::string::npos) {
+            shape.memberText.push_back(text.substr(at));
+            break;
+        }
+        shape.memberText.push_back(text.substr(at, end - at));
+        at = end + 1;
+    }
+    return shape;
+}
+
+// Computes each emittable unit's interface hash. `ExportSurface` is the same
+// structure `analyzeProgramGraph` builds; the builders in interface_hash.hpp
+// flatten it into the canonical signature text and `interfaceHashOf` hashes
+// it. Deterministic per source and sema state. Used by the incremental
+// reuse wiring (per-unit fingerprint of dependency interfaces).
+std::unordered_map<std::uint32_t, std::uint64_t> interfaceHashesForProgram(
+    const ModuleGraph& graph, const SemaResult& entrySema,
+    const std::unordered_map<std::uint32_t, SemaResult>& unitSemas) {
+    ExportCollector exports(graph, entrySema, unitSemas);
+    std::unordered_map<std::uint32_t, std::uint64_t> out;
+    for (CompilationUnit* unit : graph.units()) {
+        if (unit == nullptr || !unit->ast) continue;
+        if (unit->isPrelude && !unit->isEntry) continue;
+        if (semaForUnit(*unit, entrySema, unitSemas) == nullptr) continue;
+        const ExportSurface& surface = exports.surfaceOf(*unit);
+        std::vector<InterfaceExportEntry> entries;
+        std::vector<InterfaceClassShape> classes;
+        entries.reserve(surface.named.size() + 1);
+        for (const auto& mapping : surface.named) {
+            const ImportedBinding& b = mapping.second;
+            if (b.classDecl != nullptr) {
+                classes.push_back(
+                    splitShapeText(classDeclToInterfaceShape(*b.classDecl)));
+                continue;
+            }
+            if (b.interfaceDecl != nullptr) {
+                classes.push_back(splitShapeText(
+                    interfaceDeclToInterfaceShape(*b.interfaceDecl)));
+                continue;
+            }
+            if (b.aliasDecl != nullptr) {
+                classes.push_back(splitShapeText(
+                    aliasDeclToInterfaceShape(*b.aliasDecl)));
+                continue;
+            }
+            entries.push_back(importedBindingToEntry(
+                mapping.first, b, b.isFunction || !b.isType ? "value" : "type"));
+        }
+        if (surface.hasDefault) {
+            const ImportedBinding& b = surface.defaultExport;
+            if (b.classDecl != nullptr) {
+                classes.push_back(
+                    splitShapeText(classDeclToInterfaceShape(*b.classDecl)));
+            } else if (b.interfaceDecl != nullptr) {
+                classes.push_back(splitShapeText(
+                    interfaceDeclToInterfaceShape(*b.interfaceDecl)));
+            } else if (b.aliasDecl != nullptr) {
+                classes.push_back(splitShapeText(
+                    aliasDeclToInterfaceShape(*b.aliasDecl)));
+            } else {
+                entries.push_back(
+                    importedBindingToEntry("default", b, "default"));
+            }
+        }
+        out[unit->id] = interfaceHashOf(entries, classes);
+    }
+    return out;
 }
 
 bool hasProgramModules(const ModuleGraph& graph) {

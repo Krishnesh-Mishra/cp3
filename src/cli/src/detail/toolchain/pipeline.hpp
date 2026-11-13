@@ -95,4 +95,12 @@ GeneratedModule generateProgramModule(const GenerateProgramInput& input);
 // entry TU (cp3/codegen_program.hpp, `generateProgramModules`).
 GeneratedProgramModules generateProgramModules(const GenerateProgramInput& input);
 
+// Maps each emittable unit id to its interface hash (interface_hash.hpp over
+// the ExportSurface map of `analyzeProgramGraph`). Deterministic per source
+// and sema state; used by the incremental reuse wiring to compute the
+// per-unit ihFingerprint.
+std::unordered_map<std::uint32_t, std::uint64_t> interfaceHashesForProgram(
+    const ModuleGraph& graph, const SemaResult& entrySema,
+    const std::unordered_map<std::uint32_t, SemaResult>& unitSemas);
+
 }  // namespace cp3::cli

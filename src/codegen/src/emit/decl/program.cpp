@@ -23,6 +23,10 @@
 #include "detail/generator/generator.h"
 
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <filesystem>
+#include <memory>
 #include <string>
 #include <unordered_set>
 #include <utility>
@@ -33,6 +37,7 @@
 #include "cp3/diag/diagnostic.hpp"
 #include "cp3/meta/module.hpp"
 #include "detail/generator/cpp_writer.h"
+#include "detail/generator/fragment_cache.hpp"
 #include "detail/generator/helper_blocks.h"
 #include "detail/generator/mangle.h"
 #include "detail/generator/program_assembly.h"
@@ -43,6 +48,63 @@ namespace cp3 {
 using namespace detail;
 
 namespace {
+
+// fnv1a64 render (reuse format); matches the CLI's hex rendering.
+std::string hex64u(std::uint64_t value) {
+    char buf[17];
+    std::snprintf(buf, sizeof(buf), "%016llx",
+                  static_cast<unsigned long long>(value));
+    return std::string(buf, 16);
+}
+
+// ProgramNeeds <-> the fragment needsMask bit layout (see
+// detail/generator/fragment_cache.hpp). The bits are filled in one place so
+// the two lists cannot drift.
+void applyNeedsMask(ProgramNeeds& needs, std::uint64_t mask) {
+    needs.consoleStderr |= (mask & (std::uint64_t{1} << 0)) != 0;
+    needs.consoleAbi |= (mask & (std::uint64_t{1} << 1)) != 0;
+    needs.eventLoop |= (mask & (std::uint64_t{1} << 2)) != 0;
+    needs.arith |= (mask & (std::uint64_t{1} << 3)) != 0;
+    needs.math |= (mask & (std::uint64_t{1} << 4)) != 0;
+    needs.number |= (mask & (std::uint64_t{1} << 5)) != 0;
+    needs.str |= (mask & (std::uint64_t{1} << 6)) != 0;
+    needs.path |= (mask & (std::uint64_t{1} << 7)) != 0;
+    needs.os |= (mask & (std::uint64_t{1} << 8)) != 0;
+    needs.json |= (mask & (std::uint64_t{1} << 9)) != 0;
+    needs.jsonFile |= (mask & (std::uint64_t{1} << 10)) != 0;
+    needs.process |= (mask & (std::uint64_t{1} << 11)) != 0;
+    needs.env |= (mask & (std::uint64_t{1} << 12)) != 0;
+    needs.crypto |= (mask & (std::uint64_t{1} << 13)) != 0;
+    needs.date |= (mask & (std::uint64_t{1} << 14)) != 0;
+    needs.url |= (mask & (std::uint64_t{1} << 15)) != 0;
+    needs.time |= (mask & (std::uint64_t{1} << 16)) != 0;
+    needs.hash |= (mask & (std::uint64_t{1} << 17)) != 0;
+    needs.text |= (mask & (std::uint64_t{1} << 18)) != 0;
+    needs.readline |= (mask & (std::uint64_t{1} << 19)) != 0;
+    needs.network |= (mask & (std::uint64_t{1} << 20)) != 0;
+    needs.webserverSettings |= (mask & (std::uint64_t{1} << 21)) != 0;
+    needs.typedArray |= (mask & (std::uint64_t{1} << 22)) != 0;
+    needs.collections |= (mask & (std::uint64_t{1} << 23)) != 0;
+    needs.buffer |= (mask & (std::uint64_t{1} << 24)) != 0;
+    needs.fs |= (mask & (std::uint64_t{1} << 25)) != 0;
+    needs.io |= (mask & (std::uint64_t{1} << 26)) != 0;
+    needs.tuple |= (mask & (std::uint64_t{1} << 27)) != 0;
+    needs.eventEmitter |= (mask & (std::uint64_t{1} << 28)) != 0;
+    needs.bitwise |= (mask & (std::uint64_t{1} << 29)) != 0;
+    needs.unionValue |= (mask & (std::uint64_t{1} << 30)) != 0;
+    needs.objectValue |= (mask & (std::uint64_t{1} << 31)) != 0;
+    needs.regex |= (mask & (std::uint64_t{1} << 32)) != 0;
+    needs.parallel |= (mask & (std::uint64_t{1} << 33)) != 0;
+    needs.worker |= (mask & (std::uint64_t{1} << 34)) != 0;
+}
+
+// The native-header unique-append the merge uses for reused fragments.
+void appendUnique(std::vector<std::string>& out, const std::string& item) {
+    for (const std::string& existing : out) {
+        if (existing == item) return;
+    }
+    out.push_back(item);
+}
 
 // The `main()` call of a unit's module initializer.
 std::string initCall(const ProgramUnitText& unit) {
@@ -450,13 +512,58 @@ ProgramAssembly Generator::buildAssembly(
     }
     const std::unordered_set<std::string> virtualSet =
         detail::buildVirtualMethodSet(asts);
+    // v0.2.5 Phase 2: the CLI-validated fragment cache (Incremental only,
+    // pinned by env var). Byte-identical fragments reuse the unit's text;
+    // the shared header stays byte-identical and the build manifest keeps
+    // reusing objects.
+    std::unique_ptr<detail::FragmentCache> fragmentCache(
+        detail::loadFragmentCache());
+    if (fragmentCache) {
+        fragmentCache_ = fragmentCache.get();
+        fragmentCachePath_ =
+            std::getenv("CP3_INCREMENTAL_FRAGMENTS") != nullptr
+                ? std::getenv("CP3_INCREMENTAL_FRAGMENTS")
+                : std::string{};
+        fragmentOut_.clear();
+    }
     ProgramAssembly assembly;
     for (CompilationUnit* unit : graph.compilationOrder()) {
         if (unit == nullptr || unit->ast == nullptr) continue;
         if (unit->isPrelude && !unit->isEntry) continue;
-        if (link.semas.find(unit->id) == link.semas.end()) continue;
+        // A cached fragment is used even when the unit's sema is missing,
+        // but only through the splice inside emitProgramUnit; the default
+        // path still requires sema.
+        if (link.semas.find(unit->id) == link.semas.end() &&
+            !fragmentCache_) {
+            continue;
+        }
         emitProgramUnit(link, *unit, assembly, &virtualSet);
     }
+    if (fragmentCache_ != nullptr) {
+        // Rewrite the cache with the union of reused and freshly emitted
+        // records so stale generations disappear and fresh records carry
+        // this build's fingerprints on the next run. Best effort.
+        std::unordered_set<std::string> freshKeys;
+        freshKeys.reserve(fragmentOut_.size());
+        for (const detail::FragmentRecord& rec : fragmentOut_) {
+            freshKeys.insert(rec.unitKey);
+        }
+        for (const CompilationUnit* unit : graph.compilationOrder()) {
+            if (unit == nullptr || !unit->ast) continue;
+            if (unit->isPrelude && !unit->isEntry) continue;
+            if (freshKeys.count(unit->moduleName) != 0) continue;
+            const auto it = fragmentCache_->records.find(unit->moduleName);
+            if (it != fragmentCache_->records.end()) {
+                fragmentOut_.push_back(it->second);
+            }
+        }
+        if (!fragmentCachePath_.empty()) {
+            detail::writeFragmentCache(fragmentCachePath_, fragmentOut_);
+        }
+    }
+    fragmentCache_ = nullptr;
+    fragmentCachePath_.clear();
+    fragmentOut_.clear();
     return assembly;
 }
 
@@ -476,6 +583,55 @@ void Generator::emitProgramUnit(const ProgramLink& link,
                                 const CompilationUnit& unit,
                                 ProgramAssembly& assembly,
                                 const std::unordered_set<std::string>* virtualSet) {
+    // v0.2.5 Phase 2: splice a verified fragment when one exists. The CLI
+    // already validated the full key (source bytes, interface fingerprint,
+    // program shape, toolchain + profile); this re-verifies the cheap,
+    // locally-computable parts and the isEntry/isPackage flags. A miss falls
+    // through to the fresh emit path below.
+    if (fragmentCache_ != nullptr) {
+        const auto recIt = fragmentCache_->records.find(unit.moduleName);
+        if (recIt != fragmentCache_->records.end()) {
+            const detail::FragmentRecord& rec = recIt->second;
+            if (rec.sourceHash == hex64u(detail::fragmentSourceHashOf(unit)) &&
+                rec.isEntry == unit.isEntry &&
+                rec.isPackage == unit.isPackage) {
+                if (const char* dbg = std::getenv("CP3_INCREMENTAL_DEBUG");
+                    dbg != nullptr && *dbg != '\0') {
+                    std::fprintf(stderr,
+                                 "cp3c: incremental reuse: %s\n",
+                                 unit.moduleName.c_str());
+                }
+                const auto surfaceIt = link.surfaces.find(unit.id);
+                ProgramUnitText text;
+                text.namesp = surfaceIt != link.surfaces.end()
+                                  ? surfaceIt->second.namesp
+                                  : suggestNamespace(unit.moduleName);
+                text.sourceKey = unit.moduleName;
+                text.isEntry = unit.isEntry;
+                text.isPackage = unit.isPackage;
+                text.globals = rec.globals;
+                text.decls = rec.decls;
+                text.defs = rec.defs;
+                text.mainBody = rec.mainBody;
+                text.topLevelAwait = rec.topLevelAwait;
+                ProgramNeeds& n = assembly.needs;
+                applyNeedsMask(n, rec.needsMask);
+                for (const std::string& header : rec.nativeHeaders) {
+                    appendUnique(n.nativeHeaders, header);
+                }
+                if (unit.isEntry) {
+                    for (const WorkerSite& site : options_.workers) {
+                        if (site.inlineSite || site.headerPath.empty()) {
+                            continue;
+                        }
+                        appendUnique(n.workerHeaders, site.headerPath);
+                    }
+                }
+                assembly.units.push_back(std::move(text));
+                return;
+            }
+        }
+    }
     const auto semaIt = link.semas.find(unit.id);
     if (semaIt == link.semas.end() || semaIt->second == nullptr || !unit.ast) {
         return;
@@ -503,6 +659,47 @@ void Generator::emitProgramUnit(const ProgramLink& link,
     inner.runUnit(*unit.ast, text.decls, text.defs, text.mainBody,
                   text.globals);
     text.topLevelAwait = inner.topLevelAwait_;
+    // v0.2.5 Phase 2: capture the needs mask this unit produced, so the
+    // recorded fragment can replay these bits when this unit is reused.
+    std::uint64_t needsMask = 0;
+    needsMask |= inner.consoleStderr_ ? (std::uint64_t{1} << 0) : 0;
+    needsMask |= inner.needsConsoleAbi_ ? (std::uint64_t{1} << 1) : 0;
+    needsMask |= (inner.needsEventLoop_ || inner.topLevelAwait_)
+                     ? (std::uint64_t{1} << 2)
+                     : 0;
+    needsMask |= inner.needsArith_ ? (std::uint64_t{1} << 3) : 0;
+    needsMask |= inner.needsMath_ ? (std::uint64_t{1} << 4) : 0;
+    needsMask |= inner.needsNumber_ ? (std::uint64_t{1} << 5) : 0;
+    needsMask |= inner.needsString_ ? (std::uint64_t{1} << 6) : 0;
+    needsMask |= inner.needsPath_ ? (std::uint64_t{1} << 7) : 0;
+    needsMask |= inner.needsOs_ ? (std::uint64_t{1} << 8) : 0;
+    needsMask |= inner.needsJson_ ? (std::uint64_t{1} << 9) : 0;
+    needsMask |= inner.needsJsonFile_ ? (std::uint64_t{1} << 10) : 0;
+    needsMask |= inner.needsProcess_ ? (std::uint64_t{1} << 11) : 0;
+    needsMask |= inner.needsEnv_ ? (std::uint64_t{1} << 12) : 0;
+    needsMask |= inner.needsCrypto_ ? (std::uint64_t{1} << 13) : 0;
+    needsMask |= inner.needsDate_ ? (std::uint64_t{1} << 14) : 0;
+    needsMask |= inner.needsUrl_ ? (std::uint64_t{1} << 15) : 0;
+    needsMask |= inner.needsTime_ ? (std::uint64_t{1} << 16) : 0;
+    needsMask |= inner.needsHash_ ? (std::uint64_t{1} << 17) : 0;
+    needsMask |= inner.needsText_ ? (std::uint64_t{1} << 18) : 0;
+    needsMask |= inner.needsReadline_ ? (std::uint64_t{1} << 19) : 0;
+    needsMask |= inner.needsNetwork_ ? (std::uint64_t{1} << 20) : 0;
+    needsMask |= inner.needswebserverSettings_ ? (std::uint64_t{1} << 21) : 0;
+    needsMask |= inner.needsTypedArray_ ? (std::uint64_t{1} << 22) : 0;
+    needsMask |= inner.needsCollections_ ? (std::uint64_t{1} << 23) : 0;
+    needsMask |= inner.needsBuffer_ ? (std::uint64_t{1} << 24) : 0;
+    needsMask |= inner.needsFs_ ? (std::uint64_t{1} << 25) : 0;
+    needsMask |= inner.needsIo_ ? (std::uint64_t{1} << 26) : 0;
+    needsMask |= inner.needsTuple_ ? (std::uint64_t{1} << 27) : 0;
+    needsMask |= inner.needsEventEmitter_ ? (std::uint64_t{1} << 28) : 0;
+    needsMask |= inner.needsBitwise_ ? (std::uint64_t{1} << 29) : 0;
+    needsMask |= inner.needsUnion_ ? (std::uint64_t{1} << 30) : 0;
+    needsMask |= inner.needsObject_ ? (std::uint64_t{1} << 31) : 0;
+    needsMask |= inner.needsRegex_ ? (std::uint64_t{1} << 32) : 0;
+    needsMask |= inner.needsParallel_ ? (std::uint64_t{1} << 33) : 0;
+    needsMask |= inner.needsWorker_ ? (std::uint64_t{1} << 34) : 0;
+
     ProgramNeeds& n = assembly.needs;
     n.consoleStderr |= inner.consoleStderr_;
     n.consoleAbi |= inner.needsConsoleAbi_;
@@ -556,6 +753,23 @@ void Generator::emitProgramUnit(const ProgramLink& link,
             }
             if (!seen) n.workerHeaders.push_back(site.headerPath);
         }
+    }
+    if (fragmentCache_ != nullptr) {
+        detail::FragmentRecord rec;
+        rec.unitKey = unit.moduleName;
+        rec.sourceHash = hex64u(detail::fragmentSourceHashOf(unit));
+        rec.fragmentSourceKey = unit.moduleName;
+        rec.namesp = text.namesp;
+        rec.globals = text.globals;
+        rec.decls = text.decls;
+        rec.defs = text.defs;
+        rec.mainBody = text.mainBody;
+        rec.needsMask = needsMask;
+        rec.nativeHeaders = inner.nativeHeaders_;
+        rec.isEntry = unit.isEntry;
+        rec.isPackage = unit.isPackage;
+        rec.topLevelAwait = text.topLevelAwait;
+        fragmentOut_.push_back(std::move(rec));
     }
     assembly.units.push_back(std::move(text));
 }

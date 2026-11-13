@@ -569,8 +569,9 @@ std::string typeToCanonicalText(const Type& t) {
     return std::string("unknown-kind:") + typeKindName(t.kind);
 }
 
-std::string bindingToInterfaceEntry(const std::string& name, const ImportedBinding& b,
-                                    const std::string& kind) {
+InterfaceExportEntry importedBindingToEntry(const std::string& name,
+                                            const ImportedBinding& b,
+                                            const std::string& kind) {
     InterfaceExportEntry entry;
     entry.name = name;
     entry.kind = kind;
@@ -590,7 +591,12 @@ std::string bindingToInterfaceEntry(const std::string& name, const ImportedBindi
     for (const bool optional : b.paramOptional)
         field.paramOptional.push_back(optional ? "1" : "0");
     field.returnType = typeToCanonicalText(b.returnType);
-    return entryLine(entry);
+    return entry;
+}
+
+std::string bindingToInterfaceEntry(const std::string& name, const ImportedBinding& b,
+                                    const std::string& kind) {
+    return entryLine(importedBindingToEntry(name, b, kind));
 }
 
 std::string classDeclToInterfaceShape(const ClassDeclaration& decl) {

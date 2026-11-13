@@ -55,6 +55,7 @@
 #include "cp3/codegen_program.hpp"
 #include "cp3/diag/diagnostic.hpp"
 #include "detail/class/class_model.h"
+#include "detail/generator/fragment_cache.hpp"
 #include "detail/int/enums.h"
 #include "detail/generator/generator_state.h"
 #include "detail/expr/listener.h"
@@ -164,6 +165,13 @@ private:
     // Non-owning; null when the program has no classes. Set by the entry
     // points (run/runProgram/runWorkerModule) before any unit is emitted.
     const std::unordered_set<std::string>* virtualMethodSet_ = nullptr;
+    // v0.2.5 Phase 2 incremental reuse (plural dev/incremental builds only):
+    // set by buildAssembly when CP3_INCREMENTAL_FRAGMENTS points at the
+    // CLI-validated cache; the splice path consumes verified records and
+    // records freshly emitted fragments for the cache rewrite.
+    const detail::FragmentCache* fragmentCache_ = nullptr;
+    std::string fragmentCachePath_;
+    std::vector<detail::FragmentRecord> fragmentOut_;
 
 private:
     friend struct detail::ArrayEmitter;  // src/language/arrays/codegen_methods.cpp

@@ -107,12 +107,18 @@ std::uint64_t interfaceHashOf(const std::vector<InterfaceExportEntry>& entries,
 // are quoted. The result is always a single line (no raw '\n' can occur).
 std::string typeToCanonicalText(const Type& t);
 
+// Flattens an ImportedBinding to a canonical entry record. `kind` is the
+// export kind ("value" | "type" | "default"). The binding's `type` is
+// printed via typeToCanonicalText; a default-constructed returnType (non-
+// function binding) prints as `unknown`.
+InterfaceExportEntry importedBindingToEntry(const std::string& name,
+                                            const ImportedBinding& b,
+                                            const std::string& kind);
+
 // Flattens an ImportedBinding to one entry line: `entry kind=... name=...
 // field=... type=... flags=abcde typeParams=n(...) paramTypes=n(...)
 // paramOptional=n(...) returnType=...`. `kind` is the export kind
-// ("value" | "type" | "default"). No trailing '\n'. The binding's `type` is
-// printed via typeToCanonicalText; a default-constructed returnType (non-
-// function binding) prints as `unknown`.
+// ("value" | "type" | "default"). No trailing '\n'.
 std::string bindingToInterfaceEntry(const std::string& name, const ImportedBinding& b,
                                     const std::string& kind);
 

@@ -1,6 +1,6 @@
 // =============================================================================
-// src/cli/src/toolchain/runtime/incremental.cpp - per-module incremental cache
-// DEFINITIONS.
+// src/cli/src/toolchain/runtime/incremental.cpp - per-module incremental reuse
+// (DEFINITIONS).
 // =============================================================================
 #include "detail/toolchain/incremental.hpp"
 
@@ -8,19 +8,23 @@
 #include <cstdint>
 #include <cstdio>
 #include <fstream>
-#include <functional>
 #include <sstream>
-#include <system_error>
 #include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 #include "detail/core/util.hpp"
+#include "detail/toolchain/interface_hash.hpp"
+#include "cp3/modules.hpp"
 #include "cp3/meta/module.hpp"
+#include "cp3/core/ast.hpp"
+#include "cp3/core/types.hpp"
 
 namespace cp3::cli {
 
 namespace {
 
-// Length-prefixed field writer/reader (private to this file): "<len>:<bytes>".
+// Length-prefixed field writer/reader: "<len>:<bytes>".
 void putStr(std::string& out, const std::string& text) {
     out += std::to_string(text.size());
     out += ':';
@@ -49,6 +53,146 @@ std::string hex64(std::uint64_t value) {
     return std::string(buf, 16);
 }
 
+std::vector<std::string> splitNewline(const std::string& text) {
+    std::vector<std::string> out;
+    std::size_t at = 0;
+    while (at < text.size()) {
+        const std::size_t nl = text.find('\n', at);
+        if (nl == std::string::npos) {
+            out.push_back(text.substr(at));
+            break;
+        }
+        out.push_back(text.substr(at, nl - at));
+        at = nl + 1;
+    }
+    return out;
+}
+
+std::string joinNewline(const std::vector<std::string>& items) {
+    std::string out;
+    for (const std::string& item : items) {
+        out += item;
+        out += '\n';
+    }
+    return out;
+}
+
+std::string hexEncode(const std::string& text) {
+    static const char* kDigits = "0123456789abcdef";
+    std::string out;
+    out.reserve(text.size() * 2);
+    for (unsigned char c : text) {
+        out.push_back(kDigits[c >> 4]);
+        out.push_back(kDigits[c & 0xF]);
+    }
+    return out;
+}
+
+bool hexDecode(const std::string& text, std::string& out) {
+    out.clear();
+    if (text.size() % 2 != 0) return false;
+    out.reserve(text.size() / 2);
+    auto nibble = [](char c) -> int {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        return -1;
+    };
+    for (std::size_t i = 0; i + 1 < text.size(); i += 2) {
+        const int hi = nibble(text[i]);
+        const int lo = nibble(text[i + 1]);
+        if (hi < 0 || lo < 0) return false;
+        out.push_back(static_cast<char>((hi << 4) | lo));
+    }
+    return true;
+}
+
+std::uint64_t fnv1a(const std::string& text) {
+    std::uint64_t hash = 0xcbf29ce484222325ull;
+    for (unsigned char c : text) {
+        hash ^= c;
+        hash *= 0x100000001b3ull;
+    }
+    return hash;
+}
+
+std::uint64_t fnv1a(const std::string& text, std::uint64_t hash) {
+    for (unsigned char c : text) {
+        hash ^= c;
+        hash *= 0x100000001b3ull;
+    }
+    return hash;
+}
+
+// The class/interface/alias/enum declarations of one unit, in source order,
+// unwrapping `export { }` and `export default` wrappers.
+std::vector<const Stmt*> classLikeDeclarations(const Program& program) {
+    std::vector<const Stmt*> out;
+    for (const StmtPtr& stmt : program.body) {
+        if (!stmt) continue;
+        const Stmt* inner = stmt.get();
+        if (inner->kind == NodeKind::ExportDeclaration) {
+            const auto& ed = static_cast<const ExportDeclaration&>(*inner);
+            if (ed.declaration) inner = ed.declaration.get();
+            else continue;
+        }
+        switch (inner->kind) {
+            case NodeKind::ClassDeclaration:
+            case NodeKind::InterfaceDeclaration:
+            case NodeKind::TypeAliasDeclaration:
+            case NodeKind::EnumDeclaration:
+                out.push_back(inner);
+                break;
+            default:
+                break;
+        }
+    }
+    return out;
+}
+
+// One unit's contribution to the program shape hash: a canonical one-line
+// digest of every class/interface/alias/enum it declares. Deterministic per
+// source text.
+std::string unitShapeText(const CompilationUnit& unit) {
+    if (!unit.ast) return {};
+    std::string material;
+    for (const Stmt* decl : classLikeDeclarations(*unit.ast)) {
+        switch (decl->kind) {
+            case NodeKind::ClassDeclaration:
+                material += classDeclToInterfaceShape(
+                                static_cast<const ClassDeclaration&>(*decl));
+                material += '\n';
+                break;
+            case NodeKind::InterfaceDeclaration:
+                material += interfaceDeclToInterfaceShape(
+                                static_cast<const InterfaceDeclaration&>(*decl));
+                material += '\n';
+                break;
+            case NodeKind::TypeAliasDeclaration:
+                material += aliasDeclToInterfaceShape(
+                                static_cast<const TypeAliasDeclaration&>(*decl));
+                material += '\n';
+                break;
+            case NodeKind::EnumDeclaration: {
+                const auto& e = static_cast<const EnumDeclaration&>(*decl);
+                material += "enum:";
+                material += e.name;
+                material += '\n';
+                for (const EnumMemberPtr& member : e.members) {
+                    if (!member) continue;
+                    material += "  ";
+                    material += member->name;
+                    material += '\n';
+                }
+                break;
+            }
+            default:
+                break;
+        }
+    }
+    return material;
+}
+
 }  // namespace
 
 std::string incrementalUnitKey(const CompilationUnit& unit) {
@@ -59,62 +203,7 @@ std::string incrementalUnitKey(const CompilationUnit& unit) {
 
 std::string unitSourceHash(const CompilationUnit& unit) {
     if (unit.file == nullptr) return hex64(0);
-    return hex64(fnv1a64(unit.file->text));
-}
-
-std::string classMethodHash(const ModuleGraph& graph) {
-    // The multiset of class method names across the whole program: the same
-    // signal the codegen virtual-set pass aggregates, computed parse-only.
-    // Any change to a class member anywhere retires every cached fragment
-    // that depends on program-wide dispatch.
-    std::unordered_map<std::string, std::uint64_t> multiplicity;
-    for (const CompilationUnit* unit : graph.units()) {
-        if (unit == nullptr || !unit->ast) continue;
-        std::vector<ClassDeclaration*> classes;
-        std::function<void(const StmtPtr&)> collectClass;
-        collectClass = [&classes](const StmtPtr& stmt) {
-            if (!stmt) return;
-            if (stmt->kind == NodeKind::ClassDeclaration) {
-                classes.push_back(static_cast<ClassDeclaration*>(stmt.get()));
-            }
-        };
-        for (const StmtPtr& stmt : unit->ast->body) collectClass(stmt);
-        for (ClassDeclaration* cls : classes) {
-            for (const ClassMemberPtr& member : cls->members) {
-                if (!member) continue;
-                std::string name;
-                if (member->kind == NodeKind::MethodDeclaration) {
-                    const auto& m = static_cast<const MethodDeclaration&>(*member);
-                    if (m.key && m.key->kind == NodeKind::Identifier) {
-                        name = static_cast<const Identifier&>(*m.key).name;
-                    }
-                } else if (member->kind == NodeKind::AccessorDeclaration) {
-                    const auto& a = static_cast<const AccessorDeclaration&>(*member);
-                    if (a.key && a.key->kind == NodeKind::Identifier) {
-                        name = "access:" +
-                               static_cast<const Identifier&>(*a.key).name;
-                    }
-                } else if (member->kind == NodeKind::ConstructorDeclaration) {
-                    name = "constructor";
-                } else {
-                    continue;
-                }
-                multiplicity[name] += 1;
-            }
-        }
-    }
-    std::vector<std::string> names;
-    names.reserve(multiplicity.size());
-    for (const auto& entry : multiplicity) names.push_back(entry.first);
-    std::sort(names.begin(), names.end());
-    std::string material;
-    for (const std::string& name : names) {
-        material += name;
-        material += '=';
-        material += std::to_string(multiplicity[name]);
-        material += '\n';
-    }
-    return hex64(fnv1a64(material));
+    return hex64(fnv1a(unit.file->text));
 }
 
 std::string configHashOf(const std::string& compilerKey,
@@ -122,7 +211,18 @@ std::string configHashOf(const std::string& compilerKey,
     std::string material = compilerKey;
     material += '|';
     material += profile;
-    return hex64(fnv1a64(material));
+    return hex64(fnv1a(material));
+}
+
+std::string programShapeHash(const ModuleGraph& graph) {
+    std::uint64_t hash = 0xcbf29ce484222325ull;
+    for (const CompilationUnit* unit : graph.compilationOrder()) {
+        if (unit == nullptr || !unit->ast) continue;
+        hash ^= 0xff;
+        hash *= 0x100000001b3ull;
+        hash = fnv1a(unitShapeText(*unit), hash);
+    }
+    return hex64(hash);
 }
 
 std::string ihFingerprintOf(
@@ -141,7 +241,7 @@ std::string ihFingerprintOf(
         material += hex64(it->second);
         material += '\n';
     }
-    return hex64(fnv1a64(material));
+    return hex64(fnv1a(material));
 }
 
 bool incrementalCacheLoad(const fs::path& cachePath,
@@ -155,30 +255,53 @@ bool incrementalCacheLoad(const fs::path& cachePath,
         if (line.empty() || line.front() == '#') continue;
         std::size_t at = 0;
         IncrementalUnitEntry entry;
+        std::string needsMask, nativeHeaders, flags;
         if (!takeStr(line, at, entry.unitKey)) continue;
         if (!takeStr(line, at, entry.sourceHash)) continue;
         if (!takeStr(line, at, entry.ihFingerprint)) continue;
-        if (!takeStr(line, at, entry.classMethodHash)) continue;
+        if (!takeStr(line, at, entry.shapeHash)) continue;
         if (!takeStr(line, at, entry.configHash)) continue;
         if (!takeStr(line, at, entry.interfaceHash)) continue;
         if (!takeStr(line, at, entry.fragment.sourceKey)) continue;
         if (!takeStr(line, at, entry.fragment.namesp)) continue;
-        if (!takeStr(line, at, entry.fragment.globals)) continue;
-        if (!takeStr(line, at, entry.fragment.decls)) continue;
-        if (!takeStr(line, at, entry.fragment.defs)) continue;
-        if (!takeStr(line, at, entry.fragment.mainBody)) continue;
-        std::string flags;
+        std::string raw;
+        if (!takeStr(line, at, raw)) continue;
+        if (!hexDecode(raw, entry.fragment.globals)) continue;
+        if (!takeStr(line, at, raw)) continue;
+        if (!hexDecode(raw, entry.fragment.decls)) continue;
+        if (!takeStr(line, at, raw)) continue;
+        if (!hexDecode(raw, entry.fragment.defs)) continue;
+        if (!takeStr(line, at, raw)) continue;
+        if (!hexDecode(raw, entry.fragment.mainBody)) continue;
+        if (!takeStr(line, at, needsMask)) continue;
+        if (!takeStr(line, at, nativeHeaders)) continue;
         if (!takeStr(line, at, flags)) continue;
-        // flags: bit 0 isEntry, bit 1 isPackage, bit 2 topLevelAwait
-        unsigned bits = 0;
+        entry.fragment.needsMask = 0;
+        bool needsOk = true;
+        std::stringstream bits(needsMask);
+        std::string bit;
+        while (bits >> bit) {
+            try {
+                entry.fragment.needsMask |=
+                    (std::uint64_t{1} << std::stoul(bit));
+            } catch (const std::exception&) {
+                needsOk = false;
+                break;
+            }
+        }
+        if (!needsOk) continue;  // drop malformed records entirely
+        std::string decodedHeaders;
+        if (!hexDecode(nativeHeaders, decodedHeaders)) continue;
+        entry.fragment.nativeHeaders = splitNewline(decodedHeaders);
+        unsigned b = 0;
         try {
-            bits = static_cast<unsigned>(std::stoul(flags));
+            b = static_cast<unsigned>(std::stoul(flags));
         } catch (const std::exception&) {
             continue;
         }
-        entry.fragment.isEntry = (bits & 1u) != 0;
-        entry.fragment.isPackage = (bits & 2u) != 0;
-        entry.fragment.topLevelAwait = (bits & 4u) != 0;
+        entry.fragment.isEntry = (b & 1u) != 0;
+        entry.fragment.isPackage = (b & 2u) != 0;
+        entry.fragment.topLevelAwait = (b & 4u) != 0;
         out.push_back(std::move(entry));
     }
     return true;
@@ -194,15 +317,25 @@ bool incrementalCacheStore(const fs::path& cachePath,
         putStr(line, entry.unitKey);
         putStr(line, entry.sourceHash);
         putStr(line, entry.ihFingerprint);
-        putStr(line, entry.classMethodHash);
+        putStr(line, entry.shapeHash);
         putStr(line, entry.configHash);
         putStr(line, entry.interfaceHash);
         putStr(line, entry.fragment.sourceKey);
         putStr(line, entry.fragment.namesp);
-        putStr(line, entry.fragment.globals);
-        putStr(line, entry.fragment.decls);
-        putStr(line, entry.fragment.defs);
-        putStr(line, entry.fragment.mainBody);
+        putStr(line, hexEncode(entry.fragment.globals));
+        putStr(line, hexEncode(entry.fragment.decls));
+        putStr(line, hexEncode(entry.fragment.defs));
+        putStr(line, hexEncode(entry.fragment.mainBody));
+        std::string needs;
+        const std::uint64_t mask = entry.fragment.needsMask;
+        for (int bit = 0; bit < 64; ++bit) {
+            if (mask & (std::uint64_t{1} << bit)) {
+                if (!needs.empty()) needs += ' ';
+                needs += std::to_string(bit);
+            }
+        }
+        putStr(line, needs);
+        putStr(line, hexEncode(joinNewline(entry.fragment.nativeHeaders)));
         unsigned bits = 0;
         if (entry.fragment.isEntry) bits |= 1u;
         if (entry.fragment.isPackage) bits |= 2u;
@@ -211,7 +344,88 @@ bool incrementalCacheStore(const fs::path& cachePath,
         out += line;
         out += '\n';
     }
-    return writeTextFile(cachePath, out, nullptr);
+    // Write to a sibling temp file and rename so a crash mid-write cannot
+    // leave a torn cache; a missing or stale file on the next run is simply
+    // a miss (the codegen re-emits and rewrites it). On Windows rename does
+    // not replace an existing destination, so remove the old file first;
+    // the pre-rewrite copy is a best-effort cache, never the only state.
+    const fs::path tmp = fs::path(cachePath).string() + ".tmp";
+    if (!writeTextFile(tmp, out, nullptr)) {
+        return false;
+    }
+    std::error_code rmEc;
+    fs::remove(cachePath, rmEc);  // best effort; stale cache is not a blocker
+    std::error_code ec;
+    fs::rename(tmp, cachePath, ec);
+    return !ec;
+}
+
+// Computes the per-unit reuse decisions for one plural build. Reads the
+// cache, re-derives every cheap-to-verify key part, keeps only records that
+// match, and rewrites the cache with only those records (stale units are
+// pruned). Records missing the fingerprints the CLI can compute (fresh
+// records written by codegen) are stamped with the current values. Returns
+// the number of kept entries, 0 when the cache was unusable, or -1 when the
+// rewrite failed (the next run regenerates).
+int prepareIncrementalReuse(const fs::path& cachePath,
+                            const ModuleGraph& graph,
+                            const std::string& compilerKey,
+                            const std::string& profile,
+                            const std::unordered_map<std::uint32_t, std::uint64_t>& ihOf) {
+    std::vector<IncrementalUnitEntry> cached;
+    if (!incrementalCacheLoad(cachePath, cached)) cached.clear();
+
+    const std::string configHash = configHashOf(compilerKey, profile);
+    const std::string shapeHash = programShapeHash(graph);
+
+    std::unordered_map<std::string, IncrementalUnitEntry> entriesByKey;
+    entriesByKey.reserve(cached.size());
+    for (IncrementalUnitEntry& entry : cached) {
+        entriesByKey.emplace(entry.unitKey, std::move(entry));
+    }
+
+    std::vector<IncrementalUnitEntry> kept;
+    kept.reserve(graph.units().size());
+    std::unordered_set<std::string> seen;
+    for (const CompilationUnit* unit : graph.compilationOrder()) {
+        if (unit == nullptr || !unit->ast) continue;
+        if (unit->isPrelude && !unit->isEntry) continue;
+        const std::string key = incrementalUnitKey(*unit);
+        if (!seen.insert(key).second) continue;
+        const auto it = entriesByKey.find(key);
+        if (it == entriesByKey.end()) continue;
+        IncrementalUnitEntry entry = std::move(it->second);
+        if (entry.sourceHash != unitSourceHash(*unit)) continue;
+        if (!entry.configHash.empty() && entry.configHash != configHash) {
+            continue; // toolchain changed since the fragment was emitted
+        }
+        if (!entry.shapeHash.empty() && entry.shapeHash != shapeHash) {
+            continue; // some class/enum changed shape anywhere in the program
+        }
+        const std::string ih = ihFingerprintOf(graph, *unit, ihOf);
+        if (!entry.ihFingerprint.empty() && entry.ihFingerprint != ih) {
+            continue; // some local/package dependency's interface changed
+        }
+        // Stamp the parts codegen cannot compute (or that were empty on a
+        // fresh record). A record emitted from this build's AST is by
+        // definition consistent with this build's interfaces.
+        entry.configHash = configHash;
+        entry.shapeHash = shapeHash;
+        entry.ihFingerprint = ih;
+        const auto unitIh = ihOf.find(unit->id);
+        if (unitIh != ihOf.end()) {
+            entry.interfaceHash = hex64(unitIh->second);
+        }
+        kept.push_back(std::move(entry));
+    }
+
+    if (!incrementalCacheStore(cachePath, kept)) {
+        // The rewrite is best effort; the reuse file is regenerated on the
+        // next run. A stale cache with stale entries cannot cause a wrong
+        // hit because the splice re-verifies the source hash.
+        return -1;
+    }
+    return static_cast<int>(kept.size());
 }
 
 }  // namespace cp3::cli

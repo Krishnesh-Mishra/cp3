@@ -89,6 +89,7 @@ set(cp3_codegen_sources
     src/emit/worker/worker_module.cpp
     src/emit/worker/worker_scan.cpp
     src/emit/worker/worker_scan_stmt.cpp
+    src/detail/generator/fragment_cache.cpp
     ../language/typed-arrays/codegen.cpp
     ../language/typed-arrays/codegen_constructors.cpp
     ../language/typed-arrays/codegen_methods.cpp
