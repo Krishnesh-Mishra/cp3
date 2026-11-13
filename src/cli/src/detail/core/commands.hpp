@@ -52,6 +52,10 @@ struct CliOptions {
     std::string initType;                 // init --type application|package
     std::string initTypeSystem;           // init --type-system typescript|cpp|rust
     std::string initDescription;          // init --description "one line"
+    // Internal: `cp3 dev` sets this so the build may defer replacing the
+    // linked executable when the running child keeps it mapped; the dev
+    // session completes the replace after the child exits. Not a CLI flag.
+    bool internalDeferExeReplace = false;
     std::string initAuthor;               // init --author "Name <mail@x>"
     std::string outDir;                   // publish --out <dir|file>
     std::string name;                     // link --name <name>

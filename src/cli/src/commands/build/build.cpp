@@ -35,6 +35,10 @@
 #include <thread>
 #include <vector>
 
+#if defined(_WIN32)
+#  include <windows.h>
+#endif
+
 #include "cp3/host/options.hpp"
 
 #include "detail/cache/cache.hpp"
@@ -543,8 +547,13 @@ bool buildJobs(BuildState& st, const BuildRequest& request,
     // quote-include it relative to the build directory. User TUs (units and
     // the entry) key their manifest fingerprint on it plus the runtime
     // fingerprint: a body-only edit leaves it identical, so dependent TUs
-    // stay cached and only the edited module recompiles.
+    // stay cached and only the edited module recompiles. The entry TU lives
+    // under a module-name subdirectory (e.g. .cp3/build/src/index.cpp),
+    // where the quoted include cannot see the header beside the unit TUs, so
+    // user TUs also get -I<buildDir> explicitly.
     std::string unitFingerprint;
+    const std::vector<std::string> userInclude{
+        "-I" + st.layout.buildDir.string()};
     if (!request.sharedProgramHeader.empty()) {
         if (request.sharedProgramHeaderName.empty()) {
             return false;
@@ -570,6 +579,7 @@ bool buildJobs(BuildState& st, const BuildRequest& request,
             job.cpp = cpp;
             job.obj = obj;
             job.dependencyHash = unitFingerprint;
+            job.extraFlags = userInclude;
             jobs.push_back(std::move(job));
         }
     }
@@ -579,6 +589,7 @@ bool buildJobs(BuildState& st, const BuildRequest& request,
     entryJob.cpp = cppPath;
     entryJob.obj = objPath;
     entryJob.dependencyHash = unitFingerprint;
+    entryJob.extraFlags = userInclude;
     jobs.push_back(std::move(entryJob));
     // D72: parent-qualify the object name - the std families bring TUs that
     // share a stem with the core ones (src/std/crypto/runtime.cpp and
@@ -588,7 +599,11 @@ bool buildJobs(BuildState& st, const BuildRequest& request,
             st.layout.buildDir /
             ("_cp3_runtime_" + rt.parent_path().filename().string() + "_" +
              rt.stem().string() + ".o");
-        jobs.push_back(ObjectJob{rt.string(), rt, rtObj, {}, false, {}, false, -2});
+        ObjectJob rtJob;
+        rtJob.sourceKey = rt.string();
+        rtJob.cpp = rt;
+        rtJob.obj = rtObj;
+        jobs.push_back(std::move(rtJob));
     }
     // Packages: cached objects (if available) are linked directly and recorded
     // in the manifest; source-only packages compile here.
@@ -638,8 +653,12 @@ bool buildJobs(BuildState& st, const BuildRequest& request,
                  ".o");
             std::vector<std::string> flags{
                 "-Dmain=cp3_pkg_main_" + std::to_string(fnv1a64(impl.sourceKey))};
-            jobs.push_back(ObjectJob{impl.sourceKey, impl.source, obj,
-                                     std::move(flags), false, {}, false, -2});
+            ObjectJob pkgJob;
+            pkgJob.sourceKey = impl.sourceKey;
+            pkgJob.cpp = impl.source;
+            pkgJob.obj = obj;
+            pkgJob.extraFlags = std::move(flags);
+            jobs.push_back(std::move(pkgJob));
         }
     }
     return true;
@@ -772,12 +791,57 @@ bool linkProgram(BuildState& st, const fs::path& exePath) {
     if (st.showProgress) {
         reportRunProgress(true, false, "linking native executable...");
     }
+    // A still-running dev child keeps the previous exe image mapped on
+    // Windows; a fresh link into that path would fail with a sharing
+    // violation. Link into a sibling temp file and replace atomically: on
+    // Windows, replace-rename (MoveFileEx REPLACE_EXISTING) succeeds on a
+    // mapped image, and on POSIX rename over a running binary is fine.
+    const fs::path tmpPath =
+        st.layout.outDir / (exePath.filename().string() + ".link-tmp");
+    const LinkStep tmpStep{st.objects, tmpPath, st.nativeFlags.link};
+    const std::vector<std::string> tmpArgs =
+        linkArgs(st.tc, st.opt.compile.profile, tmpStep, st.optimizations);
     if (st.opt.verbose) {
-        std::fprintf(stderr, "cp3c: %s\n", describeCommand(args).c_str());
+        std::fprintf(stderr, "cp3c: %s\n", describeCommand(tmpArgs).c_str());
     }
-    const int rc = runProcess(args);
+    const int rc = runProcess(tmpArgs);
     if (rc != 0) {
+        std::remove(tmpPath.string().c_str());
         std::fprintf(stderr, "cp3c: linking failed (exit %d)\n", rc);
+        return false;
+    }
+
+    std::error_code renameEc;
+    const bool replaced = [&]() {
+#if defined(_WIN32)
+        const std::wstring from = tmpPath.wstring();
+        const std::wstring to = exePath.wstring();
+        if (MoveFileExW(from.c_str(), to.c_str(),
+                        MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+            return true;
+        }
+        return false;
+#else
+        fs::rename(tmpPath, exePath, renameEc);
+        return !renameEc;
+#endif
+    }();
+    if (!replaced) {
+        if (st.opt.internalDeferExeReplace) {
+            // The dev session completes the swap after the child exits; the
+            // fresh binary stays in the .link-tmp beside the exe.
+            if (st.opt.verbose) {
+                std::fprintf(stderr,
+                             "cp3c: replacement of '%s' deferred (the running app is mapped; the swap happens on restart)\n",
+                             exePath.string().c_str());
+            }
+            writeTextFile(stampPath, stamp, nullptr);
+            return true;
+        }
+        std::remove(tmpPath.string().c_str());
+        std::fprintf(stderr, "cp3c: cannot replace '%s' (the image is mapped "
+                             "or the file is read-only)\n",
+                     exePath.string().c_str());
         return false;
     }
     writeTextFile(stampPath, stamp, nullptr);
