@@ -119,7 +119,7 @@ function normalizedFile(uri: vscode.Uri): string {
 // suggest an import into a comment or string. The compiler LSP remains the
 // authority for parsing and diagnostics; this scan only protects this editor
 // contribution from offering edits in non-code text.
-function isCommentOrStringAt(text: string, offset: number): boolean {
+export function isCommentOrStringAt(text: string, offset: number): boolean {
     let state: "code" | "line" | "block" | "single" | "double" | "template" = "code";
     let escaped = false;
     const limit = Math.min(Math.max(offset, 0), text.length);
@@ -151,7 +151,10 @@ function isCommentOrStringAt(text: string, offset: number): boolean {
     return state !== "code";
 }
 
-function importInsertion(document: vscode.TextDocument): vscode.Position {
+// Shared with the intelligence engine (src/intelligence/*): these helpers decide
+// where an import goes, which names are bound in a document and whether an
+// offset sits inside a non-code region. They only read text.
+export function importInsertion(document: vscode.TextDocument): vscode.Position {
     let lastImport = -1;
     for (let line = 0; line < document.lineCount; line++) {
         if (importLinePattern.test(document.lineAt(line).text)) lastImport = line;
@@ -162,7 +165,7 @@ function importInsertion(document: vscode.TextDocument): vscode.Position {
         : new vscode.Position(0, 0);
 }
 
-function localBindings(text: string): Set<string> {
+export function localBindings(text: string): Set<string> {
     const names = new Set<string>();
     const pattern = /^\s*(?:export\s+)?(?:const|let|var|function|class|interface|enum|type)\s+([A-Za-z_$][\w$]*)/gm;
     for (let match = pattern.exec(text); match; match = pattern.exec(text)) names.add(match[1]);

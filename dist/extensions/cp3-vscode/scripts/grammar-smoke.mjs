@@ -118,7 +118,7 @@ const SAMPLE = [
 // `string.*`, `comment.*` and `keyword.operator`. A cp3 file must read exactly
 // like the JavaScript/TypeScript file next to it.
 const EXPECTATIONS = [
-    [" line comment", "comment.line.double-slash.cp3"],
+    ["line comment", "comment.line.double-slash.cp3"],
     ["/*", "comment.block.cp3"],
     ["@param", "storage.type.class.jsdoc.cp3"],
     ["{number}", "entity.name.type.jsdoc.cp3"],

@@ -145,8 +145,19 @@ std::string lowerAscii(std::string text) {
     return text;
 }
 
-bool containsAscii(const std::string& haystack, const std::string& needle) {
-    return needle.empty() || haystack.find(needle) != std::string::npos;
+// Fuzzy match in the style of the platform's symbol search: every query
+// character must appear, in order, in the candidate (case-insensitive). A
+// literal substring match is a subsequence, so this only loosens the search;
+// it lets "ZqxZetaClass" find "ZqxZetaBoxedClassTen".
+bool fuzzySubsequence(const std::string& haystack, const std::string& needle) {
+    if (needle.empty()) return true;
+    std::size_t cursor = 0;
+    for (char ch : needle) {
+        const std::size_t found = haystack.find(ch, cursor);
+        if (found == std::string::npos) return false;
+        cursor = found + 1;
+    }
+    return true;
 }
 
 // The declaration's own text when the target file is not the queried one.
@@ -340,12 +351,303 @@ Json workspaceSymbolResult(const std::string& query,
         }
         for (const SymbolEntry& entry : entries) {
             if (symbols.items.size() >= kMaxWorkspaceSymbols) return symbols;
-            if (!containsAscii(lowerAscii(entry.name), needle)) continue;
+            if (!fuzzySubsequence(lowerAscii(entry.name), needle)) continue;
             symbols.push(
                 symbolInformationJson(*document.text, *document.uri, entry));
         }
     }
     return symbols;
+}
+
+// ---------------------------------------------------------------------------
+// Workspace-scan helpers (workspace/symbol over files that are not open)
+// ---------------------------------------------------------------------------
+
+namespace {
+
+bool isWordCh(char ch) {
+    return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+           (ch >= '0' && ch <= '9') || ch == '_' || ch == '$';
+}
+
+bool isSpaceCh(char ch) { return ch == ' ' || ch == '\t'; }
+
+void skipSpaces(std::string_view& s) {
+    while (!s.empty() && isSpaceCh(s.front())) s.remove_prefix(1);
+}
+
+// Consumes `word` from the front of `s` when it appears there as a whole
+// word (identifier boundaries only), plus any trailing whitespace.
+bool takeWord(std::string_view& s, std::string_view word) {
+    if (s.size() < word.size()) return false;
+    if (s.substr(0, word.size()) != word) return false;
+    if (s.size() > word.size() && isWordCh(s[word.size()])) return false;
+    s.remove_prefix(word.size());
+    skipSpaces(s);
+    return true;
+}
+
+int kindForDeclaration(std::string_view keyword) {
+    if (keyword == "function") return 12;   // SymbolKind.Function
+    if (keyword == "class") return 5;       // SymbolKind.Class
+    if (keyword == "interface") return 11;  // SymbolKind.Interface
+    if (keyword == "enum") return 10;       // SymbolKind.Enum
+    if (keyword == "type") return 26;       // SymbolKind.TypeParameter
+    return 13;                              // SymbolKind.Variable
+}
+
+void pushEntry(std::vector<SymbolEntry>& entries, std::string name, int kind,
+               std::uint32_t line, std::size_t column) {
+    if (entries.size() >= 512) return;
+    SymbolEntry entry;
+    entry.name = std::move(name);
+    entry.kind = kind;
+    entry.line = line;
+    entry.column = static_cast<std::uint32_t>(column + 1);
+    entry.endLine = line;
+    entry.endColumn = static_cast<std::uint32_t>(column + entry.name.size());
+    entries.push_back(std::move(entry));
+}
+
+}  // namespace
+
+// A lightweight declaration scan for workspace-symbol queries across the
+// files the semantic engine has not opened. Deliberately not the frontend:
+// the scan is regex-free, linear, and only finds declaration shapes and their
+// kinds - enough for name search, never for edits.
+std::vector<SymbolEntry> scrapeSymbols(const std::string& text) {
+    std::vector<SymbolEntry> entries;
+    std::size_t start = 0;
+    std::uint32_t line = 1;
+    const std::size_t size = text.size();
+    while (start <= size && entries.size() < 512) {
+        std::size_t end = text.find('\n', start);
+        if (end == std::string::npos) end = size;
+        std::string_view view(text.data() + start, end - start);
+        if (!view.empty() && view.back() == '\r') view.remove_suffix(1);
+        std::string_view s = view;
+        skipSpaces(s);
+        bool exported = takeWord(s, "export");
+        takeWord(s, "default");
+        takeWord(s, "declare");
+        takeWord(s, "async");
+        takeWord(s, "abstract");
+        int kind = -1;
+        std::string_view keyword;
+        for (const char* candidate : {"function", "class", "interface", "enum",
+                                      "type", "const", "let", "var"}) {
+            if (takeWord(s, candidate)) {
+                keyword = candidate;
+                kind = kindForDeclaration(candidate);
+                break;
+            }
+        }
+        if (kind >= 0) {
+            std::size_t i = 0;
+            while (i < s.size() && isWordCh(s[i])) i += 1;
+            if (i > 0) {
+                // The identifier starts where the remaining text begins.
+                const std::size_t offset = view.size() - s.size();
+                pushEntry(entries, std::string(s.substr(0, i)), kind, line,
+                          offset);
+            }
+        } else if (exported) {
+            const std::size_t open = s.find('{');
+            const std::size_t close = open == std::string_view::npos
+                                          ? std::string_view::npos
+                                          : s.find('}', open);
+            if (open != std::string_view::npos && close != std::string_view::npos) {
+                const std::size_t base = view.size() - s.size();
+                const std::string_view list = s.substr(open + 1, close - open - 1);
+                std::size_t cursor = 0;
+                while (cursor < list.size() && entries.size() < 512) {
+                    const std::size_t comma = list.find(',', cursor);
+                    const std::string_view part = list.substr(
+                        cursor, comma == std::string_view::npos ? list.size() - cursor
+                                                                : comma - cursor);
+                    // One specifier: `a` or `a as b` (plus possible `type `).
+                    std::string_view trimmed = part;
+                    skipSpaces(trimmed);
+                    takeWord(trimmed, "type");
+                    std::size_t i = 0;
+                    while (i < trimmed.size() && isWordCh(trimmed[i])) i += 1;
+                    if (i > 0) {
+                        std::string name(trimmed.substr(0, i));
+                        std::size_t nameOffset =
+                            base + open + 1 + cursor + (part.size() - trimmed.size());
+                        std::string_view rest = trimmed;
+                        rest.remove_prefix(i);
+                        skipSpaces(rest);
+                        std::string_view tail = rest;
+                        if (takeWord(tail, "as")) {
+                            const std::size_t secondBase =
+                                base + open + 1 + cursor + (part.size() - tail.size());
+                            std::size_t j = 0;
+                            while (j < tail.size() && isWordCh(tail[j])) j += 1;
+                            if (j > 0) {
+                                name.assign(tail.substr(0, j));
+                                nameOffset = secondBase;
+                            }
+                        }
+                        pushEntry(entries, std::move(name), 13, line, nameOffset);
+                    }
+                    cursor = comma == std::string_view::npos ? list.size() : comma + 1;
+                }
+            }
+        }
+        start = end + 1;
+        line += 1;
+    }
+    return entries;
+}
+
+Json symbolInformationFor(const std::string& text, const std::string& uri,
+                          const SymbolEntry& entry) {
+    return symbolInformationJson(text, uri, entry);
+}
+
+// Folding ranges from pure text: multi-line block comments and template
+// literals, matched bracket pairs that open and close on different lines
+// (regions), and runs of >= 3 consecutive `import` lines (imports). Unlike
+// the syntax providers this needs no language knowledge, so it stays total on
+// any input.
+Json foldingRangeResult(const DocumentView& document) {
+    Json ranges = jsonArray();
+    if (document.text == nullptr || document.text->empty()) return ranges;
+    const std::string& text = *document.text;
+    const std::size_t size = text.size();
+    std::size_t index = 0;
+    std::uint32_t line = 0;
+    enum State { Normal = 0, BlockComment, DoubleString, SingleString, TemplateString };
+    State state = Normal;
+    std::uint32_t blockCommentStart = 0;
+    std::uint32_t templateStart = 0;
+    struct Frame { std::uint32_t line; char open; };
+    std::vector<Frame> stack;
+    while (index < size) {
+        const char ch = text[index];
+        if (state == Normal) {
+            if (ch == '\n') { line += 1; index += 1; continue; }
+            if (ch == '/' && index + 1 < size) {
+                if (text[index + 1] == '/') {
+                    while (index < size && text[index] != '\n') index += 1;
+                    continue;
+                }
+                if (text[index + 1] == '*') {
+                    state = BlockComment;
+                    blockCommentStart = line;
+                    index += 2;
+                    continue;
+                }
+            }
+            if (ch == '"') { state = DoubleString; index += 1; continue; }
+            if (ch == '\'') { state = SingleString; index += 1; continue; }
+            if (ch == '`') { state = TemplateString; templateStart = line; index += 1; continue; }
+            if (ch == '(' || ch == '[' || ch == '{') {
+                stack.push_back({line, ch});
+                index += 1;
+                continue;
+            }
+            if (ch == ')' || ch == ']' || ch == '}') {
+                const char wanted = ch == ')' ? '(' : ch == ']' ? '[' : '{';
+                if (!stack.empty() && stack.back().open == wanted) {
+                    const std::uint32_t openLine = stack.back().line;
+                    stack.pop_back();
+                    if (line > openLine) {
+                        Json range = jsonObject();
+                        range.set("startLine", jsonInt(openLine));
+                        range.set("endLine", jsonInt(line));
+                        range.set("kind", jsonString("region"));
+                        ranges.push(std::move(range));
+                    }
+                }
+                index += 1;
+                continue;
+            }
+            index += 1;
+            continue;
+        }
+        if (state == BlockComment) {
+            if (ch == '*' && index + 1 < size && text[index + 1] == '/') {
+                if (line > blockCommentStart) {
+                    Json range = jsonObject();
+                    range.set("startLine", jsonInt(blockCommentStart));
+                    range.set("endLine", jsonInt(line));
+                    range.set("kind", jsonString("comment"));
+                    ranges.push(std::move(range));
+                }
+                state = Normal;
+                index += 2;
+                continue;
+            }
+            if (ch == '\n') { line += 1; index += 1; continue; }
+            index += 1;
+            continue;
+        }
+        if (state == DoubleString || state == SingleString) {
+            const char quote = state == DoubleString ? '"' : '\'';
+            if (ch == '\\') { index += 2; continue; }
+            if (ch == quote) { state = Normal; index += 1; continue; }
+            if (ch == '\n') { line += 1; index += 1; state = Normal; continue; }
+            index += 1;
+            continue;
+        }
+        // Template literal: scanned verbatim; interpolation braces are not
+        // tracked (a backtick inside ${...} would end the literal early).
+        if (ch == '\\') { index += 2; continue; }
+        if (ch == '`') {
+            if (line > templateStart) {
+                Json range = jsonObject();
+                range.set("startLine", jsonInt(templateStart));
+                range.set("endLine", jsonInt(line));
+                range.set("kind", jsonString("region"));
+                ranges.push(std::move(range));
+            }
+            state = Normal;
+            index += 1;
+            continue;
+        }
+        if (ch == '\n') { line += 1; index += 1; continue; }
+        index += 1;
+    }
+    // Consecutive `import` lines fold together once the run reaches three.
+    std::size_t lineStart = 0;
+    std::uint32_t currentLine = 0;
+    std::uint32_t runStart = 0;
+    std::uint32_t runLength = 0;
+    while (lineStart <= size) {
+        std::size_t lineEnd = text.find('\n', lineStart);
+        if (lineEnd == std::string::npos) lineEnd = size;
+        std::string_view view(text.data() + lineStart, lineEnd - lineStart);
+        if (!view.empty() && view.back() == '\r') view.remove_suffix(1);
+        std::string_view trimmed = view;
+        skipSpaces(trimmed);
+        if (trimmed.substr(0, 6) == "import") {
+            if (runLength == 0) runStart = currentLine;
+            runLength += 1;
+        } else {
+            if (runLength >= 3) {
+                Json range = jsonObject();
+                range.set("startLine", jsonInt(runStart));
+                range.set("endLine", jsonInt(currentLine - 1));
+                range.set("kind", jsonString("imports"));
+                ranges.push(std::move(range));
+            }
+            runLength = 0;
+        }
+        lineStart = lineEnd + 1;
+        currentLine += 1;
+    }
+    if (runLength >= 3) {
+        Json range = jsonObject();
+        range.set("startLine", jsonInt(runStart));
+        range.set("endLine", jsonInt(currentLine - 1));
+        range.set("kind", jsonString("imports"));
+        ranges.push(std::move(range));
+    }
+    // Keep the answer bounded.
+    while (ranges.items.size() > 512) ranges.items.pop_back();
+    return ranges;
 }
 
 }  // namespace cp3::lsp

@@ -22,6 +22,12 @@ statically typed, JS/TS-shaped language that compiles through C++:
 - workspace auto-import completion for exported CP3 declarations, including
   named re-exports and unsaved open files. The nearest matching project module
   is ranked first and accepting a result adds its import;
+- **the codebase-aware suggestion engine**: member completion for the
+  standard library ranked by how *this workspace* uses it (sin/cos rise
+  above rare members in math-heavy code), named-export auto-import
+  (`Map`, `URL`, `Buffer`...), module-member call snippets (`cons` offers
+  `console.log(...)` with the import inserted) and workspace symbol ranking
+  learned from your own code's unigrams and adjacent-token pairs;
 - a curated set of CP3 snippets for declarations, classes, control flow,
   imports, collections, promises, documentation and HTTP handlers;
 - **signature help with documentation**: the active call shows what the
@@ -33,29 +39,74 @@ The documentation is Markdown: the server sends it as LSP `MarkupContent`,
 which VS Code renders as formatted text (a description, a `@param` list, a
 signature).
 
+## Smart suggestions
+
+On top of the language server, the extension runs a local suggestion engine
+that learns your codebase and offers the candidates you are actually about
+to write. It is a ranking and offering layer - parsing, types and
+diagnostics remain the server's job, and nothing leaves your machine.
+
+**What it knows:**
+
+- a background index of every `**/*.cp3` file in the workspace (bounded,
+  debounced, re-scanned on save and on watch events; unsaved open documents
+  always win over disk) with three statistics: identifier frequency
+  (*"how often is `combine` used here?"*), adjacent token pairs
+  (*"after `const` comes `value` in this codebase"*, a unigram/bigram model)
+  and member-use frequency (*"`Math.sin` is called 40 times here, `Math.acosh`
+  never"*);
+- the documented closed standard library surface (`std/math`, `std/console`,
+  `std/process`, `std/fs`, `std/path`, `std/os`, `std/date`, `std/json`,
+  `std/crypto`, `std/time`, `std/readline`, `std/hash`, `std/io`, `std/url`,
+  `std/text`, `std/buffer`, `std/collections`, `std/env`) - member completion
+  after `x.` only offers names the compiler accepts;
+- the document's own imports, so `import m from "std/math"` completes
+  `m.sin` correctly, and `Math.` completes it without any import at all
+  (accepting inserts `import Math from "std/math";` for you);
+
+**What it offers:**
+
+- `Math.` / `console.` / `process.` ... member completion ranked by corpus
+  frequency (log/sin rise to the top of a math-heavy project), falling back
+  to a documented prior for the hot members;
+- named-export auto-import (`Map`, `Set`, `URL`, `TextEncoder`, `Buffer`...)
+  ranked by usage; accepting merges the name into an existing
+  `import { Map } from "std/collections";` if you already have one;
+- module-member call snippets: typing `cons` offers `console.log(...)`
+  (with the import inserted on accept), typing `sin` offers `Math.sin(...)`;
+  matched members are labelled by the member name when the query matches the
+  member, or `module.member` when it matches the module;
+- workspace symbols (your declared exports) ranked by usage, excluding the
+  ones the current file declares itself and filtering matches against what
+  you typed;
+- everything ordered deterministically (exact prefix, camel-hump, substring,
+  fuzzy subsequence - re-ordered within each class by corpus and bigram
+  evidence), never fighting the server, capped, and disabled entirely with
+  `cp3.suggestCodebase: false`.
+
 ## Branding
 
 ### The logo
 
-`images/cp3-logo.svg` is the cp3 mark: a C++-style "C" with the **three**
-plus signs of "C+++" (the C++ mark has two). It is hand-written vector art -
-a 128x128 `viewBox` built from a rounded badge, one annular path and six
-rectangles. There is no font (no text element at all), no embedded raster
-image and no external reference, so it renders identically everywhere and
-stays sharp at any size.
+`images/cp3-logo.svg` is the cp3 wordmark: a white **CP** with a purple
+gradient **3** (`#8F5BFF` -> `#7C4DF0`). It is hand-written vector art - no
+font (no text element at all), no embedded raster image and no external
+reference - letterboxed onto a square `viewBox` (`0 0 1460 1460`) so the same
+artwork fills the 128x128 marketplace icon slot and the 16x16 file-icon slot
+without cropping. The artwork itself is unchanged from the original supplied
+banner; only the canvas was made square.
 
-The palette is two strong colors on a self-contained badge: the badge is an
-indigo-to-violet gradient (`#4F46E5` -> `#7C3AED`), the "C" is white and the
-plus signs are amber (`#FBBF24`). Because the "C" always sits on the badge
-rather than on the editor's background, the mark reads on a light *and* on a
-dark theme.
+`images/cp3-logo-light.svg` is the same wordmark for light themes: the
+near-white `#F2F2F4` C/P revert to near-black (`#111111`) and the gradient
+"3" stays exactly as it is. `icons/cp3-icons.json` maps `.cp3` to the
+near-white wordmark by default (used on dark themes) and to the near-black
+wordmark under the `light` theme association (applied by VS Code on light
+themes). The marketplace icon `images/cp3-logo.png` is the 128x128 raster of
+the **light** wordmark - the store page renders on white, so the blackish
+letters are the readable choice there; pass `-Variant dark` to the render
+script to rasterize the near-white variant instead.
 
-At 128x128 the whole mark is visible; at 16x16 (the file icon) the "C"
-carries the identity and the plus signs read as its texture.
-
-`images/cp3-logo.png` is the 128x128 PNG the VS Code marketplace wants. It is
-a raster of exactly that SVG - regenerate it with the script that ships
-next to it:
+`images/cp3-logo.png` is regenerated with the script that ships next to it:
 
 ```
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/render-logo.ps1
@@ -63,7 +114,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/render-logo.ps1
 
 The script rasterizes the SVG with a locally installed Chromium browser in
 headless mode (Chrome or Edge), so the PNG and the file icon match; nothing
-is downloaded and no image generator is involved.
+is downloaded and no image generator is involved. (The `-Variant` switch
+picks `light` - the default - or `dark`.)
 
 ### The file icon
 
@@ -81,8 +133,10 @@ theme gives it.
 
 `npm run smoke` includes a `brand-smoke` check that verifies the manifest is
 valid JSON, that the contributed paths resolve relative to the extension
-root, and that the artwork is what it claims to be (a 128x128 vector without
-fonts, and a 128x128 PNG).
+root and the theme file, that both wordmark SVGs keep the purple-gradient
+"3" (and their respective dark/light letter colors) with no fonts or
+external references, that the icon theme's light override re-points `.cp3`
+at the light wordmark, and that the PNG is a 128x128 raster.
 
 ## Requirements
 
@@ -98,6 +152,7 @@ fonts, and a 128x128 PNG).
 | --- | --- | --- |
 | `cp3.compilerPath` | `cp3c` | Path to the cp3 compiler. A bare name is searched on `PATH` (on Windows `cp3c.exe` is tried too), then in parent folders for a CP3 source checkout's `build/bin/cp3c`; an explicit path is used as-is. |
 | `cp3.suggestWorkspaceExports` | `true` | Offer exported symbols from CP3 files in the workspace and add the corresponding import when accepted. |
+| `cp3.suggestCodebase` | `true` | Enable the codebase-aware suggestion engine: stdlib member ranking (`Math.` -> sin/cos first), named-export auto-import, module-member call snippets (`cons` -> `console.log(...)`), workspace symbol ranking. Off: only the server and snippets. |
 
 ## Commands
 
@@ -217,3 +272,9 @@ file reads exactly like the TypeScript file next to it.
   rather than errors.
 - The `std/events` module does not exist: `EventEmitter` is a language
   builtin, which is why the grammar highlights it and not an import.
+- The suggestion engine ranks and offers; it does not type-check. Member
+  completion for user-defined classes, interfaces and typed object literals
+  is the language server's job, not the engine's (the engine only ranks the
+  candidates the server and its own catalogs offer). Pair/frequency statistics
+  are computed from your workspace's own code - there is no bundled usage
+  profile and nothing is sent anywhere.

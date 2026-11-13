@@ -3,11 +3,14 @@
 .vscode/**
 src/**
 scripts/**
+test/**
 out/**
 node_modules/**
+.vscode-test/**
 .gitignore
 .vscodeignore
 esbuild.mjs
+esbuild-test.mjs
 tsconfig.json
 package-lock.json
 **/*.ts

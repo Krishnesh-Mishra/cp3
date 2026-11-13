@@ -5,9 +5,17 @@
   "iconDefinitions": {
     "cp3-logo": {
       "iconPath": "../images/cp3-logo.svg"
+    },
+    "cp3-logo-light": {
+      "iconPath": "../images/cp3-logo-light.svg"
     }
   },
   "fileExtensions": {
     "cp3": "cp3-logo"
+  },
+  "light": {
+    "fileExtensions": {
+      "cp3": "cp3-logo-light"
+    }
   }
 }

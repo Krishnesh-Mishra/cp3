@@ -5,9 +5,11 @@
 // extends a base theme that ships with VS Code, maps `.cp3` to the logo and
 // resolves its icon path relative to the theme file.
 //
-// It also checks the artwork itself: the SVG is a 128x128 vector with no
-// external references (no font, no image), and the PNG is the 128x128 raster
-// of it.
+// The artwork checks below cover: the two SVGs that ship with the extension
+// (the near-white wordmark used on dark surfaces and its near-black
+// counterpart used on light surfaces - the "3" keeps the same purple
+// gradient), the contributed icon theme (including its light-theme override),
+// and the PNG raster the marketplace wants.
 //
 //   node scripts/brand-smoke.mjs
 
@@ -80,14 +82,36 @@ for (const theme of themes) {
         const iconPath = normalize(join(dirname(themePath), definition.iconPath));
         check(`the icon '${name}' of '${theme.id}' exists`, existsSync(iconPath), iconPath);
     }
+    // The light-theme override (a top-level association applied under the
+    // `.vs` selector): it re-points the .cp3 mapping at the blackish
+    // wordmark so the icon reads on a light theme. iconDefinitions may only
+    // live at the top level - the light section carries associations only.
+    if (data.light !== undefined) {
+        const light = data.light;
+        check(`the theme '${theme.id}' light override keeps iconDefinitions out`, light.iconDefinitions === undefined);
+        const override = (light.fileExtensions || {}).cp3;
+        check(`the theme '${theme.id}' light override re-points .cp3`, typeof override === "string" && override.length > 0, String(override));
+        if (typeof override === "string" && override.length > 0) {
+            check(`the light definition '${override}' exists`, (data.iconDefinitions || {})[override] !== undefined, override);
+        }
+    }
 }
 
 // The artwork itself.
-const svg = readFileSync(join(root, "images", "cp3-logo.svg"), "utf8");
-check("the SVG declares a 128x128 viewBox", svg.includes('viewBox="0 0 128 128"'));
-check("the SVG uses no font", !/<text[\s>]/.test(svg) && !/@font-face/.test(svg));
-check("the SVG embeds no raster image", !/<image[\s>]/.test(svg) && !/data:image/.test(svg));
-check("the SVG references no external file", !/(?:href|xlink:href)="(?!#)/.test(svg));
+function checkSvgArtwork(file, expectedFills) {
+    const svg = readFileSync(join(root, file), "utf8");
+    check(`${file} declares a square viewBox`, /viewBox="0 0 1460 1460"/.test(svg), (svg.match(/viewBox="[^"]*"/) || ["<none>"])[0]);
+    check(`${file} uses no font`, !/<text[\s>]/.test(svg) && !/@font-face/.test(svg));
+    check(`${file} embeds no raster image`, !/<image[\s>]/.test(svg) && !/data:image/.test(svg));
+    check(`${file} references no external file`, !/(?:href|xlink:href)="(?!#)/.test(svg));
+    check(`${file} keeps the purple-gradient "3"`, svg.includes('stop-color="#8F5BFF"') && svg.includes('stop-color="#7C4DF0"'));
+    for (const [fill, present] of expectedFills) {
+        check(`${file} ${present ? "uses" : "avoids"} ${fill}`, svg.includes(fill) === present);
+    }
+}
+
+checkSvgArtwork("images/cp3-logo.svg", [["#F2F2F4", true], ["#111111", false]]);
+checkSvgArtwork("images/cp3-logo-light.svg", [["#111111", true], ["#F2F2F4", false]]);
 
 const png = readFileSync(join(root, "images", "cp3-logo.png"));
 check("the PNG is a PNG file", png.subarray(1, 4).toString("ascii") === "PNG");

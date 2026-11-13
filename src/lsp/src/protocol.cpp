@@ -86,6 +86,7 @@ Json initializeResult() {
     capabilities.set("workspaceSymbolProvider", jsonBool(true));
     capabilities.set("signatureHelpProvider", signatureHelpProviderJson());
     capabilities.set("documentFormattingProvider", jsonBool(true));
+    capabilities.set("foldingRangeProvider", jsonBool(true));
     Json serverInfo = jsonObject();
     serverInfo.set("name", jsonString("cp3-lsp"));
     serverInfo.set("version", jsonString(kVersion));

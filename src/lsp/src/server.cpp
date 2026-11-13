@@ -11,14 +11,19 @@
 // =============================================================================
 #include "cp3/lsp.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
+#include <filesystem>
+#include <fstream>
 #include <map>
 #include <string>
 #include <string_view>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -71,6 +76,38 @@ struct RequestTarget {
 const std::string* stringField(const Json& object, std::string_view key) {
     const Json* value = object.find(key);
     return value != nullptr ? value->asString() : nullptr;
+}
+
+// A lowercased copy for case-insensitive substring matching.
+std::string lowerCopy(std::string_view text) {
+    std::string result(text);
+    for (char& ch : result) {
+        if (ch >= 'A' && ch <= 'Z') ch = static_cast<char>(ch - 'A' + 'a');
+    }
+    return result;
+}
+
+// Fuzzy match in the style of the platform's symbol search: every query
+// character must appear, in order, in the candidate (case-insensitive),
+// matching the open-document path.
+bool fuzzySubsequence(std::string_view haystack, std::string_view needle) {
+    std::size_t cursor = 0;
+    for (char ch : needle) {
+        const std::size_t found = haystack.find(ch, cursor);
+        if (found == std::string_view::npos) return false;
+        cursor = found + 1;
+    }
+    return true;
+}
+
+// Normalized key for path comparison (case-insensitive, slash-separated).
+std::string normalizePathKey(const std::string& path) {
+    std::string key(path);
+    for (char& ch : key) {
+        if (ch == '\\') ch = '/';
+        else if (ch >= 'A' && ch <= 'Z') ch = static_cast<char>(ch - 'A' + 'a');
+    }
+    return key;
 }
 
 std::uint32_t numberField(const Json& object, std::string_view key,
@@ -126,6 +163,18 @@ private:
     void runPendingChecks();
     void checkDocument(Document& document);
     std::vector<RawDiagnostic> runCheck(const Document& document) const;
+    void scanWorkspaceSymbols(const std::string& query, Json& out);
+    void collectWorkspaceFiles(const std::string& dir, std::vector<std::string>& files,
+                               int depth) const;
+
+    struct WorkspaceScanEntry {
+        std::filesystem::file_time_type mtime{};
+        std::uintmax_t size = 0;
+        bool ok = false;
+        std::string uri;
+        std::vector<SymbolEntry> entries;
+        std::string text;
+    };
 
     void publish(const std::string& uri,
                  const std::vector<RawDiagnostic>& diagnostics,
@@ -141,6 +190,14 @@ private:
     bool shutdownRequested_ = false;
     bool stop_ = false;
     int exitCode_ = 0;
+    // The workspace root from `initialize` (rootUri/rootPath), empty when the
+    // client sent neither; drives the workspace/symbol disk scan.
+    std::string rootPath_;
+    // mtime/size-keyed cache of scraped workspace files. The walk happens on
+    // every query (it is a linear directory scan with cached reads), so a
+    // file written a moment ago is always visible - a stale-serving TTL
+    // would hide just-written fixtures from exactly the first query.
+    std::unordered_map<std::string, WorkspaceScanEntry> workspaceScanCache_;
 };
 
 int Server::run() {
@@ -195,6 +252,19 @@ void Server::handleMessage(const Json& message) {
 void Server::handleRequest(const std::string& method, const Json& id,
                            const Json* params) {
     if (method == "initialize") {
+        // The workspace root is what workspace/symbol scans when a file has
+        // no open document; absent root means only open documents are searched.
+        if (params != nullptr && params->isObject()) {
+            std::string root;
+            if (const std::string* uri = stringField(*params, "rootUri");
+                uri != nullptr && !uri->empty()) {
+                if (!uriToPath(*uri, root)) root.clear();
+            } else if (const std::string* path = stringField(*params, "rootPath");
+                       path != nullptr && !path->empty()) {
+                root = *path;
+            }
+            rootPath_ = std::move(root);
+        }
         respond(id, initializeResult());
         return;
     }
@@ -264,8 +334,18 @@ bool Server::handleIntelDocumentRequest(const std::string& method,
         }
         std::vector<DocumentView> views;
         for (const auto& entry : documents_) views.push_back(viewOf(entry.second));
-        respond(id, workspaceSymbolResult(query != nullptr ? *query : std::string(),
-                                          views, *intel_));
+        Json symbols = workspaceSymbolResult(query != nullptr ? *query : std::string(),
+                                             views, *intel_);
+        if (!rootPath_.empty()) {
+            scanWorkspaceSymbols(query != nullptr ? *query : std::string(), symbols);
+        }
+        respond(id, std::move(symbols));
+        return true;
+    }
+    if (method == "textDocument/foldingRange") {
+        const RequestTarget target = requestTarget(params);
+        if (target.document == nullptr) respond(id, jsonArray());
+        else respond(id, foldingRangeResult(viewOf(*target.document)));
         return true;
     }
     return false;
@@ -400,6 +480,114 @@ std::vector<RawDiagnostic> Server::runCheck(const Document& document) const {
         diagnostics.push_back(internalError("unknown exception"));
     }
     return diagnostics;
+}
+
+// Caps for the workspace/symbol disk scan: the walk sees the whole
+// workspace (a cap that arbitrarily drops files would hide symbols, which is
+// worse than the extra stat), but a per-file size cap keeps memory bounded,
+// and a short TTL bounds how often the walk runs. Stale cache entries (paths
+// no longer present) are evicted after each walk.
+constexpr std::uintmax_t kMaxWorkspaceScanBytes = 1024 * 1024;   // 1 MiB
+constexpr std::size_t kMaxWorkspaceSymbolsTotal = 512;
+constexpr int kMaxWorkspaceScanDepth = 12;
+
+void Server::scanWorkspaceSymbols(const std::string& query, Json& out) {
+    const std::string needle = lowerCopy(query);
+
+    // Open documents were already answered from their (possibly dirty) text.
+    std::vector<std::string> openKeys;
+    openKeys.reserve(documents_.size());
+    for (const auto& entry : documents_) {
+        if (!entry.second.path.empty()) {
+            openKeys.push_back(normalizePathKey(entry.second.path));
+        }
+    }
+    std::sort(openKeys.begin(), openKeys.end());
+
+    std::vector<std::string> files;
+    collectWorkspaceFiles(rootPath_, files, 0);
+    if (files.empty()) return;
+    std::sort(files.begin(), files.end());
+
+    // Evict cache entries for files that disappeared (renamed/deleted) so the
+    // cache tracks the live source set instead of growing forever.
+    {
+        std::unordered_set<std::string> live;
+        live.reserve(files.size());
+        for (const std::string& file : files) live.insert(normalizePathKey(file));
+        for (auto it = workspaceScanCache_.begin(); it != workspaceScanCache_.end();) {
+            if (live.find(it->first) == live.end()) {
+                it = workspaceScanCache_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
+    for (const std::string& file : files) {
+        if (out.items.size() >= kMaxWorkspaceSymbolsTotal) break;
+        const std::string key = normalizePathKey(file);
+        if (std::binary_search(openKeys.begin(), openKeys.end(), key)) continue;
+        std::error_code ec;
+        const auto mtime = std::filesystem::last_write_time(file, ec);
+        if (ec) continue;
+        const auto size = std::filesystem::file_size(file, ec);
+        if (ec || size > kMaxWorkspaceScanBytes) continue;
+
+        auto cached = workspaceScanCache_.find(key);
+        const bool fresh = cached != workspaceScanCache_.end() &&
+                           cached->second.ok && cached->second.mtime == mtime &&
+                           cached->second.size == size;
+        if (!fresh) {
+            std::ifstream stream(file, std::ios::binary);
+            if (!stream) {
+                workspaceScanCache_[key] = WorkspaceScanEntry{};
+                continue;
+            }
+            std::string text((std::istreambuf_iterator<char>(stream)),
+                             std::istreambuf_iterator<char>());
+            WorkspaceScanEntry slot;
+            slot.mtime = mtime;
+            slot.size = size;
+            slot.uri = pathToUri(file);
+            slot.entries = scrapeSymbols(text);
+            slot.text = std::move(text);
+            slot.ok = true;
+            workspaceScanCache_[key] = std::move(slot);
+            cached = workspaceScanCache_.find(key);
+        }
+        const WorkspaceScanEntry& entry = cached->second;
+        if (!entry.ok) continue;
+        for (const SymbolEntry& symbol : entry.entries) {
+            if (out.items.size() >= kMaxWorkspaceSymbolsTotal) break;
+            if (!fuzzySubsequence(lowerCopy(symbol.name), needle)) continue;
+            out.push(symbolInformationFor(entry.text, entry.uri, symbol));
+        }
+    }
+}
+
+void Server::collectWorkspaceFiles(const std::string& dir,
+                                   std::vector<std::string>& files,
+                                   int depth) const {
+    if (depth > kMaxWorkspaceScanDepth) return;
+    std::error_code ec;
+    std::filesystem::directory_iterator it(dir, ec);
+    if (ec) return;
+    for (const auto& entry : it) {
+        const std::string name = entry.path().filename().string();
+        std::error_code typeEc;
+        if (entry.is_directory(typeEc)) {
+            if (typeEc || name.empty() || name.front() == '.') continue;
+            if (name == "node_modules" || name == "build" || name == "dist" ||
+                name == "third_party" || name == "generated" || name == "out" ||
+                name == "target" || name == "vendor") continue;
+            collectWorkspaceFiles(entry.path().string(), files, depth + 1);
+        } else if (entry.is_regular_file(typeEc)) {
+            if (!typeEc && entry.path().extension() == ".cp3") {
+                files.push_back(entry.path().string());
+            }
+        }
+    }
 }
 
 void Server::checkDocument(Document& document) {

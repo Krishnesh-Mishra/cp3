@@ -126,6 +126,11 @@
           "type": "boolean",
           "default": true,
           "description": "Suggest exported declarations from CP3 files in the workspace and add the matching import when accepted."
+        },
+        "cp3.suggestCodebase": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Enable the codebase-aware suggestion engine: stdlib member completion ranked by this workspace's usage (sin/cos/log...), named-export suggestions with auto-import (`Map`, `URL`, `Buffer`...), module-member call snippets (`cons` -> `console.log(...)` with the import inserted) and workspace symbol ranking. Disabling falls back to only the language server and snippet contributions."
         }
       }
     },
@@ -210,10 +215,13 @@
     "vscode:prepublish": "node esbuild.mjs --production",
     "compile": "node esbuild.mjs",
     "watch": "node esbuild.mjs --watch",
-    "typecheck": "tsc --noEmit",
+    "compile:test": "node esbuild-test.mjs",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p test/tsconfig.json",
+    "test": "npm run compile && npm run compile:test && node test/runShards.mjs",
     "smoke:resolve": "node scripts/resolve-smoke.mjs",
     "smoke:grammar": "node scripts/grammar-smoke.mjs",
     "smoke:brand": "node scripts/brand-smoke.mjs",
+    "smoke:std": "node scripts/std-smoke.mjs",
     "smoke": "npm run typecheck && npm run smoke:resolve && npm run smoke:grammar && npm run smoke:brand",
     "package": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1"
   },
@@ -221,9 +229,12 @@
     "vscode-languageclient": "^10.1.2"
   },
   "devDependencies": {
+    "@types/mocha": "^10.0.10",
     "@types/node": "^24.19.2",
     "@types/vscode": "~1.91.0",
+    "@vscode/test-electron": "^3.1.0",
     "esbuild": "^0.28.2",
+    "mocha": "^12.0.3",
     "typescript": "~5.9.3",
     "vscode-oniguruma": "^2.0.1",
     "vscode-textmate": "^9.3.2"

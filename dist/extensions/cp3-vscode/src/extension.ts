@@ -44,6 +44,7 @@ import {
 
 import { resolveCompilerPath } from "./compilerPath";
 import { registerEditorFeatures } from "./editorFeatures";
+import { registerSuggestionEngine } from "./intelligence/suggestionProvider";
 import {
     applyPackageJsonSchema,
     registerPackageJsonSchemaCommand,
@@ -520,6 +521,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     context.subscriptions.push(output());
     context.subscriptions.push(runOutputChannel());
     registerEditorFeatures(context);
+    registerSuggestionEngine(context);
     context.subscriptions.push(
         vscode.commands.registerCommand(RESTART_COMMAND, () => startClient(true))
     );
@@ -561,6 +563,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
                 }
             })
         );
+        // The document that triggered this activation (onLanguage:cp3) has
+        // already fired `onDidOpenTextDocument` by the time we get here, so
+        // the listener above would never see it. Start the server inline for
+        // any cp3 document that is already open.
+        for (const document of vscode.workspace.textDocuments) {
+            if (document.languageId === LANGUAGE_ID && !serverStarted) {
+                serverStarted = true;
+                void startClient();
+            }
+        }
     }
     context.subscriptions.push(
         vscode.workspace.onDidChangeConfiguration((event) => {

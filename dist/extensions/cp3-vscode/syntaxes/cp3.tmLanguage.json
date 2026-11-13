@@ -102,7 +102,7 @@
         },
         {
           "name": "comment.line.double-slash.cp3",
-          "begin": "//",
+          "begin": "//\\s*",
           "beginCaptures": {
             "0": {
               "name": "punctuation.definition.comment.cp3"

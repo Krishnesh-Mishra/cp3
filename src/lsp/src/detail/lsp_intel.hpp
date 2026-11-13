@@ -62,4 +62,21 @@ Json workspaceSymbolResult(const std::string& query,
                            const std::vector<DocumentView>& documents,
                            const IntelHooks& intel);
 
+// Lightweight declaration scan for workspace-symbol queries across files the
+// semantic engine has not opened (regex-free, linear). Positions are reported
+// exactly like the outline provider (1-based line, 1-based BYTE column).
+std::vector<SymbolEntry> scrapeSymbols(const std::string& text);
+
+// SymbolInformation for one outline entry (the same shape documentSymbol
+// uses; exposed so the server can package scraped workspace entries without
+// duplicating the position conversions).
+Json symbolInformationFor(const std::string& text, const std::string& uri,
+                          const SymbolEntry& entry);
+
+// FoldingRange array for `textDocument/foldingRange`, computed from pure
+// text: multi-line block comments and template literals, brace pairs that
+// open and close on different lines, and runs of >= 3 consecutive import
+// lines. Total on any input.
+Json foldingRangeResult(const DocumentView& document);
+
 }  // namespace cp3::lsp

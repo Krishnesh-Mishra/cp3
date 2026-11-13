@@ -14,7 +14,8 @@
 //   textDocument/{didOpen,didChange,didSave,didClose},
 //   textDocument/publishDiagnostics.
 // The intel round adds the query requests behind IntelHooks: completion, hover,
-// definition, documentSymbol, workspaceSymbol, signatureHelp, formatting.
+// definition, documentSymbol, workspaceSymbol, signatureHelp, formatting and
+// foldingRange (computed from text, no hook required).
 // =============================================================================
 #pragma once
 

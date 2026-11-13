@@ -17,7 +17,7 @@ import process from "std/process";
 
 const PORT = process.argv.length > 1 ? parseInt(process.argv[1]) : 8080;
 const LOOPS = os.cpus();
-const app = createServer({ threads: LOOPS });
+const app = createServer({ threads: parseInt(LOOPS) });
 
 app.get("/healthz", (req, res) => {
   res.text("ok");
@@ -31,6 +31,6 @@ app.use((req, res, next) => {
   res.status(404).text("not found");
 });
 
-app.listen(PORT, () => {
+app.listen(parseTo<u16>(PORT), () => {
   console.log(`listening on http://127.0.0.1:${PORT} (${LOOPS} loops)`);
 });

@@ -1,57 +1,17 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!--
-  The cp3 mark: a C++-style "C" with the three plus signs of "C+++".
-
-  Hand-written vector art - no fonts, no external references, no raster
-  embeds: every shape is a primitive, so the mark renders identically
-  everywhere. It is drawn for two sizes:
-
-    * 128x128 - the extension icon (the marketplace wants a PNG; the PNG in
-      images/cp3-logo.png is a raster of exactly this file);
-    * 16x16   - the file icon in the explorer and the tab. The "C" carries
-      the mark at that size, the plus signs read as its texture.
-
-  The colors: the badge is indigo -> violet and the plus signs are amber.
-  Both are strong enough to read on a light and on a dark editor theme,
-  because the white "C" always sits on the badge instead of on the theme's
-  background. Nothing here depends on the theme's foreground color.
--->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="C+++ (cp3)">
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1460 1460" width="1460" height="1460" role="img" aria-label="CP3 logo">
   <defs>
-    <linearGradient id="cp3Badge" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#4F46E5"/>
-      <stop offset="1" stop-color="#7C3AED"/>
+    <linearGradient id="cp3-purple" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8F5BFF"/>
+      <stop offset="1" stop-color="#7C4DF0"/>
     </linearGradient>
   </defs>
 
-  <!-- The badge: the rounded square the mark sits on. -->
-  <rect x="0" y="0" width="128" height="128" rx="26" fill="url(#cp3Badge)"/>
+  <g transform="translate(-168 294)"><!-- C -->
+  <path fill="#F2F2F4" d="M520 330 L808 330 L758 380 Q750 383 740 383 L525 383 Q512 384 500 395 L432 458 Q426 466 426 478 Q428 500 448 501 L775 501 L730 552 Q726 555 718 555 L430 555 Q360 555 360 485 Q360 450 390 425 L470 350 Q490 330 520 330 Z"/>
 
-  <!--
-    The "C": a 270 degree annulus (outer radius 40, inner radius 22) around
-    (55, 64), open on the right between -45 and +45 degrees. The two arcs
-    and the two radial cuts are one closed path, so the terminals are exact.
-  -->
-  <path d="M 83.284 35.716
-           A 40 40 0 1 0 83.284 92.284
-           L 70.556 79.556
-           A 22 22 0 1 1 70.556 48.444
-           Z"
-        fill="#FFFFFF"/>
+  <!-- P -->
+  <path fill="#F2F2F4" d="M870 330 L1120 330 Q1198 335 1198 408 Q1196 480 1120 485 L886 485 L886 575 L823 604 L823 432 L1115 432 Q1140 430 1140 408 Q1140 385 1115 383 L815 383 Z"/>
 
-  <!--
-    The three plus signs of "C+++", stacked on the open side of the "C"
-    (centers at x = 103, y = 38 / 64 / 90; each 20 wide with an 8 thick
-    stroke). Three of them are the cp3 identity; the C++ mark has two.
-  -->
-  <g fill="#FBBF24">
-    <rect x="93" y="34" width="20" height="8" rx="2"/>
-    <rect x="99" y="28" width="8" height="20" rx="2"/>
-
-    <rect x="93" y="60" width="20" height="8" rx="2"/>
-    <rect x="99" y="54" width="8" height="20" rx="2"/>
-
-    <rect x="93" y="86" width="20" height="8" rx="2"/>
-    <rect x="99" y="80" width="8" height="20" rx="2"/>
-  </g>
-</svg>
+  <!-- 3 -->
+  <path fill="url(#cp3-purple)" d="M1228 300 L1265 267 L1410 267 Q1436 267 1436 295 Q1432 320 1412 338 Q1430 345 1428 365 Q1425 385 1395 400 L1382 410 L1218 410 L1243 377 L1370 377 Q1385 377 1385 366 Q1385 352 1370 352 L1257 352 L1277 324 L1370 324 Q1385 324 1385 313 Q1385 300 1370 300 Z"/>
+</g></svg>
