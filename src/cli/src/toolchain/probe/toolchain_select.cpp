@@ -161,7 +161,7 @@ ChoiceResolution resolveFamily(const ToolchainChoice& choice,
             "clang++-<major>, or a clang++ path)";
         return ChoiceResolution::Invalid;
     }
-    std::vector<ToolchainInstall> installs =
+    const std::vector<ToolchainInstall> installs =
         discoverToolchainVersions(*candidate, false);
     if (installs.empty()) {
         return missingFamily(*candidate, choice, sourceLabel, strict,

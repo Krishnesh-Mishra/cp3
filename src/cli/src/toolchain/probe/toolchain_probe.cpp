@@ -162,6 +162,80 @@ bool probeCacheStore(const std::string& program, const ProbeCacheEntry& entry) {
     return static_cast<bool>(outFile);
 }
 
+bool probeFlagsLookup(const std::string& program, ProbeFlagsCacheEntry& out) {
+    constexpr const char* kFlagsCacheFile = "toolchain-flags-cache";
+    const ProbeBinaryIdentity identity = probeBinaryIdentity(program);
+    if (!identity.valid) return false;
+    std::error_code ec;
+    std::ifstream in(probeCacheConfigDir() / kFlagsCacheFile);
+    if (!in) return false;
+    std::string line;
+    while (std::getline(in, line)) {
+        if (line.empty() || line.front() == '#') continue;
+        const std::size_t tab1 = line.find('\t');
+        const std::size_t tab2 = tab1 == std::string::npos ? std::string::npos
+                                                           : line.find('\t', tab1 + 1);
+        const std::size_t tab3 = tab2 == std::string::npos ? std::string::npos
+                                                           : line.find('\t', tab2 + 1);
+        const std::size_t tab4 = tab3 == std::string::npos ? std::string::npos
+                                                           : line.find('\t', tab3 + 1);
+        if (tab4 == std::string::npos) continue;
+        const std::string path = line.substr(0, tab1);
+        if (path != program) continue;
+        std::uintmax_t size = 0;
+        long long mtime = 0;
+        try {
+            size = static_cast<std::uintmax_t>(
+                std::stoull(line.substr(tab1 + 1, tab2 - tab1 - 1)));
+            mtime = std::stoll(line.substr(tab2 + 1, tab3 - tab2 - 1));
+        } catch (const std::exception&) {
+            continue;
+        }
+        if (size != identity.size || mtime != identity.mtime) return false;
+        out.sysroot = line.substr(tab3 + 1, tab4 - tab3 - 1);
+        out.flags = line.substr(tab4 + 1);
+        return !out.flags.empty();
+    }
+    return false;
+}
+
+bool probeFlagsStore(const std::string& program, const ProbeFlagsCacheEntry& entry) {
+    constexpr const char* kFlagsCacheFile = "toolchain-flags-cache";
+    const ProbeBinaryIdentity identity = probeBinaryIdentity(program);
+    if (!identity.valid) return false;
+    const fs::path dir = probeCacheConfigDir();
+    std::error_code ec;
+    fs::create_directories(dir, ec);
+    if (ec) return false;
+    std::vector<std::string> kept;
+    {
+        std::ifstream in(dir / kFlagsCacheFile);
+        std::string line;
+        while (std::getline(in, line)) {
+            if (line.empty() || line.front() == '#') continue;
+            if (line.compare(0, program.size() + 1, program + "\t") == 0) continue;
+            kept.push_back(line);
+        }
+    }
+    if (kept.size() >= 64) kept.erase(kept.begin(), kept.begin() + (kept.size() - 63));
+    auto sanitize = [](const std::string& value) {
+        std::string out;
+        out.reserve(value.size());
+        for (const char c : value) {
+            out.push_back((c == '\t' || c == '\r' || c == '\n') ? ' ' : c);
+        }
+        return out;
+    };
+    std::ofstream outFile(dir / kFlagsCacheFile, std::ios::trunc);
+    if (!outFile) return false;
+    outFile << "# cp3 toolchain flags cache (v1) - see probe_cache.hpp\n";
+    for (const std::string& line : kept) outFile << line << '\n';
+    outFile << sanitize(program) << '\t' << identity.size << '\t' << identity.mtime
+            << '\t' << sanitize(entry.sysroot) << '\t' << sanitize(entry.flags)
+            << '\n';
+    return static_cast<bool>(outFile);
+}
+
 namespace {
 
 std::string lowerCopy(std::string s) {

@@ -16,6 +16,7 @@
 // headers and libraries; Clang remains the only compiler driver.
 // =============================================================================
 #include "detail/toolchain/toolchain_select.hpp"
+#include "detail/toolchain/probe_cache.hpp"
 
 #include <chrono>
 #include <cstdlib>
@@ -242,10 +243,26 @@ bool compilesWith(const std::string& program,
 #endif
 
 // Flag sets are probed once per driver and remembered: the probe and every
-// later build must agree, and re-probing on each call would be slow.
+// later build must agree. The in-process map dedupes calls inside one cp3c
+// invocation; the on-disk cache dedupes them across invocations (keyed by
+// the driver binary's identity, revalidated against a swapped MinGW tree).
 std::map<std::string, std::vector<std::string>>& flagCache() {
     static std::map<std::string, std::vector<std::string>> cache;
     return cache;
+}
+
+void rememberFlags(const std::string& program, const std::vector<std::string>& flags) {
+    flagCache()[program] = flags;
+    ProbeFlagsCacheEntry entry;
+    for (const std::string& flag : flags) {
+        entry.flags += flag;
+        entry.flags += '\x1f';
+        if (flag.rfind("--sysroot=", 0) == 0) {
+            entry.sysroot = flag.substr(std::string("--sysroot=").size());
+        }
+    }
+    if (!entry.flags.empty()) entry.flags.pop_back();  // drop trailing \x1f
+    probeFlagsStore(program, entry);
 }
 
 }  // namespace
@@ -259,6 +276,31 @@ std::vector<std::string> toolchainTargetFlags(const std::string& program) {
     auto& cache = flagCache();
     const auto it = cache.find(program);
     if (it != cache.end()) return it->second;
+    // The probe's outcome is a function of the driver binary and the local
+    // MinGW sysroot, not of the invocation; reuse a previous invocation's
+    // result (detail/toolchain/probe_cache.hpp) when both still match.
+    ProbeFlagsCacheEntry persisted;
+    if (probeFlagsLookup(program, persisted)) {
+        // The Mingw prefixes directory may be swapped or updated in place
+        // after the flags were recorded; only reuse them while the recorded
+        // sysroot still looks like a MinGW root. An empty sysroot means the
+        // driver verified its own defaults, which depends on nothing local.
+        const bool sysrootOk = persisted.sysroot.empty() ||
+                               looksLikeMingwRoot(fs::path(persisted.sysroot));
+        if (sysrootOk) {
+            std::vector<std::string> flags;
+            std::size_t start = 0;
+            while (start <= persisted.flags.size()) {
+                const std::size_t sep = persisted.flags.find('\x1f', start);
+                const std::size_t end = sep == std::string::npos ? persisted.flags.size() : sep;
+                if (end > start) flags.push_back(persisted.flags.substr(start, end - start));
+                if (sep == std::string::npos) break;
+                start = sep + 1;
+            }
+            rememberFlags(program, flags);
+            return flags;
+        }
+    }
 
     const std::string triple = defaultTriple(program);
     const std::string gnu = gnuTripleFor(triple);
@@ -268,7 +310,7 @@ std::vector<std::string> toolchainTargetFlags(const std::string& program) {
         // The driver already targets GNU (or another native target). Test its
         // own defaults first; naming a sysroot is only needed when that fails.
         if (compilesWith(program, {})) {
-            cache[program] = flags;
+            rememberFlags(program, flags);
             return flags;
         }
         const std::string arch = architectureOf(triple);
@@ -277,7 +319,7 @@ std::vector<std::string> toolchainTargetFlags(const std::string& program) {
             const std::vector<std::string> plain{"--target=" + fallback};
             if (compilesWith(program, plain)) {
                 flags = plain;
-                cache[program] = flags;
+                rememberFlags(program, flags);
                 return flags;
             }
         }
@@ -291,7 +333,7 @@ std::vector<std::string> toolchainTargetFlags(const std::string& program) {
     const std::vector<std::string> plain{"--target=" + target};
     if (compilesWith(program, plain)) {
         flags = plain;
-        cache[program] = flags;
+        rememberFlags(program, flags);
         return flags;
     }
     for (const std::string& prefix : mingwPrefixes(program)) {
@@ -313,7 +355,7 @@ std::vector<std::string> toolchainTargetFlags(const std::string& program) {
     if (flags.empty() && !gnu.empty()) {
         flags.push_back("--target=" + gnu);
     }
-    cache[program] = flags;
+    rememberFlags(program, flags);
     return flags;
 #endif
 }

@@ -34,4 +34,17 @@ bool probeCacheLookup(const std::string& program, ProbeCacheEntry& out);
 // error. Returns false only to signal the caller that nothing was persisted.
 bool probeCacheStore(const std::string& program, const ProbeCacheEntry& entry);
 
+// Cached result of the Windows target-flag probe (test-compiling a reference
+// program to pick --target/--sysroot), keyed by the same binary identity.
+// `flags` are joined by \x1f. `sysroot` records the resolved --sysroot (empty
+// when the driver's own defaults were verified instead) so a swapped MinGW
+// tree can be detected cheaply before reuse.
+struct ProbeFlagsCacheEntry {
+    std::string flags;   // \x1f-joined flag strings
+    std::string sysroot; // the resolved --sysroot path, or empty
+};
+
+bool probeFlagsLookup(const std::string& program, ProbeFlagsCacheEntry& out);
+bool probeFlagsStore(const std::string& program, const ProbeFlagsCacheEntry& entry);
+
 }  // namespace cp3::cli
