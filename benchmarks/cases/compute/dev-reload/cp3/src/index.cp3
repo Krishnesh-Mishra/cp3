@@ -1,0 +1,8 @@
+import console from "std/console";
+
+// dev-reload (cp3 entry) - the same one-line program as hello-world, used
+// by the edit -> rebuild -> rerun cycle measured by this task. The runner
+// flips Hello/Hi in a scratch copy of this file each iteration so the
+// committed source stays untouched.
+
+console.log("Hello, world!");

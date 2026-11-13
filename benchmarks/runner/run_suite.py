@@ -220,110 +220,6 @@ GATE_REFERENCES = _GATE_REFS
 NATIVE_REFERENCES = _NATIVE_REFS
 MULTICORE_TASKS = _MULTICORE
 
-# Per-task language omissions. These rows compare standard-library surfaces
-# that the omitted language does not have: no JSON parser/serializer, no
-# timer/event-loop surface, and no SHA-256 in C++ std or Rust std without a
-# crate; no timezone-aware calendar formatter or hostname/platform probe in
-# Rust std without libc or a crate. A single dependency-free file would have to
-# vendor or hand-roll the missing stack, which compares dependencies, not the
-# language. The reason is printed per row, and these languages are skipped
-# only for these tasks; the gate still applies to the remaining languages.
-TASK_OMIT_LANGUAGES = {
-    "json-roundtrip": {
-        "cpp": "no JSON in the C++ standard library; a dependency-free file would vendor a parser",
-        "rust": "no JSON in Rust std without a crate; adding serde_json compares dependencies",
-    },
-    "async-fanout": {
-        "cpp": "no timers or event loop in the C++ standard library; a file would hand-roll both",
-        "rust": "no timers or executor in Rust std; adding tokio/async-std compares dependencies",
-    },
-    "sha256-churn": {
-        "cpp": "no SHA-256 in the C++ standard library; vendoring a hash implementation compares dependencies",
-        "rust": "no SHA-256 in Rust std without a crate; adding sha2 compares dependencies",
-    },
-    "date-format": {
-        "rust": "no timezone-aware date formatting in Rust std without a crate; adding chrono compares dependencies",
-    },
-    "os-probe": {
-        "rust": "no hostname/platform probe in Rust std without libc or a crate; hand-rolling it compares bindings",
-    },
-    "regex-scan": {
-        "rust": "no regex engine in Rust std; adding the regex crate compares dependencies",
-    },
-    "json-parse-large": {
-        "cpp": "no JSON in the C++ standard library; a dependency-free file would vendor a parser",
-        "rust": "no JSON in Rust std without a crate; adding serde_json compares dependencies",
-    },
-    "exception-cost": {
-        "rust": "no exceptions in Rust; Result is the returned-value path, not throw/catch",
-        "go": "no exceptions in Go; error values are the returned-value path, not throw/catch",
-    },
-}
-
-# Workload scale for string-churn. The cp3 entry carries the scale as a
-# compile-time constant; the runner builds a copy with that constant
-# substituted for any non-default scale.
-CHURN_DEFAULT_ITERATIONS = 50000
-CHURN_STRESS_ITERATIONS = 300000
-CHURN_SCALE_PRESETS = {"default": CHURN_DEFAULT_ITERATIONS, "stress": CHURN_STRESS_ITERATIONS}
-
-# env-injection: the runner injects this one variable into every child process
-# for that task only (merged over os.environ). The checksum folds the value's
-# bytes, so a different value produces a different output.
-ENV_INJECTION_VARIABLE = "CP3_BENCH_ENV"
-ENV_INJECTION_VALUE = "cp3-benchmark-value"
-
-# Expected outputs. Fixed-value tasks are embedded here; string-churn values
-# depend on the chosen scale. All values were computed independently by
-# benchmarks/runner/oracle.py, which re-implements every workload in plain
-# Python; see benchmarks/README.md ("measured, not estimated").
-EXPECTED = {
-    "compute-single": "131434424",
-    "compute-single-int": "131434424",
-    "compute-multi": "131434424",
-    "hello-world": "Hello, world!",
-    "sha256-churn": "218229",
-    "buffer-copy": "688024",
-    "typed-array-sum": "135618465",
-    "math-kernel": "177047762",
-    "word-frequency": "37425343",
-    "object-churn": "90641269",
-    "array-growth": "200000010000000",
-    "closure-capture": "16666688333331 998521500000",
-    "interface-dispatch": "37999986 66000000",
-    "generics-mono": "998986007 998986007",
-    "json-roundtrip": "664346",
-    "async-fanout": "99898",
-    "env-injection": "133644",
-    "file-roundtrip": "698140",
-    "path-join": "425577",
-    "date-format": "796897",
-    "os-probe": "208981",
-    "binary-trees": "1348958",
-    "map-churn": "942471769",
-    "utf8-text": "78156718",
-    "regex-scan": "735703090",
-    "json-parse-large": "613781",
-    "deep-recursion": "292249866",
-    "exception-cost": "446742259 446742259",
-    "file-big": "779913",
-    "sum-array": "4000000\n15987891712",
-    "tree-walk": "16383\n66134180",
-    "push": "1000000\n15625\n499758894813\n750050",
-    "blur": "256\n7734030",
-    "strlist": "100000\n92177148",
-    "interp": "24\n914237",
-    "calc": "3750\n1250\n580458",
-    "particles": "5000\n28315536",
-    "records": "100000\n17463411840",
-    "scene": "23\n4747",
-    "respond": "578079\n3348416444655930007",
-}
-CHURN_EXPECTED = {
-    CHURN_DEFAULT_ITERATIONS: "852167",
-    CHURN_STRESS_ITERATIONS: "254546",
-}
-
 GATE_BIG_NATIVE = _GATE_BIG
 GATE_WARN_NATIVE = _GATE_WARN
 GATE_SCRIPT = _GATE_SCRIPT
@@ -1270,6 +1166,114 @@ def prepare_cp3_churn_variant(entry: Path, iterations: int) -> Path:
     if package.exists():
         shutil.copyfile(package, target / "package.json")
     return target
+
+
+_DEV_RELOAD_SOURCE_REL = {
+    "cp3": "src/index.cp3",
+    "cpp": "main.cpp",
+    "go": "main.go",
+    "rust": "main.rs",
+    "js": "main.mjs",
+    "python": "main.py",
+    "java": "Main.java",
+}
+
+
+def run_dev_reload_trial(language: str, task: str, reps: int,
+                         cp3c: Path) -> dict:
+    """Measure one edit -> build -> rerun cycle per language (dev-reload).
+
+    Each iteration flips the `Hello, world!` / `Hi, world!` string in a scratch
+    copy of the committed source, then times the whole cycle (edit -> build
+    -> run -> exit) as the user feels it in a dev loop (`cp3 run`, an
+    incremental Rust/C++ rebuild, `go run`, plain `node`/`python`).
+
+    The scratch copy under .cache/build/dev-reload/<lang> is what compiles,
+    so the committed source is never modified and stale caches cannot pass
+    output validation."""
+    base = _find_task_dir(task) if _REGISTRY_OK else (CASES / task)
+    row: dict = {"language": language, "build_ms": None, "runs_ms": [],
+                 "output": None, "note": "", "peak_rss_mb": None,
+                 "binary_kb": None}
+    scratch = BUILD / "dev-reload" / language
+    if scratch.exists():
+        shutil.rmtree(scratch)
+    shutil.copytree(base / language, scratch,
+                    ignore=shutil.ignore_patterns(".cp3", "bin", "obj"))
+    relpath = _DEV_RELOAD_SOURCE_REL.get(language)
+    if relpath is None:
+        row["note"] = f"no dev-reload path for {language}"
+        return row
+    source_path = scratch / relpath
+    original = source_path.read_text(encoding="utf-8")
+    if "Hello, world!" not in original:
+        row["note"] = "source does not contain the 'Hello, world!' anchor"
+        source_path.write_text(original, encoding="utf-8")
+        return row
+    variant = original.replace("Hello, world!", "Hi, world!")
+    build_exe = BUILD / f"dev-reload-{language}{EXE}"
+    try:
+        for edit in range(reps):
+            # even -> committed source, odd -> the one-line edit; with an odd
+            # rep count the last measurement happens on the committed source
+            # so the recorded output always matches the committed oracle.
+            write_variant = original if edit % 2 == 0 else variant
+            source_path.write_text(write_variant, encoding="utf-8")
+            expected = "Hello, world!" if edit % 2 == 0 else "Hi, world!"
+            start = time.perf_counter()
+            if language == "cp3":
+                result = run_command([str(CP3C), "run", "src/index.cp3"], cwd=scratch)
+            elif language == "cpp":
+                result = run_command(["g++", "-std=c++20", "-O3", "-o",
+                                      str(build_exe), str(source_path)])
+                if result.returncode != 0:
+                    row["note"] = f"build failed: {first_diagnostic(result.stderr or result.stdout)}"
+                    return row
+                result = run_command([str(build_exe)])
+            elif language == "rust":
+                result = run_command(["rustc", "-C", "opt-level=3", *rust_target_args(),
+                                      "-o", str(build_exe), str(source_path)])
+                if result.returncode != 0:
+                    row["note"] = f"build failed: {first_diagnostic(result.stderr or result.stdout)}"
+                    return row
+                result = run_command([str(build_exe)])
+            elif language == "go":
+                result = run_command(["go", "build", "-o",
+                                      str(build_exe), str(source_path)])
+                if result.returncode != 0:
+                    row["note"] = f"build failed: {first_diagnostic(result.stderr or result.stdout)}"
+                    return row
+                result = run_command([str(build_exe)])
+            elif language == "java":
+                outdir = BUILD / f"dev-reload-{language}"
+                outdir.mkdir(parents=True, exist_ok=True)
+                result = run_command(["javac", "-d", str(outdir), str(source_path)])
+                if result.returncode != 0:
+                    row["note"] = f"build failed: {first_diagnostic(result.stderr or result.stdout)}"
+                    return row
+                result = run_command(["java", "-cp", str(outdir), "Main"])
+            elif language == "js":
+                result = run_command(["node", str(source_path)])
+            elif language == "python":
+                result = run_command([sys.executable, str(source_path)])
+            else:
+                row["note"] = f"no dev-reload path for {language}"
+                return row
+            wall = (time.perf_counter() - start) * 1000.0
+            row["runs_ms"].append(wall)
+            out = (result.stdout or "").strip()
+            row["output"] = out
+            if result.returncode != 0:
+                row["note"] = f"run failed: {first_diagnostic(result.stderr or result.stdout)}"
+                return row
+            if out != expected:
+                row["note"] = f"stale output {out!r} (expected {expected!r})"
+                return row
+    finally:
+        source_path.write_text(original, encoding="utf-8")
+    if row["runs_ms"]:
+        row["build_ms"] = row["runs_ms"][0]
+    return row
 
 
 def run_compute_trial(language: str, task: str, reps: int, cp3c: Path,
@@ -2460,6 +2464,10 @@ def main() -> int:
                 reps = args.hello_reps or args.reps
                 header = (f"expected = {EXPECTED[task]} | spawn -> exit wall time; "
                           f"{reps} runs")
+            elif task == "dev-reload":
+                reps = args.hello_reps or args.reps
+                header = (f"expected = {EXPECTED[task]} | one edit -> build -> rerun cycle; "
+                          f"median/best/p95 across {reps} alternating edits")
             elif task == "string-churn":
                 extra = (str(churn_iterations),)
                 if churn_iterations != CHURN_DEFAULT_ITERATIONS:
@@ -2518,8 +2526,11 @@ def main() -> int:
                     GATE_NOT_RUN.append(f"{task}: {language}: toolchain not available")
                     continue
                 announce_run(task, language, task_index, task_total, reps)
-                rows.append(run_compute_trial(language, task, reps, cp3c,
-                                              extra=extra, cp3_entry=cp3_entry))
+                if task == "dev-reload":
+                    rows.append(run_dev_reload_trial(language, task, reps, cp3c))
+                else:
+                    rows.append(run_compute_trial(language, task, reps, cp3c,
+                                                  extra=extra, cp3_entry=cp3_entry))
             if task == "hello-world":
                 record_task(task, lambda: print_hello_table(task, rows, header, expected=expected))
             else:

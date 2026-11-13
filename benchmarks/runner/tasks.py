@@ -25,7 +25,7 @@ SERVER_TASKS = ["health-server", "health-server-multi"]
 COMPUTE_TASKS = [
     # compute (existing)
     "compute-single", "compute-single-int", "compute-multi",
-    "hello-world", "string-churn", "sha256-churn", "buffer-copy",
+    "hello-world", "dev-reload", "string-churn", "sha256-churn", "buffer-copy",
     "typed-array-sum", "math-kernel", "word-frequency", "object-churn",
     "array-growth", "closure-capture", "interface-dispatch",
     "generics-mono", "json-roundtrip", "async-fanout", "env-injection",
@@ -45,7 +45,7 @@ CATEGORIES: dict[str, str] = {
     # compute (pure cpu / loops / dispatch)
     **{t: "compute" for t in [
         "compute-single", "compute-single-int", "compute-multi",
-        "hello-world", "closure-capture", "interface-dispatch",
+        "hello-world", "dev-reload", "closure-capture", "interface-dispatch",
         "generics-mono", "async-fanout", "deep-recursion", "exception-cost",
     ]},
     # dsa-array (vectors, buffers, typed arrays)
@@ -77,6 +77,9 @@ CATEGORIES: dict[str, str] = {
 }
 
 TASK_OMIT_LANGUAGES = {
+    "dev-reload": {
+        "goose": "goose entry not authored for this task yet",
+    },
     "json-roundtrip": {
         "cpp": "no JSON in the C++ standard library; a dependency-free file would vendor a parser",
         "rust": "no JSON in Rust std without a crate; adding serde_json compares dependencies",
@@ -118,6 +121,7 @@ EXPECTED = {
     "compute-single-int": "131434424",
     "compute-multi": "131434424",
     "hello-world": "Hello, world!",
+    "dev-reload": "Hello, world!",
     "sha256-churn": "218229",
     "buffer-copy": "688024",
     "typed-array-sum": "135618465",
