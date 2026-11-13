@@ -1,0 +1,7 @@
+{
+  "name": "issue7-install-host-2",
+  "version": "1.0.0",
+  "description": "issue7 regression fixture host project",
+  "type": "application",
+  "main": "main.cp3"
+}
