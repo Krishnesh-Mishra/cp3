@@ -305,9 +305,11 @@ GeneratedModule Generator::runWorkerModule(const Program& program) {
     emitWorkerEntryBody(*entry.arrow, entry.channel.in, entry.channel.out, body);
     defs += body;
     defs += "}\n";
+    const std::string iface = interfaceGlobalText();
     const std::string globals =
-        interfaceGlobalText() +
-        objectGlobalDeclsFor(decls + defs + entry.inCpp + entry.outCpp, true);
+        forwardDeclareGlobals(iface + decls + defs + entry.inCpp + entry.outCpp) +
+        objectGlobalDeclsFor(iface + decls + defs + entry.inCpp + entry.outCpp, true) +
+        iface;
     applyUsageIncludes(decls + defs + globals + entry.inCpp + entry.outCpp);
     GeneratedModule module;
     module.header = buildHeader(decls, globals);

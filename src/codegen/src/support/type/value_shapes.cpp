@@ -30,6 +30,7 @@
 
 #include "detail/generator/mangle.h"
 #include "detail/generator/type_map.h"
+#include "detail/class/class_model.h"
 
 namespace cp3 {
 namespace detail {
@@ -393,6 +394,25 @@ std::string objectGlobalDeclsFor(const std::string& text, bool cloneValues) {
         out += shape->text;
         if (cloneValues) out += cloneSpecializationFor(*shape);
         out += "#endif  // " + guard + "\n\n";
+    }
+    return out;
+}
+
+// Forward declarations for every generated global struct the text names -
+// the `$o{...}` value structs AND the interface wrappers (a record may hold a
+// wrapper by value, a wrapper may take `Ref<cp3_obj_...>` parameters: the
+// forward declarations break that cycle). Emitted before any definition.
+std::string forwardDeclareGlobals(const std::string& text) {
+    std::string out;
+    for (const RegisteredShape& shape : registry()) {
+        if (text.find(shape.name) == std::string::npos) continue;
+        out += "struct " + shape.name + ";\n";
+    }
+    ModelRegistry& reg = ModelRegistry::get();
+    for (const ObjectModel* om : reg.objects()) {
+        if (!om->isInterface) continue;
+        if (text.find(om->wrapper) == std::string::npos) continue;
+        out += "struct " + om->wrapper + ";\n";
     }
     return out;
 }

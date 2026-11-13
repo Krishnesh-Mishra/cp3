@@ -163,6 +163,10 @@ bool objectReceiver(const Type& t, Type& object, bool& optional);
 // `CP3_OBJ_<HEX>_DEFINED` guard for emission at global scope: the worker TU and
 // the entry TU spell the same `$o{...}` shape as one nominal type.
 std::string objectGlobalDeclsFor(const std::string& text, bool cloneValues);
+/// Forward declarations for every generated global struct the text names:
+/// the `$o{...}` value structs and the interface wrappers. Emitted before
+/// any definition.
+std::string forwardDeclareGlobals(const std::string& text);
 
 // The JS-compat typed-array family (D69; src/language/typed-arrays/codegen.cpp):
 // regular arrays with a value-like element type (`number`, `string`,
