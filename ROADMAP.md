@@ -1,11 +1,12 @@
 # CP3 Roadmap
 
-## v0.2.4 - Active release (Release Tracking)
+## v0.2.4 - Shipped (Release Tracking)
 
-This file also tracks the v0.2.4 release as it ships. The release is blocked on
-the section below; nothing ships until every **Must** row lands and the corpus
-is green on both the local Windows build and the packaged MSI used for the
-benchmark runs.
+This file also tracks the v0.2.4 release. **v0.2.4 is shipped**: the first cut was
+pulled back after ten defects found in post-release use; all ten are fixed and
+covered by 100 regression fixtures; the rebuilt artifacts (Windows x64 MSI,
+Linux x64 tarball) passed staged smoke tests; the release is tagged `v0.2.4` and
+published as Latest on GitHub.
 
 **Scope rule for v0.2.4:** implement everything from the user's discussion with
 the scratch agent, and nothing else. The discussion covered the residual
