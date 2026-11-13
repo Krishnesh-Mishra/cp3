@@ -1332,6 +1332,22 @@ bool memberMatchesTypeof(const Type& m, std::string_view kind) {
     return false;
 }
 
+// `x` under `typeof x <kind>` for a union `t`: the arm whose guard passes
+// keeps exactly the members whose family the tag selects; the other arm
+// keeps the complement. A non-union `t` is returned as-is: a single-typed
+// value is never split by the branch (the impossible arm would just cascade
+// `unknown` into live code).
+Type Analyzer::selectUnionByTypeof(const Type& t, std::string_view kind,
+                                   bool matching) {
+    if (!t.isUnion() && !t.isNullable()) return t;
+    std::vector<Type> keep;
+    for (const Type& m : t.parts) {
+        if (matching == memberMatchesTypeof(m, kind)) keep.push_back(m);
+    }
+    if (keep.empty()) return Type::unknown();
+    return Type::unionOf(std::move(keep));
+}
+
 Type Analyzer::selectByTypeof(const Type& t, std::string_view kind,
                               bool inverted) {
     auto match = [&](const Type& m) {

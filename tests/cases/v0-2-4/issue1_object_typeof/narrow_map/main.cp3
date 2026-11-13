@@ -1,5 +1,13 @@
 import console from "std/console";
-const x: Map<string, number> | undefined = new Map([["k", 11]]);
-if (typeof x === "object") {
-    console.log(x.get("k"));
+import { Map } from "std/collections";
+class Holder {
+    items: Map<string, number>;
+    constructor() {
+        this.items = new Map<string, number>();
+        this.items.set("k", 11);
+    }
+}
+const h: Holder | undefined = new Holder();
+if (typeof h === "object") {
+    console.log(h.items.get("k"));
 }

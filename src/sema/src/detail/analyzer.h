@@ -709,7 +709,12 @@ private:
     void leaveFunctionBody(const FunctionContext& saved);
     void analyzeIf(IfStatement& stmt);
     bool detectTypeofNarrowing(Expr& cond, std::string& name, Type& type,
-                               bool& negated);
+                               bool& negated, std::string& kind);
+    // The branch type for `x` under `typeof x <tag>`: the union of the members
+    // the tag selects (the `typeof ===` arm) or the members it does not select
+    // (the other arm). Non-union types stay as-is, so a single-typed value is
+    // never narrowed to `unknown` by a dead arm.
+    Type selectUnionByTypeof(const Type& t, std::string_view kind, bool matching);
     // `x !== null` / `x != null` / `x === null` narrowing for member
     // expressions (`n.next !== null`): returns the member node ID and the
     // non-null type.

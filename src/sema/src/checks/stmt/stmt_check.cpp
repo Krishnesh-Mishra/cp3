@@ -365,25 +365,47 @@ void Analyzer::collectCondNarrowings(Expr& cond, bool condTrue,
     std::string name;
     Type type;
     bool negated = false;
-    if (detectTypeofNarrowing(cond, name, type, negated)) {
+    std::string kind;
+    if (detectTypeofNarrowing(cond, name, type, negated, kind)) {
         ConditionNarrowing cn;
         cn.isMember = false;
         cn.name = name;
         cn.type = type;
         cn.nullish = type;
         cn.negated = negated;
-        // Convert to branch-type form: then-branch type.
-        const bool branchIsNull = (negated == condTrue) ? false : true;
+        if (kind.empty()) {
+            // `x === null` / `x === undefined` (and their negations): union
+            // member subtraction, exactly as the typeof family worked before.
+            const bool branchIsNull = (negated == condTrue) ? false : true;
+            Binding orig;
+            if (branchIsNull) {
+                cn.type = type;
+            } else if (lookup(name, orig)) {
+                cn.type = withoutMember(orig.type, type);
+                cn.nullish = type;
+            } else {
+                cn.type = type;
+            }
+            cn.negated = !branchIsNull;
+            out.push_back(cn);
+            return;
+        }
+        // The branch where the guard is satisfied: `typeof === "x"` in the
+        // `===`/`==` arm, `typeof !== "x"` in the `!==`/`!=` arm.
+        const bool branchMatches = negated != condTrue;
         Binding orig;
-        if (branchIsNull) {
-            cn.type = type;
-        } else if (lookup(name, orig)) {
-            cn.type = withoutMember(orig.type, type);
-            cn.nullish = type;
+        if (lookup(name, orig)) {
+            // Partition the declared union into the members the tag selects
+            // and the members it does not; this is what makes
+            // `typeof x === "object"` drop the nullish flavor instead of
+            // erasing the reading to `object`.
+            cn.type = selectUnionByTypeof(orig.type, kind, branchMatches);
+            cn.nullish = selectUnionByTypeof(orig.type, kind, !branchMatches);
         } else {
             cn.type = type;
+            cn.nullish = type;
         }
-        cn.negated = !branchIsNull;
+        cn.negated = !branchMatches;
         out.push_back(cn);
         return;
     }
@@ -562,7 +584,8 @@ void Analyzer::analyzeIf(IfStatement& stmt) {
 }
 
 bool Analyzer::detectTypeofNarrowing(Expr& cond, std::string& name, Type& type,
-                                     bool& negated) {
+                                     bool& negated, std::string& kind) {
+    kind.clear();
     if (cond.kind != NodeKind::BinaryExpr) return false;
     auto& be = static_cast<BinaryExpr&>(cond);
     if (be.op != BinaryOp::StrictEqual && be.op != BinaryOp::Equal &&
@@ -607,11 +630,12 @@ bool Analyzer::detectTypeofNarrowing(Expr& cond, std::string& name, Type& type,
     else if (lit == "string") prim = Type::string();
     else if (lit == "boolean") prim = Type::boolean();
     else if (lit == "undefined") prim = Type::undefined();
-    else if (lit == "object") prim = ambient();
+    else if (lit == "object") prim = Type::unknown();
     else if (lit == "function") prim = Type::unknown();
     else return false;
     name = static_cast<Identifier&>(*ue.operand).name;
     type = prim;
+    kind = lit;
     return true;
 }
 
