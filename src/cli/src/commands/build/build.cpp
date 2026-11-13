@@ -86,6 +86,12 @@ struct ObjectJob {
     bool objReusable = false;
     // Filled by the pool (or -2 when phase A fails before compiling).
     int clangRc = -2;
+    // When set, this TU's manifest fingerprint replaces the whole-tree one:
+    // the plural (per-module) pipeline keys its unit TUs on the shared
+    // header's content hash plus the runtime fingerprint, so an interface
+    // edit retires them but a body-only edit does not. Runtime TUs leave it
+    // empty and keep the whole-tree fingerprint.
+    std::string dependencyHash;
 };
 
 // The release profile's default switches. `--no-*` turns one off without
@@ -273,13 +279,19 @@ bool inspectTU(BuildState& st, ObjectJob& job) {
     const bool objReusable = fs::exists(job.obj, ec) &&
                              objectMatchesFamily(job.obj, expectedObjFamily(st.tc));
     job.objReusable = objReusable;
+    // The TU's manifest fingerprint: the per-module pipeline keys user TUs on
+    // the shared header's content hash plus the runtime fingerprint; every
+    // other TU keeps the whole-tree fingerprint (runtime headers included).
+    const std::string tuFingerprint = job.dependencyHash.empty()
+                                          ? st.headerFingerprint
+                                          : job.dependencyHash;
     // The entry also carries the include-tree fingerprint it was built under:
     // the manifest does not track which headers a TU includes, so an include
     // change retires every entry on its next build (detail/cache.hpp).
     const bool upToDate = !st.force && existing != nullptr &&
                           existing->hash == job.hash &&
                           existing->profile == st.profile &&
-                          existing->header == st.headerFingerprint &&
+                          existing->header == tuFingerprint &&
                           existing->compiler == st.compilerKey &&
                           objReusable;
     if (upToDate) {
@@ -377,16 +389,19 @@ bool finalizeTU(BuildState& st, ObjectJob& job) {
         return false;
     }
     st.anyCompiled = true;
+    const std::string tuFingerprint = job.dependencyHash.empty()
+                                          ? st.headerFingerprint
+                                          : job.dependencyHash;
     CacheEntry* existing = findEntry(st.manifest, job.obj.string());
     if (existing == nullptr) {
         st.manifest.push_back(CacheEntry{st.profile, job.sourceKey, job.hash,
-                                         st.headerFingerprint, st.compilerKey,
+                                         tuFingerprint, st.compilerKey,
                                          job.cpp.string(), job.obj.string()});
     } else {
         existing->profile = st.profile;
         existing->source = job.sourceKey;
         existing->hash = job.hash;
-        existing->header = st.headerFingerprint;
+        existing->header = tuFingerprint;
         existing->compiler = st.compilerKey;
         existing->cpp = job.cpp.string();
     }
@@ -524,6 +539,22 @@ std::string fileStamp(const fs::path& path);
 bool buildJobs(BuildState& st, const BuildRequest& request,
                const fs::path& cppPath, const fs::path& objPath,
                const std::string& entryKey, std::vector<ObjectJob>& jobs) {
+    // The plural pipeline's shared header goes beside the unit TUs; they
+    // quote-include it relative to the build directory. User TUs (units and
+    // the entry) key their manifest fingerprint on it plus the runtime
+    // fingerprint: a body-only edit leaves it identical, so dependent TUs
+    // stay cached and only the edited module recompiles.
+    std::string unitFingerprint;
+    if (!request.sharedProgramHeader.empty()) {
+        if (request.sharedProgramHeaderName.empty()) {
+            return false;
+        }
+        const fs::path headerPath =
+            st.layout.buildDir / request.sharedProgramHeaderName;
+        writeTextFile(headerPath, request.sharedProgramHeader, nullptr);
+        unitFingerprint = std::to_string(fnv1a64(request.sharedProgramHeader)) +
+                          ":" + st.headerFingerprint;
+    }
     if (request.extraModules != nullptr) {
         for (const BuildRequest::ExtraModule& extra : *request.extraModules) {
             if (extra.module == nullptr) continue;
@@ -531,13 +562,24 @@ bool buildJobs(BuildState& st, const BuildRequest& request,
             const fs::path hpp = st.layout.buildDir / (extra.moduleName + ".hpp");
             const fs::path obj = st.layout.buildDir / (extra.moduleName + ".o");
             writeTextFile(cpp, extra.module->source, nullptr);
-            writeTextFile(hpp, extra.module->header, nullptr);
-            jobs.push_back(ObjectJob{extra.sourceKey, cpp, obj, {}, false, {},
-                                     false, -2});
+            if (!extra.module->header.empty()) {
+                writeTextFile(hpp, extra.module->header, nullptr);
+            }
+            ObjectJob job;
+            job.sourceKey = extra.sourceKey;
+            job.cpp = cpp;
+            job.obj = obj;
+            job.dependencyHash = unitFingerprint;
+            jobs.push_back(std::move(job));
         }
     }
     // Entry TU first, then the runtime TUs the program actually needs.
-    jobs.push_back(ObjectJob{entryKey, cppPath, objPath, {}, false, {}, false, -2});
+    ObjectJob entryJob;
+    entryJob.sourceKey = entryKey;
+    entryJob.cpp = cppPath;
+    entryJob.obj = objPath;
+    entryJob.dependencyHash = unitFingerprint;
+    jobs.push_back(std::move(entryJob));
     // D72: parent-qualify the object name - the std families bring TUs that
     // share a stem with the core ones (src/std/crypto/runtime.cpp and
     // src/runtime/src/core/runtime.cpp both stem to "runtime").
@@ -972,6 +1014,13 @@ std::string generatedProgramText(const BuildRequest& request,
     std::string text = mod.source;
     text += '\n';
     text += mod.header;
+    if (!request.sharedProgramHeader.empty()) {
+        // The plural pipeline keeps the include superset in the shared header;
+        // fold it in so the runtime-TU marker scan sees the same markers the
+        // single-TU text would carry.
+        text += '\n';
+        text += request.sharedProgramHeader;
+    }
     if (request.extraModules != nullptr) {
         for (const BuildRequest::ExtraModule& extra : *request.extraModules) {
             if (extra.module == nullptr) continue;

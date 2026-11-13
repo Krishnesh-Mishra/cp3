@@ -67,6 +67,7 @@ struct ProgramUnitText {
     std::string decls;     // forward declarations + module-scope globals
     std::string defs;      // function definitions
     std::string mainBody;  // top-level statements (the module initializer)
+    std::string sourceKey;  // the unit's logical module name (manifest identity)
     bool isEntry = false;  // the entry's body runs in main, not an initializer
     bool isPackage = false;  // declaration-only unit linked from `pak/`
     bool topLevelAwait = false;  // the unit's body needs a coroutine

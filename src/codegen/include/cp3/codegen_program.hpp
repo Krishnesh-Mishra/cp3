@@ -54,4 +54,34 @@ struct GenerateProgramInput {
 // throw, never abort).
 GeneratedModule generateProgram(const GenerateProgramInput& input);
 
+// One checked unit emitted as its own translation unit (plural pipeline).
+// `name` is the deterministic file stem used for the .cpp and the object
+// file; `sourceKey` is the logical identity of the unit for the build
+// manifest (the unit's module name). The TU is `#include`d of the shared
+// header and holds the unit's definitions and its module initializer.
+struct GeneratedProgramUnit {
+    std::string name;       // e.g. "cp3_unit_3" - unique per emission index
+    std::string sourceKey;  // the unit's module name (manifest identity)
+    std::string source;     // the unit's .cpp text
+};
+
+// The plural result. `sharedHeader` is the .hpp every unit TU and the entry
+// TU include (includes, helpers, shared globals, all units' declaration
+// sections and the module-initializer forward declarations). `units` holds
+// one TU per checked unit in emission order; the entry unit's top-level
+// statements are not a TU of their own - they run in `entry`'s main().
+// `entry` is the small entry TU (using namespace <entry-ns>; main body).
+struct GeneratedProgramModules {
+    GeneratedModule sharedHeader;   // .source = the shared .hpp text
+    std::vector<GeneratedProgramUnit> units;
+    GeneratedModule entry;          // .source = the entry TU text
+};
+
+// Lowers a local-module program to one shared header plus ONE .cpp per
+// checked unit plus a small entry TU (v0.2.5 dev-profile pipeline). The
+// per-unit namespaces and the link table are identical to `generateProgram`;
+// cross-unit references resolve through the shared header's declaration
+// sections exactly as through the single TU's phase-1 sections.
+GeneratedProgramModules generateProgramModules(const GenerateProgramInput& input);
+
 }  // namespace cp3

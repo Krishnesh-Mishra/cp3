@@ -144,12 +144,58 @@ std::vector<CheckedModuleUnit> checkedUnits(const FrontendResult& frontend) {
     return units;
 }
 
-// The codegen half for a local-module graph.
+// The plural (per-module TU) pipeline's output for one program codegen pass.
+// `mod` stays the entry module; `units` holds one generated module per
+// exported checked unit (excluding the entry's own statements), and
+// `sharedProgramHeader` is the header every unit TU and the entry TU
+// includes. Empty for the single-TU (release) path.
+struct ProgramArtifacts {
+    struct Unit {
+        std::string name;       // output stem, e.g. "cp3_unit_0"
+        std::string sourceKey;  // manifest identity (the unit's module name)
+        GeneratedModule module;
+    };
+    std::vector<Unit> units;
+    std::string sharedProgramHeader;
+};
+
+// The codegen half for a local-module graph. The dev (incremental) profile
+// lowers through the plural pipeline: one shared header plus one TU per
+// checked unit plus a small entry TU (v0.2.5 Phase 1). Release and debug keep
+// the single whole-program TU.
 int codegenProgram(const FrontendResult& frontend, const BuildContext& ctx,
-                   const CodegenOptions& options, GeneratedModule& mod) {
+                   const CodegenOptions& options, GeneratedModule& mod,
+                   ProgramArtifacts* out = nullptr) {
     CollectingDiagnosticSink cgSink;
     const bool lineDirectives =
         ctx.opt->compile.profile == BuildProfile::Debug;
+    if (ctx.opt->compile.profile == BuildProfile::Incremental) {
+        GeneratedProgramModules plural = cp3::cli::generateProgramModules(
+            {*frontend.graph, checkedUnits(frontend), *ctx.moduleName, cgSink,
+             /*lineDirectives=*/false, options});
+        renderDiagnostics(cgSink.diagnostics(), *ctx.render, stderr);
+        if (cgSink.hasErrors()) {
+            return kExitCompileError;
+        }
+        if (plural.entry.source.empty()) {
+            std::fprintf(stderr,
+                         "cp3c: internal error: code generation produced no "
+                         "output\n");
+            return kExitCompileError;
+        }
+        if (out != nullptr) {
+            for (GeneratedProgramUnit& unit : plural.units) {
+                ProgramArtifacts::Unit u;
+                u.name = std::move(unit.name);
+                u.sourceKey = std::move(unit.sourceKey);
+                u.module.source = std::move(unit.source);
+                out->units.push_back(std::move(u));
+            }
+            out->sharedProgramHeader = std::move(plural.sharedHeader.source);
+        }
+        mod = std::move(plural.entry);
+        return kExitSuccess;
+    }
     mod = generateProgramModule({*frontend.graph, checkedUnits(frontend),
                                  *ctx.moduleName, cgSink, lineDirectives,
                                  options});
@@ -379,11 +425,22 @@ options.importedInterfaces = importedInterfacesFor(*frontend.graph, *entry);
     if (workerExit != kExitSuccess) return workerExit;
 
     GeneratedModule mod;
+    ProgramArtifacts programArtifacts;
     const int cgExit = frontend.program
-                           ? codegenProgram(frontend, ctx, options, mod)
+                           ? codegenProgram(frontend, ctx, options, mod,
+                                            &programArtifacts)
                            : codegenEntry(*entry, frontend.sema, ctx, options,
                                           mod);
     if (cgExit != kExitSuccess) return cgExit;
+    // v0.2.5 plural pipeline: one TU per checked unit. They join the extras
+    // compile alongside the worker TUs; the shared header is written by the
+    // build driver beside them.
+    if (!programArtifacts.units.empty()) {
+        for (ProgramArtifacts::Unit& unit : programArtifacts.units) {
+            extras.push_back(detail::BuildRequest::ExtraModule{
+                unit.name, &unit.module, unit.sourceKey});
+        }
+    }
 
     if (effective.verbose && effective.compile.maxMemoryMb != 0) {
         std::fprintf(stderr, "cp3c: --max-memory cap: %llu MB (codegen phase)\n",
@@ -429,6 +486,8 @@ options.importedInterfaces = importedInterfacesFor(*frontend.graph, *entry);
     request.importedStdModules = &importedStdModules;
     request.extraModules = &extras;
     request.packageImplementations = &packageImplementations;
+    request.sharedProgramHeader = std::move(programArtifacts.sharedProgramHeader);
+    request.sharedProgramHeaderName = "cp3_program.hpp";
     request.execute = execute;
     reportRunProgress(execute, effective.verbose,
                       "preparing native build...");

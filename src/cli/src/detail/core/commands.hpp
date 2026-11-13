@@ -170,7 +170,12 @@ struct BuildRequest {
     const std::string* moduleName = nullptr;  // e.g. "src/index"
     const GeneratedModule* module = nullptr;  // generated C++ (cpp/hpp)
     const std::vector<std::string>* importedStdModules = nullptr;  // D68 selection
-    const std::vector<ExtraModule>* extraModules = nullptr;  // worker modules
+    const std::vector<ExtraModule>* extraModules = nullptr;  // per-module TUs
+    // The plural (per-module TU) pipeline's shared header, written once beside
+    // the unit TUs as `sharedProgramHeaderName` under the build directory.
+    // Empty for the single-TU (release) pipeline.
+    std::string sharedProgramHeader;
+    std::string sharedProgramHeaderName;
     // Installed packages' `pak/` C++ implementations (declaration surfaces are
     // linked against these, never regenerated as stubs).
     const std::vector<PackageImplementation>* packageImplementations = nullptr;

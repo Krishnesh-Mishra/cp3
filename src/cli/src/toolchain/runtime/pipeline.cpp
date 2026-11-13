@@ -564,4 +564,8 @@ GeneratedModule generateProgramModule(const GenerateProgramInput& input) {
     return generateProgram(input);
 }
 
+GeneratedProgramModules generateProgramModules(const GenerateProgramInput& input) {
+    return cp3::generateProgramModules(input);
+}
+
 }  // namespace cp3::cli

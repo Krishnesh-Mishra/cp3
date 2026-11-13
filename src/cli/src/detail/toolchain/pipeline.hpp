@@ -90,4 +90,9 @@ GeneratedModule generateModule(const GenerateModuleInput& input);
 // per checked unit, local imports resolved through the link table.
 GeneratedModule generateProgramModule(const GenerateProgramInput& input);
 
+// The plural pipeline (v0.2.5, dev/incremental profile): the same program
+// lowered to one shared header plus ONE .cpp per checked unit plus a small
+// entry TU (cp3/codegen_program.hpp, `generateProgramModules`).
+GeneratedProgramModules generateProgramModules(const GenerateProgramInput& input);
+
 }  // namespace cp3::cli

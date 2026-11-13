@@ -52,6 +52,7 @@
 #include "cp3/core/analysis.hpp"
 #include "cp3/core/ast.hpp"
 #include "cp3/codegen.hpp"
+#include "cp3/codegen_program.hpp"
 #include "cp3/diag/diagnostic.hpp"
 #include "detail/class/class_model.h"
 #include "detail/int/enums.h"
@@ -145,6 +146,13 @@ public:
     // The whole-program entry and its per-unit emission (emit/program.cpp).
     GeneratedModule runProgram(const ModuleGraph& graph,
                                const std::vector<CheckedModuleUnit>& units);
+    GeneratedProgramModules runProgramModules(
+        const ModuleGraph& graph, const std::vector<CheckedModuleUnit>& units);
+
+private:
+    // The assembly both pipelines share (link + virtual set + per-unit texts).
+    detail::ProgramAssembly buildAssembly(
+        const ModuleGraph& graph, const std::vector<CheckedModuleUnit>& units);
     void runUnit(const Program& program, std::string& decls, std::string& defs,
                  std::string& mainBody, std::string& globals);
     void emitProgramUnit(const detail::ProgramLink& link,
