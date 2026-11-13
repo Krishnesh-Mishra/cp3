@@ -18,6 +18,7 @@
 #include "detail/class/class_model.h"
 
 #include <cstddef>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -198,16 +199,17 @@ std::string plainText(const ObjectModel& om) {
 
 }  // namespace
 
-std::string objectStructsText() {
-    ModelRegistry& reg = ModelRegistry::get();
-    const std::vector<const ObjectModel*> all = reg.objects();
+// The dependency-ordered list of registered models: a by-value wrapper member
+// must be complete first, so the walk is a dependency sort, not a name sort.
+std::vector<const ObjectModel*> orderModels(
+    const std::vector<const ObjectModel*>& all,
+    const std::function<bool(const ObjectModel&)>& keep) {
     std::vector<const ObjectModel*> ordered;
     std::vector<bool> done(all.size(), false);
-    // Dependency order: a by-value wrapper member must be complete first.
     while (ordered.size() < all.size()) {
         bool progress = false;
         for (std::size_t i = 0; i < all.size(); ++i) {
-            if (done[i] || !depsDone(*all[i], all, done)) continue;
+            if (done[i] || !keep(*all[i]) || !depsDone(*all[i], all, done)) continue;
             done[i] = true;
             ordered.push_back(all[i]);
             progress = true;
@@ -215,18 +217,51 @@ std::string objectStructsText() {
         if (!progress) break;  // a cycle: fall back to registration order
     }
     for (std::size_t i = 0; i < all.size(); ++i) {
-        if (!done[i]) ordered.push_back(all[i]);
+        if (!done[i] && keep(*all[i])) ordered.push_back(all[i]);
     }
+    return ordered;
+}
+
+std::string objectStructsText() {
+    ModelRegistry& reg = ModelRegistry::get();
+    const std::vector<const ObjectModel*> all = reg.objects();
+    const std::vector<const ObjectModel*> ordered =
+        orderModels(all, [](const ObjectModel&) { return true; });
     std::string out;
     for (const ObjectModel* om : ordered) {
         if (!reg.objectUsable(om->label)) continue;
         if (!objectModelUsed(*om)) continue;  // the value-shape path owns it
-        if (!om->isInterface) {
-            out += plainText(*om);
+        if (om->isInterface) {
+            // The wrapper goes to the global scope (interfaceGlobalText);
+            // the namespace scope keeps the literal struct its implementing
+            // TU builds.
+            if (!om->literalName.empty()) out += literalText(*om);
             continue;
         }
-        if (!om->literalName.empty()) out += literalText(*om);
+        out += plainText(*om);
+    }
+    return out;
+}
+
+// The interface wrappers are named identically by every unit of a program and
+// are element-wise identical by construction, so a single global definition
+// per TU is both legal (ODR: same tokens, same entities) and required for
+// the wrapper type to cross a whole-program boundary. The guard keeps one
+// definition per TU when a unit hosts both a .cpp and a header copy.
+std::string interfaceGlobalText() {
+    ModelRegistry& reg = ModelRegistry::get();
+    const std::vector<const ObjectModel*> all = reg.objects();
+    const std::vector<const ObjectModel*> ordered =
+        orderModels(all, [](const ObjectModel& om) { return om.isInterface; });
+    std::string out;
+    for (const ObjectModel* om : ordered) {
+        if (!reg.objectUsable(om->label)) continue;
+        if (!objectModelUsed(*om)) continue;  // the value-shape path owns it
+        const std::string guard = upperSnake(om->wrapper) + "_DEFINED";
+        out += "#ifndef " + guard + "\n";
+        out += "#define " + guard + "\n";
         out += wrapperText(*om);
+        out += "#endif  // " + guard + "\n\n";
     }
     return out;
 }

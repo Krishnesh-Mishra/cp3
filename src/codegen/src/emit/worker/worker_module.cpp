@@ -306,6 +306,7 @@ GeneratedModule Generator::runWorkerModule(const Program& program) {
     defs += body;
     defs += "}\n";
     const std::string globals =
+        interfaceGlobalText() +
         objectGlobalDeclsFor(decls + defs + entry.inCpp + entry.outCpp, true);
     applyUsageIncludes(decls + defs + globals + entry.inCpp + entry.outCpp);
     GeneratedModule module;

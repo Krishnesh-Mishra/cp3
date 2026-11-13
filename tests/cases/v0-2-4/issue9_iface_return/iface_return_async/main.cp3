@@ -1,6 +1,6 @@
 import console from "std/console";
 import { makeFoo } from "./dep.cp3";
-async function main(): Promise<void> {
+async function main(): Promise<undefined> {
     const foo = await Promise.resolve(makeFoo());
     console.log(foo.id);
 }

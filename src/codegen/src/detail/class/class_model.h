@@ -312,11 +312,17 @@ std::string templateHeadOf(const std::vector<std::string>& names);
 // template at a use site.
 std::string templateUseOf(const ClassModel& cm);
 
-// The C++ struct text of every usable registered object/interface shape, in
-// dependency order (an interface whose wrapper is a by-value field of another
-// shape is emitted first): the interface literal + wrapper structs, then the
-// plain object structs (emit/class_shape.cpp).
+// The C++ struct text of every usable registered object shape, in
+// dependency order: the plain object structs, plus each interface's literal
+// struct (the namespace the implementing TU emits object literals for).
+// Interface wrappers are NOT emitted here; they go to the global scope
+// (interfaceGlobalText) so the wrapper type crosses whole-program units.
 std::string objectStructsText();
+
+// The wrapper structs of the registered interfaces, in dependency order: a
+// whole-program unit shares every wrapper between its TUs, so each wrapper
+// is emitted at global scope under a one-definition guard.
+std::string interfaceGlobalText();
 
 // Does the class (or an ancestor) declare a constructor?
 bool hasClassCtor(const ClassModel& cm);

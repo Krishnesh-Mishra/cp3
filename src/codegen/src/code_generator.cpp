@@ -238,7 +238,8 @@ void Generator::runUnit(const Program& program, std::string& decls,
     decls = enumDecls_ + classFwdDecls_ + jsonShapeDecls_ + objectDecls_ +
             genericDecls_ + classDecls_ + decls;
     defs = classDefs_ + defs;
-    globals = objectGlobalDeclsFor(decls + defs + mainBody, needsWorker_);
+    globals = interfaceGlobalText() +
+              objectGlobalDeclsFor(decls + defs + mainBody, needsWorker_);
 
     // A tuple can surface only in a signature (a tuple return type or a tuple
     // parameter) with no literal or index read to raise the flag; scan the
