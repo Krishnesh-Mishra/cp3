@@ -1,0 +1,5 @@
+import { m57 } from "../mid/m57.cp3";
+import { m6 } from "../mid/m6.cp3";
+export function a37(x: number): number {
+    return m57(x) + m6(x + 2);
+}

@@ -1,0 +1,5 @@
+import { b64 } from "../base/b64.cp3";
+import { b104 } from "../base/b104.cp3";
+export function m64(x: number): number {
+    return b64(x) + b104(x + 1);
+}

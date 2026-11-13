@@ -1,0 +1,5 @@
+import { b85 } from "../base/b85.cp3";
+import { b125 } from "../base/b125.cp3";
+export function m71(x: number): number {
+    return b85(x) + b125(x + 1);
+}

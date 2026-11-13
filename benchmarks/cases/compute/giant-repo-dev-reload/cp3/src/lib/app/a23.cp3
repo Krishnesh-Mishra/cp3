@@ -1,0 +1,5 @@
+import { m115 } from "../mid/m115.cp3";
+import { m64 } from "../mid/m64.cp3";
+export function a23(x: number): number {
+    return m115(x) + m64(x + 2);
+}

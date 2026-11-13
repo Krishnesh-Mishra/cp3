@@ -1,0 +1,5 @@
+{ "name": "bench-giant-repo-dev-reload",
+  "version": "0.1.0",
+  "description": "edit -> rebuild -> rerun on a 300-file module graph (giant-repo-dev-reload)",
+  "type": "application",
+  "main": "src/index.cp3" }

@@ -1,0 +1,6 @@
+import { b0 } from "../base/b0.cp3";
+import { b40 } from "../base/b40.cp3";
+export function m0(x: number): number {
+    return b0(x) + b40(x + 1);
+}
+export { greet } from "../base/b0.cp3";

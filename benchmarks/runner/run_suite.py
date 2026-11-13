@@ -851,8 +851,8 @@ def prepare_server_entry(language: str, task: str, port: int,
 def try_cp3_build(entry: Path) -> tuple[bool, str]:
     """Build a cp3 entry. Returns (ok, diagnostic-or-exe-path)."""
     # Keep the generated C++ and the runtime it calls inspectable for every
-    # benchmark build: .cp3/build/core/cp3-runtime/ is a snapshot only, so it
-    # does not change the measured executable.
+    # benchmark build: .cp3/build/_runtime/ is a show-only mirror created
+    # once; it does not change the measured executable.
     result = run_command([str(CP3C), "build", "src/index.cp3", "--show-runtime"],
                          cwd=entry)
     if result.returncode != 0:
@@ -1178,6 +1178,38 @@ _DEV_RELOAD_SOURCE_REL = {
     "java": "Main.java",
 }
 
+# Per-task overrides for the file the trial flips. giant-repo-dev-reload's
+# flip target is the deep leaf module (lib/base/b0) that carries the string,
+# so the edit exercises the whole import chain (cp3 rebuild, JS ESM parse,
+# Python import) instead of just the entry.
+_DEV_RELOAD_SOURCE_REL_BY_TASK = {
+    "giant-repo-dev-reload": {
+        "cp3": "lib/base/b0.cp3",
+        "cpp": "lib/base/b0.hpp",
+        "rust": "lib/base/b0.rs",
+        "go": "lib/base/b0.go",
+        "js": "lib/base/b0.mjs",
+        "python": "lib/base/b0.py",
+        "java": "lib/base/B0.java",
+    },
+}
+
+# The runnable entry per language per task. The trial always reruns the
+# ENTRY (the thing that prints) - never the file it edits. Only dev-reload's
+# entry is its edit target (single-file benchmark); giant-repo-dev-reload
+# edits a deep leaf module instead.
+_DEV_RELOAD_ENTRY_REL_BY_TASK = {
+    "giant-repo-dev-reload": {
+        "cp3": "src/index.cp3",
+        "cpp": "main.cpp",
+        "rust": "main.rs",
+        "go": "main.go",
+        "js": "index.mjs",
+        "python": "index.py",
+        "java": "Main.java",
+    },
+}
+
 
 def run_dev_reload_trial(language: str, task: str, reps: int,
                          cp3c: Path) -> dict:
@@ -1195,15 +1227,28 @@ def run_dev_reload_trial(language: str, task: str, reps: int,
     row: dict = {"language": language, "build_ms": None, "runs_ms": [],
                  "output": None, "note": "", "peak_rss_mb": None,
                  "binary_kb": None}
-    scratch = BUILD / "dev-reload" / language
+    scratch = BUILD / task / language
     if scratch.exists():
         shutil.rmtree(scratch)
     shutil.copytree(base / language, scratch,
                     ignore=shutil.ignore_patterns(".cp3", "bin", "obj"))
-    relpath = _DEV_RELOAD_SOURCE_REL.get(language)
+    task_overrides = _DEV_RELOAD_SOURCE_REL_BY_TASK.get(task, {})
+    relpath = task_overrides.get(language) or _DEV_RELOAD_SOURCE_REL.get(language)
     if relpath is None:
         row["note"] = f"no dev-reload path for {language}"
         return row
+    # The trial reruns the module graph's runnable entry. On single-file
+    # tasks the flipped file IS that entry (classic dev-reload); on
+    # giant-repo-dev-reload the flip target is a deep leaf module and the
+    # entry is separate - running the flipped leaf directly prints nothing.
+    entry_overrides = _DEV_RELOAD_ENTRY_REL_BY_TASK.get(task, {})
+    entry_rel = entry_overrides.get(language)
+    if entry_rel is None:
+        if task_overrides.get(language):
+            row["note"] = f"no entry override for {language} (task {task})"
+            return row
+        entry_rel = relpath  # single-file task: the flip target is the entry
+    entry_path = scratch / entry_rel
     source_path = scratch / relpath
     original = source_path.read_text(encoding="utf-8")
     if "Hello, world!" not in original:
@@ -1222,24 +1267,24 @@ def run_dev_reload_trial(language: str, task: str, reps: int,
             expected = "Hello, world!" if edit % 2 == 0 else "Hi, world!"
             start = time.perf_counter()
             if language == "cp3":
-                result = run_command([str(CP3C), "run", "src/index.cp3"], cwd=scratch)
+                result = run_command([str(CP3C), "run", entry_rel], cwd=scratch)
             elif language == "cpp":
                 result = run_command(["g++", "-std=c++20", "-O3", "-o",
-                                      str(build_exe), str(source_path)])
+                                      str(build_exe), str(entry_path)])
                 if result.returncode != 0:
                     row["note"] = f"build failed: {first_diagnostic(result.stderr or result.stdout)}"
                     return row
                 result = run_command([str(build_exe)])
             elif language == "rust":
                 result = run_command(["rustc", "-C", "opt-level=3", *rust_target_args(),
-                                      "-o", str(build_exe), str(source_path)])
+                                      "-o", str(build_exe), str(entry_path)])
                 if result.returncode != 0:
                     row["note"] = f"build failed: {first_diagnostic(result.stderr or result.stdout)}"
                     return row
                 result = run_command([str(build_exe)])
             elif language == "go":
                 result = run_command(["go", "build", "-o",
-                                      str(build_exe), str(source_path)])
+                                      str(build_exe), str(entry_path)])
                 if result.returncode != 0:
                     row["note"] = f"build failed: {first_diagnostic(result.stderr or result.stdout)}"
                     return row
@@ -1247,15 +1292,17 @@ def run_dev_reload_trial(language: str, task: str, reps: int,
             elif language == "java":
                 outdir = BUILD / f"dev-reload-{language}"
                 outdir.mkdir(parents=True, exist_ok=True)
-                result = run_command(["javac", "-d", str(outdir), str(source_path)])
+                java_sources = list((scratch).rglob("*.java"))
+                result = run_command(["javac", "-d", str(outdir),
+                                      *[str(p) for p in java_sources]])
                 if result.returncode != 0:
                     row["note"] = f"build failed: {first_diagnostic(result.stderr or result.stdout)}"
                     return row
                 result = run_command(["java", "-cp", str(outdir), "Main"])
             elif language == "js":
-                result = run_command(["node", str(source_path)])
+                result = run_command(["node", str(entry_path)])
             elif language == "python":
-                result = run_command([sys.executable, str(source_path)])
+                result = run_command([sys.executable, str(entry_path)])
             else:
                 row["note"] = f"no dev-reload path for {language}"
                 return row
@@ -2464,7 +2511,7 @@ def main() -> int:
                 reps = args.hello_reps or args.reps
                 header = (f"expected = {EXPECTED[task]} | spawn -> exit wall time; "
                           f"{reps} runs")
-            elif task == "dev-reload":
+            elif task == "dev-reload" or task == "giant-repo-dev-reload":
                 reps = args.hello_reps or args.reps
                 header = (f"expected = {EXPECTED[task]} | one edit -> build -> rerun cycle; "
                           f"median/best/p95 across {reps} alternating edits")
@@ -2526,7 +2573,7 @@ def main() -> int:
                     GATE_NOT_RUN.append(f"{task}: {language}: toolchain not available")
                     continue
                 announce_run(task, language, task_index, task_total, reps)
-                if task == "dev-reload":
+                if task == "dev-reload" or task == "giant-repo-dev-reload":
                     rows.append(run_dev_reload_trial(language, task, reps, cp3c))
                 else:
                     rows.append(run_compute_trial(language, task, reps, cp3c,

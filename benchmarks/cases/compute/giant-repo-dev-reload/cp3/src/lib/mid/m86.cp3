@@ -1,0 +1,5 @@
+import { b2 } from "../base/b2.cp3";
+import { b42 } from "../base/b42.cp3";
+export function m86(x: number): number {
+    return b2(x) + b42(x + 1);
+}

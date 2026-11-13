@@ -1,0 +1,5 @@
+import { b86 } from "../base/b86.cp3";
+import { b126 } from "../base/b126.cp3";
+export function m114(x: number): number {
+    return b86(x) + b126(x + 1);
+}

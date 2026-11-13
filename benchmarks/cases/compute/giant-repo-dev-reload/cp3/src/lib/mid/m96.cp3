@@ -1,0 +1,5 @@
+import { b32 } from "../base/b32.cp3";
+import { b72 } from "../base/b72.cp3";
+export function m96(x: number): number {
+    return b32(x) + b72(x + 1);
+}

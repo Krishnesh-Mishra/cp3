@@ -1,0 +1,6 @@
+import { m0 } from "../mid/m0.cp3";
+import { m77 } from "../mid/m77.cp3";
+export function a0(x: number): number {
+    return m0(x) + m77(x + 2);
+}
+export { greet } from "../mid/m0.cp3";

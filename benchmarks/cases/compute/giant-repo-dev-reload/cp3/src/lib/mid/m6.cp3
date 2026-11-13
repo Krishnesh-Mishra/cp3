@@ -1,0 +1,5 @@
+import { b18 } from "../base/b18.cp3";
+import { b58 } from "../base/b58.cp3";
+export function m6(x: number): number {
+    return b18(x) + b58(x + 1);
+}

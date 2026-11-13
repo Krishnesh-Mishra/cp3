@@ -1,0 +1,9 @@
+package base
+
+func B37(x int) int {
+    acc := x + 37
+    acc = (acc * 31 + 259) % 1000033
+    acc = (acc * 131 + x * 17 + 37) % 1000199
+    return acc
+}
+

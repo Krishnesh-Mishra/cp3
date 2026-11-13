@@ -1,0 +1,5 @@
+import { b24 } from "../base/b24.cp3";
+import { b64 } from "../base/b64.cp3";
+export function m8(x: number): number {
+    return b24(x) + b64(x + 1);
+}

@@ -1,0 +1,5 @@
+import { m55 } from "../mid/m55.cp3";
+import { m4 } from "../mid/m4.cp3";
+export function a11(x: number): number {
+    return m55(x) + m4(x + 2);
+}
