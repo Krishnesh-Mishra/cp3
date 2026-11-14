@@ -1,6 +1,5 @@
 ---
 title: Math
-chapter: Chapter 3 · Standard library
 ---
 # Math
 
@@ -70,10 +69,6 @@ For negative values, `floor` and `trunc` differ: `floor(-1.2)` is `-2`, while `t
 The runtime follows the underlying floating-point math library for special values, domain errors, and precision. If an application needs a specific validation policy, check its inputs and outputs explicitly.
 
 ## Function index
-
-`PI`, `E`, `LN2`, `LN10`, `LOG2E`, `LOG10E`, `SQRT1_2`, `SQRT2`, `random`, `min`, `max`, `pow`, `gcd`, `lcm`, `clamp`, `lerp`, `sqrt`, `abs`, `floor`, `ceil`, `round`, `trunc`, `cbrt`, `log`, `log2`, `log10`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `sinh`, `cosh`, `tanh`, `asinh`, `acosh`, `atanh`, `exp`, `log1p`, `hypot`, and `sign` are the documented members. The compiler treats this namespace as closed and diagnoses unsupported names.
-
-## Full function index
 
 | Member | Signature | Notes |
 | --- | --- | --- |

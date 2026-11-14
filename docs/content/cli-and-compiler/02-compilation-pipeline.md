@@ -1,82 +1,64 @@
 ---
-title: Compilation pipeline
-chapter: Chapter 4 · Compiler and tools
+title: How a build flows
 ---
-# Compilation pipeline
+# How a build flows
 
-CP3 compiles a source program in distinct stages. A failure in an earlier stage prevents later stages from running.
+You don't need to know the internals to use CP3 — but when a build fails, knowing *where* it failed makes the fix obvious. This page is the user-level map: what each command does, where the files go, and how to recognize each kind of failure.
 
-## 1. Source loading and modules
+## The flow, end to end
 
-The CLI selects the entry point and loads source files and imports. Standard modules are resolved from the compiler's registry and linked runtime support. A missing import or invalid export is diagnosed before native compilation.
+```text
+.cp3 source ──► front end ──► code generation ──► clang++ ──► .cp3/out
+```
 
-## 2. Lexing and parsing
+| Command | What happens |
+| --- | --- |
+| `cp3 check` | Front end only — parse, resolve modules, type-check. Stops before C++ is generated. |
+| `cp3 run` | Full flow, evaluated incrementally (cached), then the program executes. |
+| `cp3 build` | Full flow, release settings; the executable is never run. |
+| `cp3 warm` | Full flow; artifacts are cached, nothing executes. |
+| `cp3 dev` | The flow in a watch loop; saves trigger rebuild + restart. |
 
-The lexer turns source text into tokens. The parser builds syntax trees and reports malformed constructs with source locations. Syntax errors are not C++ compiler errors; generated C++ may not exist yet.
+## Where the files go
 
-## 3. Semantic analysis
+Everything a build produces lives under `<project-root>/.cp3/` (the project root is the nearest directory containing `package.json`):
 
-The analyzer resolves names, checks declared and inferred types, validates imports and members, and reports semantic diagnostics. This is where CP3 rejects operations that violate the static language rules.
+| Entry | Holds |
+| --- | --- |
+| `.cp3/build/` | Generated C++ for your program (and C++ for installed packages' sources). |
+| `.cp3/cache/` | Compiled objects for your sources and runtime units, the build manifest, and the link stamp. Incremental builds reuse these when nothing relevant changed. |
+| `.cp3/out/` | The linked executable (`<entry-name>[.exe]`), or a `.cp3pak` for package projects. |
+| `.cp3/packages/`, `.cp3/native/`, `.cp3/link/`, `.cp3/lock.json` | Installed and linked CP3 packages, native SDK bindings, and the lockfile. |
 
-## 4. C++ generation
+`cp3 clean` deletes `.cp3/build`, `.cp3/cache`, and `.cp3/out` (and keeps `.cp3/native`). `cp3 clean --all` also clears `.cp3/packages`, `.cp3/native` and `.cp3/lock.json`.
 
-The code generator translates checked CP3 constructs into C++ and runtime calls. The generated source is an implementation artifact. It is useful for debugging and performance inspection, but it is not the language specification.
+## Reading a failure
 
-## 5. Native compilation and linking
+Match the output to its stage:
 
-The selected C++ compiler compiles generated code and CP3 runtime units, then links the executable. Errors at this stage may come from the native compiler, linker, missing system dependencies, or incompatible toolchain settings.
-
-## Build cache
-
-Project builds store generated artifacts under the build directory and may reuse native object files when inputs and configuration allow it. A changed compiler, runtime, target, or build setting can invalidate artifacts. Use `cp3 clean` when a deliberately fresh project build is needed; rebuilding the compiler itself with CMake is a separate repository workflow.
-
-## Finding the stage
-
-Read the first reported failure and note whether it names a CP3 diagnostic code, a generated `.cpp` file, or a native link symbol. These point to different stages. The [diagnostics page](./06-diagnostics.md) describes the generated local help link.
-
-## The stages in order
-
-| Stage | Main responsibility | Typical failure |
+| Output clue | Stage | What it means |
 | --- | --- | --- |
-| Project discovery | Select entry point, manifest, imports, and toolchain settings | Wrong root, missing file, invalid package metadata |
-| Lexing | Convert source characters into tokens | Invalid token or unterminated literal |
-| Parsing | Build syntax/AST nodes | Unexpected token or unsupported grammar |
-| Semantic analysis | Resolve names, modules, types, signatures, and diagnostics | Unknown name, type mismatch, invalid API member |
-| Code generation | Lower the accepted representation into C++ translation units | Unsupported lowering or internal codegen diagnostic |
-| Native compilation | Compile generated and runtime C++ with selected Clang | C++ diagnostic, missing include, unsupported flag |
-| Linking | Combine object files and native dependencies | Undefined symbol or missing library |
-| Execution | Run the produced native binary | Runtime exception, environment or I/O failure |
+| `CP3xxxx` code with a `.cp3` file and span | Lex, parse, module resolution, type check | CP3 rejected the source. Fix the code; the target binary was never built. |
+| A `.cpp` file with a C++ diagnostic | Compile | The generated or runtime C++ failed to compile — a compiler bug or an incompatible toolchain; report it with the reproducer. |
+| `undefined symbol` / missing library | Link | A native dependency is missing, or the toolchain/target doesn't match. Check the toolchain selection. |
+| Stack trace / thrown value after launch | Run | The program built and ran; the failure is in the program. |
 
-The `check` command stops after front-end analysis. It does not run code generation or prove that the native compiler can compile the program. `build` and `run` proceed through native compilation and linking; `run` additionally executes the binary.
+Two things worth remembering:
 
-## Imports and project boundaries
+1. A green `cp3 check` does not prove a native build will succeed; it's only the front-end stage.
+2. A C++ error in a generated file always has a CP3 source construct behind it — attach that source to the report, not just the generated file.
 
-The CLI resolves CP3 modules before code generation. Standard modules use a registry with closed exported surfaces. Local source modules and installed CP3 packages enter the dependency graph and generate translation units as required. An unresolved import is a front-end error; it is not deferred to the C++ linker.
+## Which command for which job
 
-Project manifests influence the entry file and compile settings. A nested manifest or wrong current directory can make a command load settings from a different project than expected. Confirm the root before diagnosing a type-mode or toolchain discrepancy.
-
-## Generated translation units and native compile
-
-Codegen emits C++ for the program and connects the selected runtime support. The native toolchain compiles those sources and links required libraries. `--show-runtime` preserves the generated C++ and runtime support snapshot under the project build tree for inspection.
-
-A C++ error in a generated file should be traced back to the CP3 source construct and the emitter that owns it. A linker error is later and usually concerns symbols, object inclusion, library discovery, or target mismatch. Keep the first relevant native error and full compile command when filing an issue.
-
-## Incremental builds
-
-The CLI records build inputs and can reuse unchanged native compilation outputs. The compiler may still regenerate a translation unit when an upstream dependency or option changes. A CMake build of the CP3 compiler and an application build of a `.cp3` program have separate build trees and caches.
-
-Use the normal build to verify an edit. Clean only when checking a clean-build property or when there is concrete evidence of stale state. See [Project settings and build cache](./09-project-settings-and-cache.md).
-
-## Source locations and diagnostics
-
-The front end maps tokens and AST nodes to original file spans. CP3 diagnostics use those spans and stable diagnostic codes, even though generated C++ has different line numbers. A native compiler error may include a generated location; use the preserved runtime/source mapping and generated files to map it back.
-
-## Where to trace a pipeline bug
-
-Start at the first stage that produces incorrect behavior. Follow the owning files in `src/lexer`, `src/parser`, `src/sema`, `src/codegen`, `src/runtime`, or `src/cli`. Then inspect the corresponding CMake target and test family. Do not fix a semantic rejection by adding a codegen workaround, or a runtime bug by changing parser acceptance.
+- Fast feedback while editing: `cp3 check` (front end only, no C++) or `cp3 run` (cached, real execution).
+- Watch mode: `cp3 dev`; pre-warm the loop with `cp3 warm` before a long session.
+- Shippable binary: `cp3 build` (release).
+- Fast test pass: `cp3 test` (builds and runs your test files).
+- After changing toolchains, clearing a stale cache: `cp3 clean`; when package caches are suspect: `cp3 clean --all`.
 
 ## Related pages
 
 - [CLI commands](./01-cli-commands.md)
-- [Diagnostics](./06-diagnostics.md)
-- [Generated C++ inspection](./10-generated-cpp-inspection.md)
+- [Project settings and build cache](./09-project-settings-and-cache.md)
+- [Diagnostics and generated help](./06-diagnostics.md)
+- [Compiler design](../internal-engineering/01-compiler-design.md) — how it works under the hood

@@ -1,6 +1,5 @@
 ---
 title: Text encoding
-chapter: Chapter 3 · Standard library
 ---
 # Text encoding
 
@@ -96,10 +95,14 @@ function roundTrip(text: string): string {
 
 Unknown members are diagnosed at compile time with the documented member as the candidate list.
 
-## Conformance cases and implementation
-
-`tests/cases/stdlib/02/text` covers byte-exact encoding, round trips, the `encoding` property, U+FFFD replacement, and the unsupported-encoding error. Semantic checks are in `src/std/text/sema.cpp`; lowering is in `src/std/text/codegen.cpp`; the runtime is header-only in `src/std/text/include/cp3/std/text.hpp`. Keep semantic checks, generated calls, and runtime failure behavior aligned when changing the surface.
+UTF-8 validation is backed by a vendored simdutf build on the supported targets, with a built-in fallback when it is unavailable — behavior is identical either way.
 
 ## Choosing text encoding or Buffer
 
 Use `TextEncoder` / `TextDecoder` when the boundary is between text and raw UTF-8 bytes, such as network payloads or file contents. Use `Buffer` when the data must also be rendered as hex or base64, or when byte-oriented slicing with those encodings is needed. Both treat a CP3 string as UTF-8 bytes; prefer the type that names the conversion the application actually performs.
+
+## Related pages
+
+- [Typed arrays](./16-typed-arrays.md) — the `Uint8Array` byte type this module converts to and from
+- [Buffers](./11-buffer.md) — hex/base64 representations
+- [Strings](../language/04-values-and-objects/05-strings.md) — CP3 strings are UTF-8 byte strings

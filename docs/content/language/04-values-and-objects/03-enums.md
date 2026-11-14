@@ -1,10 +1,9 @@
 ---
 title: Enums
-chapter: Chapter 1 · The language
 ---
 # Enums
 
-CP3 supports enum declarations with the backing forms accepted by the parser and analyzer. Enum members are named values; the checker prevents mixing incompatible backing kinds within one declaration.
+CP3 supports enum declarations with number- or string-backed members. The checker enforces one backing kind per declaration, validates member access and assignment, and treats number-backed enums as numbers in arithmetic and relational expressions.
 
 ## Declaring and using an enum
 
@@ -17,30 +16,14 @@ enum Direction {
 }
 
 const heading: Direction = Direction.North;
+console.log(heading); // 0
 ```
 
 Use the declared enum type at API boundaries. This prevents unrelated numbers or strings from being passed where a particular enum is expected.
 
 ## Backing values
 
-The compiler supports enum member forms with consistent string or numeric backing as implemented in the semantic checker. A declaration that mixes backing kinds is rejected. Auto-numbering and printed representation should be verified against the exact form and conformance cases rather than assumed from TypeScript.
-
-## Type checking
-
-Enum members have enum-associated types. The checker reports invalid member access, mixed backing, and incompatible assignments using the stable diagnostic catalog. The current test corpus contains ambiguous markers for some enum printing questions; those behaviors are not stated here as guarantees.
-
-Use enums for a finite, named set of values. Use a string union when the API is specifically defined as a union of string literals and the type checker supports that shape.
-
-## Numeric members and automatic values
-
-A numeric enum can omit initializers. In that form, CP3 assigns the first value `0` and increments subsequent members:
-
-```ts
-enum Direction { North, South, East, West }
-// Direction.North is 0; subsequent members increase by one.
-```
-
-A numeric member may also use a constant expression. The checker accepts supported literal and enum-member expressions; it does not execute an arbitrary function at compile time:
+A numeric enum with no initializer auto-numbers: the first member is `0`, and each later member is the previous value plus one. A numeric member may carry a constant expression — a literal, a unary sign or bitwise-not over a constant, `+`/`-`/`*`/`/`/`%` over constants, or a link to an earlier member of the same enum:
 
 ```ts
 enum Color {
@@ -48,9 +31,15 @@ enum Color {
   Crimson = Red,
   Deep = Red + 10,
 }
+
+enum Level {
+  Low = 10,
+  Mid,   // 11
+  High,  // 12
+}
 ```
 
-The `tests/cases/enums` fixtures cover omitted values, explicit arithmetic, references to earlier members, and rejection of non-constant initialization. Do not assume every C++ constant expression or TypeScript enum initializer is accepted.
+The checker accepts only compile-time constants; it does not execute an arbitrary function at compile time. A member whose initializer is not a constant expression is rejected, with code `CP3401`.
 
 ## String-backed members
 
@@ -63,18 +52,62 @@ enum Status {
 }
 ```
 
-A string member without an explicit string initializer is rejected, and a declaration cannot mix string- and number-backed members. Use one backing kind for the whole enum.
+Rules for declaration shape:
 
-## Compatibility and comparison
+| Form | Result |
+| --- | --- |
+| Mixed number and string members | rejected: `CP3706` |
+| A member with no initializer after a string-backed member | rejected: `CP3401` (a string-backed member has no value to inherit) |
+| A member initialized with a non-constant expression | rejected: `CP3401` |
 
-The checker preserves the declared enum type in annotated bindings and rejects assignment from a different enum. Numeric enum members have numeric backing behavior, but do not treat every raw number as a validated enum member: the checker and tests define which assignments are allowed. Compare two values using their enum members rather than depending on an undocumented display format.
+## Arithmetic and comparisons
 
-Member lookup is checked. A misspelled member produces a diagnostic with candidate enum members. Runtime printing and implicit conversion behavior are separate questions; consult the specific run-mode fixtures instead of assuming TypeScript reverse maps or C++ enum formatting.
+Number-backed enums read as numbers in `+`, `-`, `*`, `/`, `%`, `**`, `&`, `|`, `^`, `<<`, `>>`, `>>>`, and in relational operators (`<`, `<=`, `>`, `>=`, `===`, `!==` and the loose forms). Any pair of number-backed enums participates — including members of two different number-backed enums. The result of arithmetic is `number`:
+
+```ts
+enum Color { Red, Green, Blue }
+enum Size { Small, Large }
+
+const total = Color.Green + Size.Large; // number
+const ordered = Color.Red < Color.Blue; // true
+```
+
+A number-backed enum is assignable to `number`:
+
+```ts
+const n: number = Color.Blue; // 2
+```
+
+String-backed enums are not numbers: arithmetic and relational operators over them are rejected (`CP3411` / `CP3406`), and a string-backed enum is not assignable to `number`. Assigning a plain `number` to an enum binding is rejected (`CP3401`) — the numericness rules never flow a raw number into an enum implicitly.
+
+Enum members compare with `===`/`!==` against each other and against the same member type. Number-backed members also compare against numbers: `Color.Red === 0` is `true`.
+
+## Printed representation
+
+A number-backed enum prints its underlying integer; a string-backed enum prints its member's string value:
+
+```ts
+const c: Color = Color.Green;
+console.log(c);        // 1
+console.log(`${c}`);   // 1
+```
+
+## Member access and diagnostics
+
+Member lookup is checked. An unknown member produces a diagnostic with the enum's members as candidates (`CP3305`); assigning a member of one enum to another enum's binding is rejected (`CP3401`):
+
+```ts
+const c: Color = Color.Green;
+// const bad = Color.Chartreuse; // CP3305: did you mean 'Green'?
+// const wrong: Size = Color.Red; // CP3401
+```
 
 ## When to use an enum
 
-Use an enum when values form a closed named set and the backing representation is useful. Use a string union when a function's public contract is exactly a small set of text literals and that form is supported by the checker. Use a class or interface when each value carries fields or behavior rather than being one choice from a fixed set.
+Use an enum when values form a closed named set and the backing representation is useful. Use a string union when a function's public contract is exactly a small set of text literals and that form is supported by the checker — a union of all-literal members of one string family spells itself as the base family at assignability sites (`"a" | "b"` behaves as `string`). Use a class or interface when each value carries fields or behavior rather than being one choice from a fixed set.
 
-## Test and implementation map
+## Related pages
 
-`tests/cases/enums` includes declaration, member access, arithmetic initializer, assignment, equality, switch matching, and invalid backing cases. Semantic validation is in `src/sema/src/checks/type/enum_check.cpp`; code generation must stay consistent with its accepted constant expressions. When adding a rule, include a check-mode rejection case and a run-mode case for the observable backing value.
+- [Types and inference](../01-variables-and-bindings/02-types.md)
+- [Control flow and narrowing](../03-control-flow/01-conditions-and-loops.md)
+- [Classes and interfaces](./02-classes-and-interfaces.md)

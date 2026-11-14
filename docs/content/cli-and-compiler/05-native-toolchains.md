@@ -1,91 +1,82 @@
 ---
 title: Native toolchains
-chapter: Chapter 4 · Compiler and tools
 ---
 # Native toolchains
 
-CP3 emits C++ and relies on a native toolchain to produce the final executable. The selected compiler affects compilation, diagnostics, optimization, linking, and platform compatibility. The toolchain used to build the CP3 compiler itself is a separate concern from the toolchain selected for a CP3 application.
+CP3 lowers your program to C++ and needs a Clang compiler to finish the job. Picking the right one — and keeping it — is the subject of this page.
 
-## The two compiler builds
+## What you install
 
-| Build | What it compiles | Where it is configured |
-| --- | --- | --- |
-| CP3 compiler build | CP3 front end, code generator, CLI, and runtime sources | Repository CMake build and the C++ compiler used by CMake |
-| CP3 application build | Generated C++, runtime objects, native dependencies, final program | `cp3 toolchain` configuration and application build profile |
+- **Clang, version 16 or newer.** On Windows, CP3 targets **MinGW-w64 GNU** (never the MSVC triple); the Windows Clang you install is used with the MinGW sysroot CP3 locates automatically.
+- The compiler carries and manages your choice: `cp3 toolchain` selects, inspects, and stores it. **CP3 itself is built with CMake; your programs are never built with CMake.**
 
-Changing an application toolchain does not rebuild CP3's lexer or semantic analyzer. Changing CP3 compiler source requires rebuilding the repository's CMake targets before a new compiler binary contains those changes.
+Before any compiler is accepted for a build, CP3 verifies it: the candidate is asked to compile, link, and run a one-line C++20 program. A Clang that fails that smoke test is treated as unusable, even if it appears on `PATH`.
 
-## Inspect choices and installed versions
-
-The toolchain command supports these read and configuration forms:
+## Inspect what you have
 
 ```sh
-cp3 toolchain list
-cp3 toolchain list --json
-cp3 toolchain detect
+cp3 toolchain list          # candidates + the effective choice
+cp3 toolchain list --json   # machine-readable
+cp3 toolchain detect        # what automatic discovery finds
+cp3 toolchain current       # one line: the effective choice + its source
 ```
 
-`list` reports discovered compiler candidates, installed versions, and the effective choice. `--json` exposes machine-readable status for scripts. `detect` shows what automatic discovery finds. A candidate can be installed but unusable for the active target; read the reported problem instead of treating “found” as “ready.”
-
-CP3 currently selects Clang-family toolchains for application builds. Detection can find multiple installations and versioned binaries. Record the exact version and path when comparing generated executables.
+A candidate that is installed but cannot serve the active target is reported as such — "found" is not "ready". Record the exact version and path when comparing builds.
 
 ## Choose a toolchain
 
-Use a compiler family, optional version, or explicit executable path:
-
 ```sh
-cp3 toolchain use clang
-cp3 toolchain use clang@18
-cp3 toolchain use C:/LLVM/bin/clang++.exe
+cp3 toolchain use clang            # family only
+cp3 toolchain use clang@18         # a specific major version
+cp3 toolchain use /opt/llvm/bin/clang++   # an explicit executable
 ```
 
-Use `--project` to save the selection for the nearest project, or `--global` for the user's global setting:
+Scope the saved choice:
 
 ```sh
-cp3 toolchain use clang@18 --project
-cp3 toolchain use clang --global
+cp3 toolchain use clang@18 --project   # remembered in this project's package.json
+cp3 toolchain use clang --global      # remembered for all projects
+cp3 toolchain clear --project          # forget the project choice
+cp3 toolchain                       # interactive picker (on a TTY)
 ```
 
-Project configuration belongs to that project's `package.json`; global configuration is stored outside the repository. Choose project scope when contributors need a shared, reproducible compiler expectation. Choose global scope when the preference is specific to one developer's machine.
+- **Project scope** is for shared, reproducible builds — contributors and CI agree on one compiler. It is stored as a `"toolchain"` object in `package.json`.
+- **Global scope** is for your own machine preference. It lives outside the repository (`%APPDATA%\cp3\toolchain.conf` on Windows, `$XDG_CONFIG_HOME/cp3/toolchain.conf` — or `~/.config/cp3/toolchain.conf` — elsewhere; `CP3_CONFIG_DIR` overrides the directory).
 
-To clear a saved choice, use `cp3 toolchain clear --project` or `cp3 toolchain clear --global`. Bare `cp3 toolchain` opens the interactive selection flow when attached to a terminal.
+## Precedence, and strict pins
 
-## Selection precedence and strict pins
+When several settings disagree, the resolver applies them in this order:
 
-A one-command toolchain override can take precedence for that invocation. Environment, project, global, and automatic selection then participate according to the CLI's toolchain resolver. Use `cp3 toolchain list` to see the effective choice and its source instead of guessing which setting won.
+1. `--toolchain <...>` on the command line;
+2. the `CP3_TOOLCHAIN` environment variable;
+3. the project's `package.json` `"toolchain"` object;
+4. the global configuration file;
+5. automatic detection — the newest *usable* installed Clang wins.
 
-A project pin can stop matching after a machine change or an installation update. By default, the resolver can attempt the applicable fallback path. `--strict-toolchain` asks the command to fail when the saved exact choice is unavailable; this is useful for CI jobs that must reject a changed compiler selection.
+`cp3 toolchain list` shows the effective choice and where it came from, so you never have to guess.
 
-Strict selection checks the toolchain identity. It does not make native builds deterministic by itself: SDK versions, system headers, linker inputs, target architecture, and profile flags also matter.
+A saved **exact** pin (`clang@18`) that no longer matches anything on the machine normally falls back with a warning. `--strict-toolchain` turns that into a hard failure instead — use it in CI when a changed compiler must be rejected, never silently swapped.
 
-## Build profile and optimization
+## If no compiler is found
 
-The release profile selects optimization options for the configured native toolchain. The profile can include `-O` optimization, LTO, target-specific instruction selection, loop unrolling, and optional PGO behavior. Debug and incremental profiles have different goals. Consult [Build profiles and PGO](./11-build-profiles-and-pgo.md) for the current command switches.
+Invoking `cp3 toolchain` on a terminal opens the interactive selector. When nothing usable is installed, it offers to install Clang through your platform's package manager (`winget install LLVM.LLVM` on Windows, `brew install llvm` / `xcode-select --install` on macOS, `apt-get|dnf|pacman` on Linux), and only proceeds after an interactive yes — CP3 never downloads a compiler on its own. A non-interactive machine prints the manual install instructions instead.
 
-Native optimization operates on generated C++. It may inline or vectorize a loop when the emitted code exposes enough information, but it cannot disregard required checks or observable side effects. Use [Generated C++ inspection](./10-generated-cpp-inspection.md) and backend diagnostics to establish what happened.
+## Requirements and platform notes
 
-## Troubleshoot native compilation
+- The release profile additionally selects the target's machine architecture flags; a binary built with `-march=native`/`-mcpu=native` may not run on other CPUs. Use `--no-native` (or ship a generic build) when the deployment target differs.
+- CP3 targets the MinGW-w64 toolchain on Windows with the UCRT; MSVC-linked runtimes are not supported targets for generated programs.
+- macOS uses the system libc++/STL; Linux uses the system STL.
 
-When a build fails, identify the stage first:
+## Troubleshooting
 
-1. A CP3 diagnostic code indicates front-end or semantic rejection.
-2. A C++ file and line usually indicate native compilation of generated or runtime source.
-3. An undefined symbol or missing library usually indicates link configuration or an absent dependency.
-4. A runtime error occurs after a binary has been produced and launched.
-
-For a native compiler failure, preserve the first diagnostic, full compiler invocation, generated source, target flags, and toolchain version. Later errors may be cascades from the first failure. For a linker error, preserve library search paths and the complete link command.
-
-Do not patch an ephemeral generated `.cpp` as the lasting fix. Trace the output to the CP3 code generator or runtime implementation, then add or update a source-level test.
-
-## Reproduce performance measurements
-
-For a benchmark comparison, keep the CP3 build profile and toolchain version explicit. Compare the same input and output oracle, record the repetition count and variation, and note whether timing includes process startup or compilation. A compiler name alone is not enough to reproduce a result.
-
-When investigating vectorization, request a report from the configured backend and verify that the diagnostic points to the generated benchmark loop. A remark from a standard library header is not evidence about that loop.
+1. Identify the stage first: a `CP3xxxx` code is a front-end error; a `.cpp` file with a C++ diagnostic is the native compile step; an undefined symbol is a link failure; a stack trace after launch is the program.
+2. For a native compile failure, preserve the first diagnostic, the full command (`--verbose` prints it), the generated source path, and the toolchain version.
+3. For a link failure, keep the search paths (`-L` dirs), the link order, and the complete link command.
+4. Do not hand-edit generated `.cpp` files; fix the CP3 source (or report the compiler bug with a reproducer).
 
 ## Related pages
 
-- [Project settings and build cache](./09-project-settings-and-cache.md)
+- [CLI commands](./01-cli-commands.md)
 - [Build profiles and PGO](./11-build-profiles-and-pgo.md)
-- [Compilation pipeline](./02-compilation-pipeline.md)
-- [Generated C++ inspection](./10-generated-cpp-inspection.md)
+- [Project settings and build cache](./09-project-settings-and-cache.md)
+- [How a build flows](./02-compilation-pipeline.md)

@@ -1,6 +1,5 @@
 ---
 title: Environment variables
-chapter: Chapter 3 · Standard library
 ---
 # Environment variables
 
@@ -103,5 +102,10 @@ The example demonstrates where defaults belong; it does not make every string a 
 | `env.get<T>(key, { default })` | `T` | Returns default if missing |
 | `env.has(key)` | `boolean` | Returns false when the key is missing or the OS value is empty; true for values written via `env.load`/`process.env.set` (even empty) |
 | `env.load(path)` | `void` | Throws if file cannot be read |
+
+## Related pages
+
+- [Process arguments, environment, and child processes](./03-process.md) — the `process.env` map `std/env` reads through
+- [Cryptography](./10-crypto.md) — keeping secrets out of source and logs
 
 The compiler's supported members are exactly `get`, `has`, and `load`; unknown `env` members are diagnosed rather than treated as arbitrary properties.

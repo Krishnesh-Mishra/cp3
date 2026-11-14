@@ -1,6 +1,5 @@
 ---
 title: Time and stopwatches
-chapter: Chapter 3 · Standard library
 ---
 # Time and stopwatches
 
@@ -44,10 +43,7 @@ sw.reset();
 console.log(sw.elapsed() === 0); // true
 ```
 
-The watch is two clock readings plus a flag: no method allocates or throws.
-The clock is `std::chrono::steady_clock` (`QueryPerformanceCounter` on
-Windows, `CLOCK_MONOTONIC` elsewhere) — the same monotonic-now primitive as
-the `std/process` `hrtime` family, but as a reusable object.
+The watch is monotonic: it is never moved by a wall-clock adjustment, so it is never negative.
 
 ## `console.time(label?)` and `console.timeEnd(label?)`
 
@@ -83,10 +79,16 @@ The namespace object (`time.stopwatch`) and `Stopwatch` values are closed: a mem
 
 ## Semantics
 
-The clock is `std::chrono::steady_clock` (`QueryPerformanceCounter` on Windows, `CLOCK_MONOTONIC` elsewhere) — the same monotonic-now primitive as the `std/process` `hrtime` family, but as a reusable object. A watch is two clock readings plus a flag: no method allocates or throws. `elapsed()` on a running watch reads the live interval; on a stopped watch it returns the frozen value. The unit is milliseconds as a fractional `double` (nanosecond resolution). `console.time` / `console.timeEnd` are per-label timers on the same monotonic clock.
+`std/time` is monotonic only, never wall clock: a system-clock adjustment (NTP step, manual set, DST) never moves a measurement. `elapsed()` on a running watch reads the live interval; on a stopped watch it returns the frozen value; before the first `start()` it is `0`. The unit is milliseconds as a fractional number. No method allocates or throws.
 
 ## Limits
 
-- Monotonic only, never wall clock: a system-clock adjustment (NTP step, manual set, DST) never moves a measurement. Do not use `std/time` to read the current wall time, to schedule at a wall instant, or to compare across processes; use [Date](./08-date.md) for wall-clock time.
-- No durations as integers: `elapsed()` is always `number`; there is no exact integer width for a duration.
-- No timeouts or scheduling here: `sleep`, `setTimeout`, and `setInterval` are separate timer APIs, not stopwatch methods.
+- Monotonic only: do not use `std/time` to read the current wall time or to schedule at a wall instant; use [Date](./08-date.md) for wall-clock time.
+- `elapsed()` is always a fractional `number` of milliseconds; there is no exact integer width for a duration.
+- No timeouts or scheduling: `setTimeout`, `setInterval` and `setImmediate` are separate timer APIs, not stopwatch methods.
+
+## Related pages
+
+- [Dates and times](./08-date.md) — wall-clock dates and timestamps
+- [Console](./01-console.md) — `console.time` / `console.timeEnd` as members of the console namespace
+- [Process arguments, environment, and child processes](./03-process.md) — `process.hrtime()` for raw monotonic readings

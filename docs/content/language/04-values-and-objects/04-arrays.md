@@ -1,6 +1,5 @@
 ---
 title: Arrays
-chapter: Chapter 3 · Standard library
 ---
 # Arrays
 
@@ -96,9 +95,9 @@ These operations mutate the array object. A `const` binding can call them becaus
 | `findLastIndex(predicate)` | `number` | Last matching position, or `-1`. |
 | `some(predicate)` | `boolean` | Whether at least one element matches. |
 | `every(predicate)` | `boolean` | Whether all elements match. |
-| `binarySearch(target)` | `number` | Searches a sorted array and returns the matching position or insertion result according to the runtime contract. |
+| `binarySearch(target)` | `number` | Searches a sorted array and returns the matching position, or `-1` when absent. |
 
-`binarySearch` requires sorted input. A debug runtime checks the ordering precondition; release builds skip that check, so passing unsorted data is a caller error and the result is not meaningful. Sorting order depends on element type or an explicit comparator. Use the same ordering convention for sorting and searching.
+`binarySearch` requires sorted input; searching an unsorted array is a caller error and the result is not meaningful. Sorting order depends on element type or an explicit comparator. Use the same ordering convention for sorting and searching.
 
 ## Reduce and accumulator types
 
@@ -128,7 +127,7 @@ const words: string[] = ["maple", "ash", "oak"];
 const longWords = words.filter(word => word.length > 3);
 ```
 
-Named function values are also accepted when their signatures match the method. `filter`, `some`, and `every` callbacks must produce a boolean-compatible result. `map`'s result type comes from the callback return type. `flatMap`'s callback must return an array; `forEach` returns `void` and its callback's return value is ignored.
+Named function values are also accepted when their signatures match the method. `filter`, `some`, and `every` callbacks must produce a boolean-compatible result. `map`'s result type comes from the callback return type. `flatMap`'s callback must return an array; `forEach` returns `undefined` and its callback's return value is ignored.
 
 Callbacks execute once per element visited, subject to the method's early-exit behavior. A callback can have side effects, so replacing a method chain with a fused loop is only valid when the compiler can prove the transformation preserves them.
 
@@ -161,13 +160,11 @@ Use `slice()` or `Array.from()` when a separate array container is needed. A sha
 
 ## Cost and performance
 
-Arrays are growable, so appends may increase capacity and move stored values. `push` is usually the natural append operation. Front insertion/removal can shift later elements and is more costly for large arrays. Creating intermediate arrays with `map`, `filter`, or `slice` uses additional storage.
-
-The compiler has a narrow reserve optimization for some counted loops with proven append patterns. It is not a guarantee that every loop reserves correctly or that array elements avoid their normal representation. See [Allocation and arrays](../../internal-engineering/05-allocation-and-arrays.md) and [Optimization pipeline](../../cli-and-compiler/03-optimization-pipeline.md).
+Arrays are growable, so appends may increase capacity and move stored values. `push` is usually the natural append operation. Front insertion/removal can shift later elements and is more costly for large arrays. Creating intermediate arrays with `map`, `filter`, or `slice` uses additional storage. Measure a program that is actually hot before reaching for manual tuning.
 
 ## Method inventory
 
-The implemented regular-array method table includes `length`, `push`, `unshift`, `pop`, `shift`, `join`, `sort`, `includes`, `filter`, `find`, `findLast`, `findIndex`, `findLastIndex`, `some`, `every`, `map`, `flatMap`, `forEach`, `reduce`, `reduceRight`, `indexOf`, `lastIndexOf`, `binarySearch`, `slice`, `at`, `toSorted`, `toReversed`, `reverse`, `splice`, `toSpliced`, `concat`, `with`, `copyWithin`, `keys`, `values`, `entries`, `flat`, `unique`, `shuffle`, and `fill`. Static construction helpers include `Array.of` and `Array.from`.
+The implemented regular-array method table includes `length`, `push`, `unshift`, `pop`, `shift`, `join`, `sort`, `includes`, `filter`, `find`, `findLast`, `findIndex`, `findLastIndex`, `some`, `every`, `map`, `flatMap`, `forEach`, `reduce`, `reduceRight`, `indexOf`, `lastIndexOf`, `binarySearch`, `slice`, `at`, `toSorted`, `toReversed`, `reverse`, `splice`, `toSpliced`, `concat`, `with`, `copyWithin`, `keys`, `values`, `entries`, `flat`, `unique`, `shuffle`, and `fill`. Static construction helpers include `Array.of`, `Array.from`, and `Array.isArray` (a compile-time constant boolean).
 
 The method names resemble JavaScript, but use the signatures and semantics described in this guide. Check the compiler's diagnostics when an overload or general iterable form is not accepted.
 
@@ -176,5 +173,4 @@ The method names resemble JavaScript, but use the signatures and semantics descr
 - [Strings](./05-strings.md)
 - [Typed arrays, buffers, and DataView](../../standard-library/16-typed-arrays.md)
 - [Arrays and object literals](./01-arrays-and-objects.md)
-- [Runtime allocation and arrays](../../internal-engineering/05-allocation-and-arrays.md)
 - Array behavior is covered across the `arrays-strings`, `perf-array`, and general test families.

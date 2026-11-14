@@ -1,6 +1,5 @@
 ---
 title: Networking
-chapter: Chapter 3 · Standard library
 ---
 # Networking
 
@@ -35,7 +34,7 @@ const text = await response.text();
 - **Operator override**: set `SSL_CERT_FILE=/path/to/bundle.pem` before launching the process to replace the embedded bundle with your own (for a corporate or private PKI). The override file must exist and parse; if it does not load, verification falls back to the embedded bundle.
 - **Server options**: `createServer({ tls })` and `new WebSocketServer({ port, path?, tls })` take PEM **file paths** only (`cert` and `key`) — inline PEM strings are rejected with `ERR_TLS_INVALID_OPTIONS`. `ca` (a client-certificate CA list for mTLS) and file passphrases are accepted as `passphrase` on an encrypted `key`.
 - **`minProtocol`**: `"TLSv1.2"` (default) or `"TLSv1.3"`. Lower floors are refused with `ERR_TLS_INVALID_OPTIONS`.
-- **Fail closed**: a TLS misconfiguration (missing/unreadable cert/key, unloadable CA) throws `ERR_TLS_INVALID_OPTIONS` synchronously at server construction; a verification failure during the handshake surfaces as a `TLSError` with `[CODE] message` (e.g. `[CERT_UNTRUSTED] ...`, `[ERR_TLS_HANDSHAKE_TIMEOUT] ...`) as the promise rejection. On any link without a TLS backend, TLS entry points fail with `ERR_TLS_BACKEND_UNAVAILABLE` instead of silently degrading to plaintext (this was the state on `linux-arm64` before v0.2's TLS bring-up; it now ships OpenSSL and its TLS row is wired).
+- **Fail closed**: a TLS misconfiguration (missing/unreadable cert/key, unloadable CA) throws `ERR_TLS_INVALID_OPTIONS` synchronously at server construction; a verification failure during the handshake surfaces as a `TLSError` with `[CODE] message` (e.g. `[CERT_UNTRUSTED] ...`, `[ERR_TLS_HANDSHAKE_TIMEOUT] ...`) as the promise rejection. On a build without a TLS backend, TLS entry points fail with `ERR_TLS_BACKEND_UNAVAILABLE` instead of silently degrading to plaintext. The ARM64 packages are built with OpenSSL but have not been run on ARM64 hardware.
 
 ## `tls()` — reusable TLS options
 
@@ -83,7 +82,7 @@ Register a `"connection"` handler that receives a WebSocket, optionally with the
 
 `createServer(options?)` constructs an HTTP server with route registration and middleware support. The options object supports `threads`, an integer of at least one, and the full config surface: `tls` — either a boolean (`true` enables TLS with default options and requires `cert`/`key` at runtime), an inline options object, or a value from the `tls({...})` factory — `cors` (`{ origin?, methods?, headers?, credentials?, maxAge? }`), `static` (a directory path), `bodyLimit` (maximum request-body bytes), `trustProxy` (honors `X-Forwarded-Proto`), `views` (a template directory for `res.render`), and `onError` (`(err, req, res) => ...`). An empty options object is valid. Each route handler can be synchronous or return `Promise<undefined>`. Routes and middleware execute in registration order. Calling `next()` from middleware continues the chain; it returns `Promise<undefined>`, so async middleware may use `await next()`. A chain that completes without sending a response returns 404. Requests over `bodyLimit` are rejected with 413 before the handler runs; CORS preflights are answered by the cors middleware alone.
 
-With `tls`, `listen` serves HTTPS through a uWS `SSLApp`; the cert/key are PEM **file paths** consumed synchronously at context creation (an unreadable or non-PEM file fails construction). `tls: true` with no cert/key throws `ERR_TLS_INVALID_OPTIONS` rather than serving plaintext.
+With `tls`, `listen` serves HTTPS; the cert/key are PEM **file paths** read when the server is constructed (an unreadable or non-PEM file fails construction). `tls: true` with no cert/key throws `ERR_TLS_INVALID_OPTIONS` rather than serving plaintext.
 
 ```ts
 const server = createServer();
@@ -119,7 +118,7 @@ const address = await lookup("example.com");   // e.g. "93.184.216.34"
 
 ## Raw sockets (TCP, UDP, TLS)
 
-Available since v0.2.1. The `std/network` registry exports the names in this section; they lower onto the vendored native runtime (`src/std/network/tcp/`, `src/std/network/udp/`, `src/std/network/tls/`). The translation units are selected in the native link plan only when your source names one of these APIs, so programs that never import them stay small.
+Available since v0.2.1. The `std/network` registry exports the names in this section; programs that never use them link nothing extra.
 
 ### TCP — `createTcpServer` / `connectTcp` / `TcpSocket`
 
@@ -165,7 +164,7 @@ client.on("close", () => {});
 
 **`connectTcp(options)`** — `connectTcp({ host, port, timeout?, idleTimeout?, maxWriteBuffer? })`, or the convenience `connectTcp(host, port, timeout?)`. **It is not a Promise**: the socket is returned immediately and outcomes arrive via `"connect"` / `"error"` / `"close"` (like Node's `net.createConnection`). `host` may be an IPv4 literal or a hostname (DNS via libuv, IPv4 only — IPv6 literals are rejected). `port` is required in practice; `0` is rejected. `timeout` defaults to `10000` ms; on expiry the socket emits `"error"` (`ETIMEDOUT`) then `"close"`. `timeout: 0` disables the connect timer (the OS TCP timeout applies).
 
-Deliberate limits of the planned surface: IPv4 only for bind and connect; `\"data\"` chunks are raw TCP segments (libuv read sizes, up to 64 KiB) with **no framing** — the app must frame itself (length prefix, delimiter, ...); no TLS and no UDP on this path; server `close()` discards live connections and unflushed bytes.
+Deliberate limits: IPv4 only for bind and connect; `"data"` chunks are raw TCP segments (libuv read sizes, up to 64 KiB) with **no framing** — the app must frame itself (length prefix, delimiter, ...); no TLS and no UDP on this path; server `close()` discards live connections and unflushed bytes.
 
 ### UDP — `createUdpSocket` / `UdpSocket`
 
@@ -193,7 +192,7 @@ socket.close();
 
 ### TLS over raw sockets — `connectTls` / `createTlsServer` / `TlsSocket`
 
-Named import: `import { connectTls, createTlsServer, TlsSocket } from "std/network"`. These ride the same vendored TLS engine (OpenSSL, memory-BIO) that `fetch("https://…")`, `wss://`, and `createServer({ tls })` already use in this version — but their own language bindings are **not** exported, unlike those server-side paths.
+Named import: `import { connectTls, createTlsServer, TlsSocket } from "std/network"`. These ride the same vendored TLS engine (OpenSSL) that `fetch("https://…")`, `wss://`, and `createServer({ tls })` use.
 
 ```ts
 import { connectTls, createTlsServer } from "std/network";
@@ -220,20 +219,31 @@ socket.on("error", (err) => console.log(err.message));           // "TLSError: [
 
 **`TLSError`** — the `Error` object every TLS failure is delivered as: thrown from the factories, passed to `"error"` listeners. `name` is `"TLSError"`; the machine code travels in the message as `"[CODE] ..."`, e.g. `"[CERT_UNTRUSTED] ..."`. Codes: `CERT_UNTRUSTED`, `ERR_TLS_HANDSHAKE_TIMEOUT`, `ERR_TLS_HANDSHAKE_RATE_LIMITED`, `ERR_TLS_HANDSHAKE_FAILED`, `ERR_TLS_PROTOCOL_TOO_OLD`, `ERR_TLS_NO_PEER_CERTIFICATE`, `ERR_TLS_NOT_CONNECTED`, `ERR_TLS_SOCKET_DESTROYED`, `ERR_TLS_INVALID_OPTIONS`, `ERR_TLS_BACKEND_UNAVAILABLE` (the fail-closed stub backend — builds without the OpenSSL archives installed never silently downgrade to plaintext).
 
-Deliberate limits of the planned surface: one certificate/key per `TlsServer` (no per-SNI callback), no session resumption or tickets, no client-cert request, no OCSP stapling; `setMaxSendFragment` after the handshake is stored but only applied to the next connection; the rate limiter is per-server and in-process.
+Deliberate limits: one certificate/key per `TlsServer` (no per-SNI callback), no session resumption or tickets, no client-cert request, no OCSP stapling; `setMaxSendFragment` after the handshake is stored but only applied to the next connection; the rate limiter is per-server and in-process.
 
-### What to use today
+### What to use when
 
 - HTTP(S) client — `fetch` (see **Fetch**); HTTPS is verified against the embedded CA bundle by default.
 - WebSocket client/server — `WebSocket` / `WebSocketServer`, including TLS servers (see the WebSocket sections).
 - HTTPS server — `createServer({ tls })` or reusable `tls({ ... })` options (see **TLS trust and certificates**), including `new WebSocketServer({ port, tls })`.
+- Raw TCP/UDP/TLS sockets — `createTcpServer` / `connectTcp`, `createUdpSocket`, `connectTls` / `createTlsServer` (see **Raw sockets**). When a native library already has a socket and a non-blocking step API, `std/io` exposes the reactor primitives instead (see [I/O readiness](./18-io.md)).
 - Hostname resolution — `lookup`.
-- Raw TCP/UDP/TLS sockets — **not available**; watch the import registry and the `src/std/network/{tcp,udp,tls}/` sources for the bindings to land.
 
-
+Note that `createServer({ tls })` / `new WebSocketServer({ port, tls })` take PEM **file paths** only — the raw TLS sockets are the path for inline PEM material (see **TLS over raw sockets**).
 
 Treat network responses as external input. Check status codes, validate parsed JSON, and set a timeout when an operation must have a bounded duration. Network operations may fail because of DNS, connection, timeout, protocol, or remote-server errors. Catch errors at a layer that can retry safely or report context.
 
 ## Resource lifetime
 
 Close WebSocket connections and HTTP servers explicitly. Avoid starting a listener as a side effect of importing a module; create and listen to a server from the program's startup flow so the lifecycle is visible.
+
+## Requirements and platforms
+
+Networking is built on the compiler's bundled libuv and OpenSSL (TLS 1.2 floor), and HTTPS verification trusts an embedded Mozilla CA bundle with an `SSL_CERT_FILE` override. The supported targets are Windows x64 and Linux x64; Windows/Linux ARM64 packages exist but are untested.
+
+## Related pages
+
+- [I/O readiness](./18-io.md) — reactor primitives for native socket libraries
+- [JSON](./09-json.md) — `response.json<T>()` parsing
+- [URL extensions](./24-url-extensions.md) — URL handling behind fetch and servers
+- [Cryptography](./10-crypto.md) — key material and hashes

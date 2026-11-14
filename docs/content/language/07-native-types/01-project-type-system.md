@@ -1,6 +1,5 @@
 ---
 title: Native type-system selection
-chapter: Chapter 1 · The language
 ---
 # Native type-system selection
 
@@ -26,9 +25,9 @@ The setting is named `typeSystem` and accepts exactly `typescript`, `cpp`, or `r
 
 | `typeSystem` | Portable CP3 names | Native names accepted without a prefix | Typical use |
 | --- | --- | --- | --- |
-| `typescript` | `number`, `string`, `boolean`, `void`, unions, arrays, and other supported CP3 forms | No Rust/C++ numeric vocabulary | Portable CP3 applications and libraries |
-| `cpp` | Same CP3 names | C++ scalar spellings such as `int`, `unsigned`, `long long`, `size_t`, `float` | Code whose numeric boundaries mirror C/C++ APIs |
-| `rust` | Same CP3 names | Rust scalar spellings such as `i32`, `u64`, `usize`, `f32` | Code whose numeric boundaries mirror Rust APIs |
+| `typescript` | `number`, `string`, `boolean`, `unions`, `arrays`, and other supported CP3 forms | No Rust/C++ numeric vocabulary | Portable CP3 applications and libraries |
+| `cpp` | Same CP3 names | C++ scalar spellings such as `int`, `unsigned`, `long long`, `size_t`, `float` (`bool` → `boolean`, `double` → `number`, `std::string` → `string`) | Code whose numeric boundaries mirror C/C++ APIs |
+| `rust` | Same CP3 names | Rust scalar spellings such as `i32`, `u64`, `usize`, `f32` (`bool` → `boolean`, `f64` → `number`, `String` → `string`) | Code whose numeric boundaries mirror Rust APIs |
 
 This is a type-name setting. It does not make C++ headers importable, bind Rust crates, make pointers safe, or change native toolchain selection. See [Native interop](../../cli-and-compiler/07-native-interop.md) for the narrower ABI boundary.
 

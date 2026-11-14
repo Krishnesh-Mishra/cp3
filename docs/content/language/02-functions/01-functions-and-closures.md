@@ -1,6 +1,5 @@
 ---
 title: Functions and closures
-chapter: Chapter 1 · The language
 ---
 # Functions and closures
 
@@ -14,7 +13,7 @@ function add(left: number, right: number): number {
 }
 ```
 
-The function returns `number`. Every return path must satisfy that result type. A function declared with `void` is used for work that does not return a value:
+The function returns `number`. Every return path must satisfy that result type. A function declared with `undefined` as its result is used for work that does not return a value; a bare `return;` is accepted:
 
 ```ts
 function report(message: string): undefined {
@@ -59,9 +58,9 @@ function makeCounter(): () => number {
 }
 ```
 
-In this example, the returned closure outlives the call to `makeCounter`. `count` must therefore have a lifetime that extends with the closure. This is why escaping closures are not ordinary stack-local captures.
+In this example, the returned closure outlives the call to `makeCounter`, so `count` must remain accessible after `makeCounter` returns. The closure, not the surrounding block, keeps the captured state alive.
 
-See [Closure lifetime and capture costs](../../internal-engineering/04-closures.md) for storage and allocation details.
+See [Closure lifetime and capture costs](../../internal-engineering/02-no-garbage-collector.md) for storage and allocation details.
 
 ## Generic functions
 
@@ -75,7 +74,7 @@ function identity<T>(value: T): T {
 const answer = identity<number>(42);
 ```
 
-The compiler monomorphizes supported generic instantiations into concrete native forms. Generic syntax and constraints are described in [Generics](../05-generics/01-generics.md).
+Generic syntax and constraints are described in [Generics](../05-generics/01-generics.md).
 
 ## Async functions
 
@@ -102,10 +101,17 @@ async function main() {
 
 The body's `return` is checked against the unwrapped value type, so a promise expression is awaited before being returned — `return await somePromise`, exactly like the value coercions in ordinary functions.
 
-Async methods on classes are supported as well (`async greet(): Promise<void> { ... }`); calling one yields a promise of its annotation, and the `return` statements inside are checked against the unwrapped value type.
+Async methods on classes are supported as well (`async greet(): Promise<undefined> { ... }`); calling one yields a promise of its annotation, and the `return` statements inside are checked against the unwrapped value type.
 
-An async annotation that is not a `Promise<T>` is tolerated as a value-annotation form: `async function f(): T` behaves like `Promise<T>`. Async does not mean a new operating-system thread is created for every call. It means the result and continuation are scheduled through the runtime. See [Async and concurrency](../../internal-engineering/07-async-and-concurrency.md).
+An async annotation that is not a `Promise<T>` is tolerated as a value-annotation form: `async function f(): T` behaves like `Promise<T>`. An `async` function adopts a returned promise — `return parts.promise` in `async f(): Promise<C>` type-checks (the returned promise's value type must match `C`). Async does not mean a new operating-system thread is created for every call. It means the result and continuation are scheduled through the runtime. See [Async and concurrency](../../internal-engineering/04-async-non-blocking-io.md).
 
 ## Function errors
 
-The checker validates argument count, argument types, callability, and return types. Common diagnostics are in the `CP34xx` and `CP35xx` ranges. If a generated help page ranks a neighboring page first, use the diagnostic’s exact source excerpt as the primary evidence.
+The checker validates argument count, argument types, callability, and return types. Common diagnostics are in the `CP34xx` and `CP35xx` ranges. If a generated help page ranks a neighboring page first, use the diagnostic's exact source excerpt as the primary evidence.
+
+## Related pages
+
+- [Bindings and declarations](../01-variables-and-bindings/01-bindings.md)
+- [Generics](../05-generics/01-generics.md)
+- [Conditions and loops](../03-control-flow/01-conditions-and-loops.md)
+- [Errors and exceptions](../06-modules-and-errors/02-errors.md)

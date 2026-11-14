@@ -1,6 +1,5 @@
 ---
 title: Native type limitations and diagnostics
-chapter: Chapter 1 · The language
 ---
 # Native type limitations and diagnostics
 
@@ -18,9 +17,9 @@ The resolver rejects types that do not have a supported plain CP3 value represen
 | C++ `long double` | No CP3 native value mapping | Use `double`/`number` if its precision is adequate |
 | C++ `wchar_t`, `char8_t`, `char16_t`, `char32_t` | Encoding and platform representation are not modeled by this value tier | Use a documented integer/code point or CP3 `string` representation |
 | C++ `auto` | Deduction placeholder, not a concrete declared value type | Write the concrete type |
-| C++ `std::string_view` | Non-owning view with lifetime requirements | Use `std::string`/CP3 `string` when an owned string is intended |
-| `any` | CP3 intentionally rejects unchecked arbitrary values | Use `unknown` or a concrete type |
-| TypeScript `object` as a native prefixed scalar | It does not describe a concrete runtime layout | Use an interface or named object type |
+| C++ `std::string_view` | Non-owning view with lifetime requirements | Use `c_'std::string'`/CP3 `string` when an owned string is intended |
+| `any` | CP3 intentionally rejects unchecked arbitrary values (`CP3806`) | Use `object` or a concrete type |
+| TypeScript `object` as a native prefixed scalar | It resolves as the permissive `object` value; it does not describe a concrete runtime layout | Use an interface or named object type for a shape |
 
 These limits protect the front end from claiming ownership, layout, or conversion semantics it cannot guarantee.
 
@@ -32,7 +31,7 @@ Use CP3 arrays for owned CP3 collections. For native pointers, define a small fo
 
 ## Unknown name versus unsupported type
 
-The compiler distinguishes an unrecognized spelling from a known but unsupported spelling. A typo such as `r_'u33'` is an unknown Rust type name and may include a suggestion. A known unsupported type such as `r_'i128'` reports why that type has no current CP3 representation. Correct the spelling or choose the suggested supported scalar; do not silence the diagnostic with `unknown` unless the value is genuinely dynamic.
+The compiler distinguishes an unrecognized spelling from a known but unsupported spelling. A typo such as `r_'u33'` is an unknown Rust type name and may include a suggestion. A known unsupported type such as `r_'i128'` reports why that type has no current CP3 representation. Correct the spelling or choose the suggested supported scalar.
 
 ## Prefix and project mode errors
 
@@ -52,8 +51,6 @@ Even with strict mode disabled, integral-only operations still reject non-integr
 
 A type diagnostic includes a stable CP3 code and a source span. Use the code when searching tests or compiler diagnostics; use the source span to find the first declaration or expression that caused the mismatch. The exact diagnostic text can evolve, while the semantic distinction—unknown name, unsupported name, invalid union, or illegal conversion—should guide the repair.
 
-For compiler contributors, the native vocabulary is centralized in `src/common/src/native/native_types.cpp`; sema policy lives in `src/sema/src/checks/native_types.cpp` and assignment checking. Parser support for prefixed type syntax is separate from name resolution. Keep the mapping, diagnostics, tests, and docs in sync when adding a type.
-
 ## Tests that define the current surface
 
 The most relevant conformance fixtures are grouped under `tests/cases/types/02` and `tests/cases/types/03`:
@@ -64,8 +61,6 @@ The most relevant conformance fixtures are grouped under `tests/cases/types/02` 
 - Union fixtures check nullish optional values and reject unsupported mixed native unions.
 - Unsupported-type fixtures check messages for Rust and C++ names outside the supported set.
 - Strict-mode fixtures check assignment and mixed arithmetic rejection.
-
-A new mapping should include a success fixture and a failure fixture when relevant. Test values near zero, signed boundaries, and widths above the ordinary `number` exact-integer range when precision is part of the feature.
 
 ## Safe documentation rule
 

@@ -1,6 +1,5 @@
 ---
 title: Errors and exceptions
-chapter: Chapter 1 · The language
 ---
 # Errors and exceptions
 
@@ -87,4 +86,10 @@ Do not write one generic catch policy for all APIs. Read whether the specific op
 - Preserve resource cleanup through `finally` when it must run on returns or throws.
 - Add tests for the nearest catch, propagation, rethrow, and cleanup paths affected by a change.
 
-The language fixtures under `tests/cases/errors` cover thrown-`Error` programs, the expected `CP3509` rejection of thrown strings and numbers, catch scope, nested handlers, propagation, finally on return, and runtime failures such as out-of-bounds operations. Use them as the contract before changing the lowering.
+The language fixtures under `tests/cases/errors` cover thrown-`Error` programs, the expected `CP3509` rejection of thrown strings and numbers, catch scope, nested handlers, propagation, finally on return, and runtime failures such as out-of-bounds operations. Use them as the contract when changing how errors behave.
+
+## Related pages
+
+- [Conditions and loops](../03-control-flow/01-conditions-and-loops.md)
+- [Modules and exports](./01-modules.md)
+- [Global builtins](../99-global-builtins.md)

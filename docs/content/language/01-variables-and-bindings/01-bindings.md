@@ -1,6 +1,5 @@
 ---
 title: Bindings and declarations
-chapter: Chapter 1 · The language
 ---
 # Bindings and declarations
 
@@ -97,6 +96,8 @@ An empty collection does not reveal an element type by inspection. Annotate it:
 const names: string[] = [];
 ```
 
+Under the native `cpp`/`rust` type systems, an un-annotated binding initialized with a plain integer literal infers a native integer instead of `number` — `const port = 8080` is not `number` there. See [Types and inference](./02-types.md#un-annotated-literal-bindings-take-the-native-default) for the exact rules.
+
 For more about union compatibility, inference, and project-dependent native type names, see [Types and inference](./02-types.md).
 
 ## Initializers and absent values
@@ -139,9 +140,9 @@ The extracted names obey the same `const`/`let`/`var` reassignment rules as ordi
 
 ## Binding lifetime and captured names
 
-Local bindings exist within their lexical scope. Closures can capture values from an outer scope, which can extend the lifetime of captured state beyond the block that created it. Mutable captures can require a runtime capture cell. This affects representation but not the source-level rule that a `const` binding cannot be reassigned.
+Local bindings exist within their lexical scope. Closures can capture values from an outer scope, which can extend the lifetime of a captured binding beyond the block that created it. This affects lifetime, not the source-level rule that a `const` binding cannot be reassigned.
 
-See [Functions and closures](../02-functions/01-functions-and-closures.md) and [Closure storage and lifetime](../../internal-engineering/04-closures.md) before using a closure to retain large objects or shared mutable state.
+See [Functions and closures](../02-functions/01-functions-and-closures.md) and [Closure storage and lifetime](../../internal-engineering/02-no-garbage-collector.md) before using a closure to retain large objects or shared mutable state.
 
 ## Practical choice table
 

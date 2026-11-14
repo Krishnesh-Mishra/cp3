@@ -1,6 +1,5 @@
 ---
 title: Dates and times
-chapter: Chapter 3 · Standard library
 ---
 # Dates and times
 
@@ -130,6 +129,7 @@ const later = start.addDays(1).addHours(2);
 
 This avoids a hidden mutation through an alias. Keep the original value when both instants are needed for comparison or reporting.
 
-## Test and implementation boundary
+## Related pages
 
-`tests/cases/stdlib/02/date` covers signatures, ISO parsing/formatting, component reads, arithmetic, comparison, and differences. The semantic member lists live in `src/std/date/sema.cpp`; code generation and the built-in Date runtime define how those calls are represented. Use those sources and tests when documenting timezone or invalid-input behavior instead of assuming full ECMAScript Date parity.
+- [Time and stopwatches](./21-time.md) — monotonic elapsed-time measurements (`std/time`), which never use the wall clock
+- [JSON](./09-json.md) — serialization for storing `toISOString()` output

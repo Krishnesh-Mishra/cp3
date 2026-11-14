@@ -1,6 +1,5 @@
 ---
 title: Destructuring declarations
-chapter: Chapter 1 · The language
 ---
 # Destructuring declarations
 
@@ -25,7 +24,12 @@ const [red, , blue] = rgb;
 const [first, ...tail] = rgb;
 ```
 
-The rest binding collects the remaining elements after the consumed positions. The test suite includes tuple rest cases, including a rest pattern with no remaining entries. Treat the result as a new collection of the remaining items; it is not a reference alias for the original tuple tail.
+A pattern default applies when the position is absent from the source — `const [x = 7] = []` binds `x` to `7` (the rest arm clamps instead of reading out of bounds). The rest binding collects the remaining elements after the consumed positions; the remaining tuple's positional types survive. The test suite includes tuple rest cases, including a rest pattern with no remaining entries:
+
+```ts
+const [head, ...rest] = rgb; // head: number, rest: [number, number]
+const [only, ...none] = [7];  // only: number, none collects nothing
+```
 
 Array destructuring requires an array or tuple compatible source. A string is not accepted as an array source merely because it can be iterated in some JavaScript contexts. The `array_source_error` case pins this rejection.
 
@@ -107,7 +111,7 @@ The annotation types the input object and therefore the extracted bindings. An a
 
 ## Declarations without an initializer
 
-CP3 currently lowers a destructuring declaration with no initializer to bindings initialized with `undefined`, matching the supported `let name;` behavior:
+A destructuring declaration with no initializer binds every extracted name to `undefined`, matching the supported `let name;` behavior:
 
 ```ts
 let [left, right];

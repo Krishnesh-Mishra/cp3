@@ -1,6 +1,5 @@
 ---
 title: Arrays and object literals
-chapter: Chapter 1 · The language
 ---
 # Arrays and object literals
 
@@ -19,17 +18,33 @@ The element type can be inferred from a non-empty literal. Give an empty array a
 const pending: string[] = [];
 ```
 
+`Array<T>` is the equivalent generic spelling in an annotation, and `Array<T>(n)` (or `new Array<T>(n)`) constructs a length-form array. The type argument is required for the length form; a bare `new Array(n)` is rejected (`CP3401`) unless the element type is pinned by an annotation or a `.fill(...)` chain. See [Arrays](./04-arrays.md) for the method surface.
+
+An array annotation may carry the `readonly` qualifier — `readonly number[]` or `readonly [number, number]`. It is accepted only on array and tuple types; it does not add any runtime behavior.
+
+## Index signatures in object type literals
+
+Interfaces and object type literals accept an index signature `[name: string]: T` (or `[n: number]: T`):
+
+```ts
+interface Dict {
+  [name: string]: number;
+}
+```
+
+Member access resolves to the index value type, and an object literal carrying extra properties is accepted against a shape with an index signature even if it does not mention every named member. Use `Map<K, V>` when the key set is fully dynamic; CP3 does not offer index signatures on arbitrary classes.
+
 ## Indexed access
 
 ```ts
 const first: number = scores[0];
 ```
 
-The index expression is checked and lowered through the array family’s runtime rules. For ordinary arrays, an absent element may be represented as `undefined` in supported operations such as `pop` and `shift`; do not confuse that with an in-range indexed value. Typed arrays and `DataView` have their own bounds and conversion rules.
+The index expression is checked against the array's element type. In supported operations an absent element reads as `undefined` — such as `pop` and `shift` on an empty array; do not confuse that with an in-range indexed value. Typed arrays and `DataView` have their own bounds and conversion rules.
 
 ## Array methods
 
-CP3 implements a broad array method surface, including `push`, `pop`, `shift`, `unshift`, `map`, `filter`, `reduce`, `find`, `some`, `every`, `slice`, `sort`, `includes`, and `indexOf`. Exact callbacks and return types are defined by the compiler’s array member table. See [Array methods](./04-arrays.md) for the full reference.
+CP3 implements a broad array method surface, including `push`, `pop`, `shift`, `unshift`, `map`, `filter`, `reduce`, `find`, `some`, `every`, `slice`, `sort`, `includes`, and `indexOf`. Exact callbacks and return types are listed on the arrays page. See [Array methods](./04-arrays.md) for the full reference.
 
 Some operations mutate the existing array (`push`, `pop`, `sort`, `unique`, `shuffle`); others return a new array (`map`, `filter`, `slice`). Read the individual method description before assuming JS behavior or a copy boundary.
 
@@ -53,7 +68,7 @@ interface User {
 const user: User = { name: "Asha", active: true };
 ```
 
-The analyzer checks missing and excess properties in the source forms covered by its structural object checks. CP3 rejects open index-signature declarations; use a supported `Map<K, V>` when keys are dynamic.
+The analyzer checks missing and excess properties in the source forms covered by its structural object checks. Interfaces and object type literals accept an index signature (`[name: string]: T`); use a supported `Map<K, V>` when keys are fully dynamic at runtime.
 
 ## Object spread
 
@@ -65,7 +80,7 @@ const extended = { ...base, y: 3 }; // { x: number, y: number }
 extended.y; // 3
 ```
 
-Object spread is not a runtime deep clone: the result is built field by field, so nested objects stay shared references. To build a new shape from a reused object, prefer spread; `Object.assign(target, source)` mutates the target in place instead. See [Global builtins](../99-global-builtins.md) for the full `Object.*` surface.
+Object spread is not a runtime deep clone: the result is built field by field, so nested objects stay shared references. A spread of a general array (e.g. `add(...xs)`) is also accepted in call position for a fixed arity. To build a new shape from a reused object, prefer spread; `Object.assign(target, source)` mutates the target in place instead — and with a fresh literal target it produces the merged shape (JS key order, later sources win), which is the difference to know when printing or enumerating the result. See [Global builtins](../99-global-builtins.md) for the full `Object.*` surface.
 
 ## Aliasing and mutation
 
@@ -78,7 +93,7 @@ alias.push(2);
 // original now observes the added element as well
 ```
 
-This sharing model matters to escape analysis and lifetime. See [Values and references](../../internal-engineering/01-value-model.md).
+This sharing model is part of CP3's lifetime rules for reference-shaped values. See [Values and references](../../internal-engineering/02-no-garbage-collector.md).
 
 ## Choosing a container
 
@@ -89,3 +104,10 @@ This sharing model matters to escape analysis and lifetime. See [Values and refe
 - Use `Buffer` for byte strings and encoding conversion.
 
 These types have different element, bounds, and mutation behavior; they are not interchangeable merely because JavaScript can represent them all as objects.
+
+## Related pages
+
+- [Arrays](./04-arrays.md)
+- [Classes and interfaces](./02-classes-and-interfaces.md)
+- [Global builtins](../99-global-builtins.md)
+- [Types and inference](../01-variables-and-bindings/02-types.md)

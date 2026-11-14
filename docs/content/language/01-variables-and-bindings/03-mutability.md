@@ -1,6 +1,5 @@
 ---
 title: Mutability and immutability
-chapter: Chapter 1 · The language
 ---
 # Mutability and immutability
 
@@ -76,7 +75,7 @@ const threshold = 12;
 const isLarge = (value: number): boolean => value > threshold;
 ```
 
-A closure capturing a mutable `let` observes the binding's current value according to the capture semantics implemented by CP3. The compiler may need a shared capture cell for mutable captures, which can affect allocation and lifetime. See [Functions and closures](../02-functions/01-functions-and-closures.md) and [Closure storage and lifetime](../../internal-engineering/04-closures.md).
+A closure capturing a mutable `let` observes the binding's current value according to the capture semantics implemented by CP3. See [Functions and closures](../02-functions/01-functions-and-closures.md) and [Closure storage and lifetime](../../internal-engineering/02-no-garbage-collector.md).
 
 ```ts
 let total = 0;
@@ -86,7 +85,7 @@ const add = (value: number): undefined => {
 add(5);
 ```
 
-Use a clear owner for mutable state. Capturing a name does not make the state thread-safe; the [thread-safety guide](../../internal-engineering/10-thread-safety.md) explains the limits of shared state across worker or parallel execution.
+Use a clear owner for mutable state. Capturing a name does not make the state thread-safe; the [thread-safety guide](../../internal-engineering/04-async-non-blocking-io.md) explains the limits of shared state across worker or parallel execution.
 
 ## Fields and array elements
 
@@ -136,4 +135,4 @@ The variable cases cover rejected reassignment of constants, permitted array and
 - [Bindings and declarations](./01-bindings.md)
 - [Types and inference](./02-types.md)
 - [Scope and initialization](./04-scope-and-initialization.md)
-- [Escape analysis](../../internal-engineering/02-escape-analysis.md)
+- [Escape analysis](../../internal-engineering/03-escape-analysis.md)

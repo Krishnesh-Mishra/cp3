@@ -1,6 +1,5 @@
 ---
 title: Tests and compiler verification
-chapter: Chapter 4 · Compiler and tools
 ---
 # Tests and compiler verification
 
@@ -78,7 +77,7 @@ This sequence avoids treating a successful compile or one green test as broad pr
 
 ## Related pages
 
-- [Compilation pipeline](./02-compilation-pipeline.md)
-- [Diagnostics](./06-diagnostics.md)
+- [CLI commands](./01-cli-commands.md)
+- [Diagnostics and generated help](./06-diagnostics.md)
 - [Generated C++ inspection](./10-generated-cpp-inspection.md)
-- [Optimization pipeline](./03-optimization-pipeline.md)
+- [Compiler optimization and guarantees](./03-optimization-pipeline.md)

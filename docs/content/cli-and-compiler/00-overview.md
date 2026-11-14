@@ -1,70 +1,65 @@
 ---
-title: Chapter 4 · Compiler and tools
-chapter: Chapter 4 · Compiler and tools
+title: CLI and compiler
 ---
-# Chapter 4 · Compiler and tools
+# CLI and compiler
 
-This chapter is the practical guide to the CP3 compiler, CLI, native toolchain, project cache, diagnostics, generated C++, and verification workflow. It is useful both for application developers diagnosing a build and for contributors changing compiler behavior.
+This section is the practical guide to the CP3 command line: what the commands do, which settings a project can carry, the build profiles and flags, and how to read failures. If you want to ship a CP3 program, you live here.
 
 ## Start with the task
 
 | Task | Page |
 | --- | --- |
-| Create, check, run, build, clean, or package a project | [CLI commands](./01-cli-commands.md) |
-| Understand what happens from `.cp3` to executable | [Compilation pipeline](./02-compilation-pipeline.md) |
-| Learn the existing optimization proofs and limits | [Optimization pipeline](./03-optimization-pipeline.md) |
-| Understand generic lowering | [Generics and specialization](./04-generics.md) |
-| Select or diagnose a native compiler | [Native toolchains](./05-native-toolchains.md) |
-| Read a compiler error and open its related documentation | [Diagnostics and generated help](./06-diagnostics.md) |
-| Integrate a native SDK | [Native packages and ABI boundaries](./07-native-interop.md) |
-| Find conformance test families | [Tests and verification](./08-tests-and-verification.md) |
-| Understand `package.json`, output paths, and cache reuse | [Project settings and build cache](./09-project-settings-and-cache.md) |
-| Trace a CP3 expression into its C++ output | [Generated C++ inspection](./10-generated-cpp-inspection.md) |
+| Create, check, run, build, test, clean, or package a project | [CLI commands](./01-cli-commands.md) |
+| Understand what a build does and what each failure means | [How a build flows](./02-compilation-pipeline.md) |
+| See what the compiler optimizes (and what it never does) | [Compiler optimization and guarantees](./03-optimization-pipeline.md) |
+| Generics and the build | [Generics and the build](./04-generics.md) |
+| Select, pin, or troubleshoot the C++ compiler | [Native toolchains](./05-native-toolchains.md) |
+| Read a diagnostic and open its generated help | [Diagnostics and generated help](./06-diagnostics.md) |
+| Integrate a native SDK or library | [Native packages and ABI boundaries](./07-native-interop.md) |
+| Run the conformance suite or add a test | [Tests and verification](./08-tests-and-verification.md) |
+| Understand `package.json`, `.cp3/`, and cache reuse | [Project settings and build cache](./09-project-settings-and-cache.md) |
+| Inspect the generated C++ for a check or a performance question | [Generated C++ inspection](./10-generated-cpp-inspection.md) |
 | Choose debug, incremental, release, or PGO | [Build profiles and PGO](./11-build-profiles-and-pgo.md) |
 
-## Two workflows, two build trees
+## Two build trees
 
-Developing a CP3 program and developing the CP3 compiler are separate workflows:
+Building the CP3 compiler and building a CP3 program are different workflows with different caches:
 
 ```text
-CP3 compiler source --CMake--> cp3c executable
-.cp3 program --cp3 CLI--> generated C++ --native compiler--> program executable
+CP3 compiler source  --CMake-->   cp3c executable
+.cp3 program        --cp3 CLI-->  program executable
 ```
 
-After editing compiler or runtime C++ source, rebuild the compiler so the executable contains that edit. After editing a `.cp3` application, use the project CLI to rebuild that application. The repository's CMake object cache is not the same cache as a project's `.cp3/build` directory.
+After editing the compiler, rebuild the compiler (CMake). After editing a `.cp3` program, use the `cp3` CLI on that project. The repository's CMake object cache is not the same as a project's `.cp3/` directory, and cleaning one does nothing for the other.
 
-## Development and release commands
+## Everyday commands
 
-Use `cp3 check` for fast front-end feedback. Use `cp3 run` to build and execute. Use `cp3 build` to produce an executable without launching it. Use `cp3 dev` for the watch workflow, and `cp3 fmt` for source formatting.
+- `cp3 check` — parse and type-check; no C++ is produced.
+- `cp3 run` — build (incrementally, cached) and execute.
+- `cp3 build` — build an optimized release binary, without running it.
+- `cp3 dev` — watch and rebuild on save.
+- `cp3 warm` — build every artifact ahead of time (nothing runs).
+- `cp3 test` — build and run test files.
 
-Project commands find settings from a project manifest and may reuse cached outputs. A `--release` build is intended for optimized execution; `--debug` is for debugging; `--incremental` favors short cached development builds. Keep the profile fixed when collecting performance results.
+Start with [CLI commands](./01-cli-commands.md); pick your profile in [Build profiles and PGO](./11-build-profiles-and-pgo.md).
 
-## What the compiler is responsible for
+## If you are new here
 
-The CP3 compiler owns source-language behavior: tokenization, grammar, module resolution, types, diagnostics, and lowering. Generated C++ is an intermediate artifact. The native compiler then applies its own optimizations and emits machine code. A backend optimization cannot repair an incorrect CP3 lowering, and CP3 source semantics cannot be inferred from one generated C++ spelling.
+1. Install the toolchain: [Native toolchains](./05-native-toolchains.md).
+2. Make a project, run the example: [Quick start](../quick-start.md).
+3. Give your project a manifest and understand caching: [Project settings and build cache](./09-project-settings-and-cache.md).
+4. When something fails, match the output to its stage: [Diagnostics](./06-diagnostics.md) and [How a build flows](./02-compilation-pipeline.md).
 
-When investigating a performance issue, trace all three layers: source expression, CP3-generated C++, and backend machine-code/optimization evidence. A pass being present in the source tree is not proof it applied to a particular expression.
-
-## Source organization for contributors
-
-The implementation is organized into focused components such as `src/lexer`, `src/parser`, `src/modules`, `src/sema`, `src/codegen`, `src/runtime`, `src/std`, and `src/cli`. Start at the stage that first behaves incorrectly, then follow the corresponding test family in `tests/cases` and build target.
-
-Avoid fixing a front-end type issue by emitting a special C++ workaround, or changing parser acceptance to hide a runtime failure. Keep the fix at the layer that owns the observed behavior and add the smallest representative positive and negative tests for a compiler change.
-
-## Version and reproducibility
-
-The CLI flags and compiler implementation evolve. Use the installed compiler's `help` output as the authority for a command, and record `cp3 version` with build logs. For benchmark reports, also record the native compiler version, target, profile, repetitions, output oracle, and variation.
-
-## Pages in this chapter
+## Pages in this section
 
 - [CLI commands](./01-cli-commands.md)
-- [Compilation pipeline](./02-compilation-pipeline.md)
-- [Optimization pipeline](./03-optimization-pipeline.md)
-- [Generics and specialization](./04-generics.md)
+- [How a build flows](./02-compilation-pipeline.md)
+- [Compiler optimization and guarantees](./03-optimization-pipeline.md)
+- [Generics and the build](./04-generics.md)
 - [Native toolchains](./05-native-toolchains.md)
-- [Diagnostics](./06-diagnostics.md)
+- [Diagnostics and generated help](./06-diagnostics.md)
 - [Native packages and ABI boundaries](./07-native-interop.md)
 - [Tests and verification](./08-tests-and-verification.md)
-- [Project settings and cache](./09-project-settings-and-cache.md)
+- [Project settings and build cache](./09-project-settings-and-cache.md)
 - [Generated C++ inspection](./10-generated-cpp-inspection.md)
 - [Build profiles and PGO](./11-build-profiles-and-pgo.md)

@@ -1,15 +1,11 @@
 ---
 title: Collections
-chapter: Chapter 3 · Standard library
 ---
 # Collections
 
-`std/collections` is the single module for every collection type. Import all
-of them from `"std/collections"`; there are no per-type module specifiers:
+The collection types are TypeScript-style ambient builtins: `Map`, `Set`, `LRUCache`, `MultiMap`, `ConcurrentMap`, `Queue`, `Stack`, `PriorityQueue`, `RingBuffer` and `BitSet` resolve in both value and type positions with no import, mirroring TypeScript. `import { Map, Set } from "std/collections"` stays valid for source compatibility and narrows identically:
 
 ```ts
-import { Map, Set, LRUCache, Queue, Stack, PriorityQueue, RingBuffer, BitSet, MultiMap, ConcurrentMap } from "std/collections";
-
 const counts = new Map<string, number>();
 const seen = new Set<string>();
 const queue = new Queue<number>();
@@ -22,7 +18,9 @@ const shared = new ConcurrentMap<string, number>();
 const cache = new LRUCache<string, number>(128);
 ```
 
-Both preserve insertion order when iterating. They are reference values managed by the runtime; see [Values and references](../internal-engineering/01-value-model.md).
+There are no per-type module specifiers.
+
+Collections are reference values; assigning one binding to another shares the same collection.
 
 ## Map
 
@@ -111,6 +109,25 @@ const visited = new Set<string>();
 ```
 
 A Map needs two type arguments (`K`, `V`); a Set needs one (`T`). The constructor does not infer a safe key/value pair from an empty collection. The type checker validates later `set`, `get`, and `add` calls against these arguments.
+
+## Constructing from iterables and spreading
+
+`new Map<K, V>(entries)` and `new Set<T>(elements)` accept an array of entries / elements:
+
+```ts
+const counts = new Map<string, number>([["apples", 3], ["pears", 5]]);
+const seen = new Set<string>(["a", "b"]);
+
+for (const [key, value] of counts.entries()) {
+  // entries in insertion order
+}
+```
+
+A `Map` entries source is an array of `[key, value]` pairs (for example, the result of `entries()` or `Object.entries(...)`). Spreads work the same way: `[...set]` yields the set's values and `[...map]` yields `[key, value]` pairs. `for...of` iterates arrays and strings, so iterate the `values()` / `entries()` arrays: `for (const [key, value] of counts.entries())`.
+
+## Map.groupBy
+
+`Map.groupBy(list, callback)` (called as `Map.groupBy(...)`) groups an array into a `Map<K, T[]>`; `Object.groupBy(list, callback)` is the string-key record form. See [Global builtins](../language/99-global-builtins.md) for the `Object.*` statics and `Object.fromEntries`.
 
 ## Method signatures and callback order
 
@@ -354,9 +371,10 @@ shared.get("hits"); // 1
 | ConcurrentMap | | `has`, `delete` | `(key: K): boolean` (thread-safe) |
 | ConcurrentMap | | `size` | Read-only count property (thread-safe, point-in-time) |
 
-All types are imported from `"std/collections"`:
-`import { Map, Set, LRUCache, Queue, Stack, PriorityQueue, RingBuffer, BitSet, MultiMap, ConcurrentMap } from "std/collections";`
+They all resolve with no import (ambient); `import { Map, Set, ... } from "std/collections"` remains valid for source compatibility.
 
-## Tests and implementation
+## Related pages
 
-The standard-library collection tests cover generic construction, missing Map lookups, insertion order, replacement, deletion, clear, and iteration, plus deterministic Queue FIFO, Stack LIFO, PriorityQueue min/max order, RingBuffer overwrite, BitSet `set`/`get`/`count`/`and`/`or`/`xor`, MultiMap `add`/`get`, ConcurrentMap `set`/`get`, and LRU eviction cases — all importing from `"std/collections"`. Unknown members are diagnosed at compile time.
+- [Global builtins](../language/99-global-builtins.md) — `Object.fromEntries`, `Object.groupBy`, and the `Object.*` record statics
+- [JSON](./09-json.md) — `Record<string, V>` canonicalizes to `Map<string, V>`
+- [Hash](./23-hash.md) — non-cryptographic checksums (unrelated to collection hashing)

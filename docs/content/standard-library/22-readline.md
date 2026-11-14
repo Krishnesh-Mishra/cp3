@@ -1,6 +1,5 @@
 ---
 title: Readline
-chapter: Chapter 3 · Standard library
 ---
 # Readline
 
@@ -89,7 +88,7 @@ The namespace object is closed: a member outside the table is a compile-time err
 
 ## Semantics
 
-All reads delegate to the process family's stdin pump (`process.stdin`): one sibling reader thread and one buffered line queue shared with it. Lines are split on `\n` with a trailing `\r` stripped. The module has a default export only; `import { readLine } from "std/readline"` is rejected, use the default import form above.
+All reads delegate to the same stdin pump `process.stdin` uses: `std/readline` and `process.stdin` share one buffered line queue. Lines are split on `\n` with a trailing `\r` stripped. The module has a default export only; `import { readLine } from "std/readline"` is rejected, use the default import form above.
 
 ## Limits
 

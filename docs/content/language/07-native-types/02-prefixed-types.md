@@ -1,6 +1,5 @@
 ---
 title: Rust, C++, and TypeScript-prefixed types
-chapter: Chapter 1 · The language
 ---
 # Rust, C++, and TypeScript-prefixed types
 
@@ -72,15 +71,15 @@ CP3 recognizes common C++ arithmetic scalar spellings and fixed-width aliases. T
 
 | C++ spelling | CP3 native type |
 | --- | --- |
-| `char` | `char` (the target C++ implementation determines its signedness) |
+| `char` | `char` — checked as an 8-bit signed integer in CP3's model (rank below i32) |
 | `signed char`, `int8_t`, `std::int8_t` | `i8` |
 | `unsigned char`, `uint8_t`, `std::uint8_t` | `u8` |
-| `short` and signed variants | `i16` |
-| `unsigned short` variants | `u16` |
-| `int`, `signed`, `signed int` | `i32` |
-| `unsigned`, `unsigned int` | `u32` |
-| `long`, signed `long` variants | Native `long` representation |
-| `unsigned long` variants | Native `unsigned long` representation |
+| `short` and signed variants, `int16_t`, `std::int16_t` | `i16` |
+| `unsigned short` variants, `uint16_t`, `std::uint16_t` | `u16` |
+| `int`, `signed`, `signed int`, `int32_t`, `std::int32_t` | `i32` |
+| `unsigned`, `unsigned int`, `uint32_t`, `std::uint32_t` | `u32` |
+| `long`, signed `long` variants | Native `long` representation (platform-width, 32 or 64 bits) |
+| `unsigned long` variants | Native `unsigned long` representation (platform-width) |
 | `long long` and signed variants, `int64_t`, `std::int64_t` | `i64` |
 | `unsigned long long`, `uint64_t`, `std::uint64_t` | `u64` |
 | `size_t`, `std::size_t`, `uintptr_t` | `u64` |
@@ -89,7 +88,6 @@ CP3 recognizes common C++ arithmetic scalar spellings and fixed-width aliases. T
 | `double` | CP3 `number` |
 | `bool` | CP3 `boolean` |
 | `std::string` | CP3 `string` |
-| `void` | CP3 `void` |
 
 Examples:
 
@@ -112,8 +110,7 @@ The `ts_` prefix explicitly names the portable CP3 types:
 | `boolean` | `boolean` |
 | `undefined` | `undefined` |
 | `null` | `null` |
-| `void` | `void` |
-| `unknown` | `unknown` |
+| `object` | the untyped `object` spelling (the permissive ambient value) |
 
 For example, this lets a Rust-vocabulary project retain a regular CP3 number:
 
@@ -123,7 +120,7 @@ let ratio: ts_'number' = 1.5;
 let optionalRaw: r_'i64' | undefined = undefined;
 ```
 
-`ts_'any'` is not an escape from CP3's banned `any` type. `object` does not name a concrete runtime shape. Use `unknown` or a declared interface/alias as appropriate.
+`ts_'any'` is rejected with `CP3806` (the `any` type is banned). Use `object` for an untyped value, or a declared interface/alias for a shape. The retired spellings `void` and `unknown` are not part of this vocabulary — annotate results as `undefined` and untyped values as `object`.
 
 ## These are value types, not pointer declarations
 

@@ -1,6 +1,5 @@
 ---
 title: Strings
-chapter: Chapter 3 · Standard library
 ---
 # Strings
 
@@ -131,7 +130,15 @@ String.raw(["a", "b"], "x");   // "axb"
 
 ## Concatenation and cost
 
-The `+` operator combines strings. The compiler has a lowering for common concatenation chains that can reserve the result size and append the parts into one result buffer. That is an implementation optimization, not a promise that all concatenations allocate once.
+The `+` operator combines strings — `string + string` is the one mixed-shape rule: `"a" + 1` and `"x" + true` are compile errors (`CP3411`), as is adding a string to a number. Interpolate with template literals, or convert explicitly, when you need to build text from non-string values:
+
+```ts
+import console from "std/console";
+
+const n: number = 3;
+console.log(`${n} items`);    // template literal
+console.log("count: " + String(n)); // explicit conversion
+```
 
 Transformations such as `replaceAll`, `slice`, `split`, case conversion, padding, and repetition create result storage. When processing a large text stream, avoid retaining every intermediate result if a direct scan or streaming API is available.
 
@@ -152,7 +159,7 @@ Assigning a string to another binding does not create mutable shared text. Reass
 
 The documented checker surface includes `length`, `charAt`, `at`, `charCodeAt`, `codePointAt`, `matchAll`, `startsWith`, `endsWith`, `includes`, `repeat`, `padStart`, `padEnd`, `toUpperCase`, `toLowerCase`, `trim`, `trimStart`, `trimEnd`, `indexOf`, `lastIndexOf`, `slice`, `substring`, `replace`, `replaceAll`, and `split`. The static `String.fromCharCode(...codes)` constructs a byte string from numeric codes; `String.fromCodePoint(...codes)` constructs one from Unicode scalar values; `String.raw` is the ordinary-call spelling of the raw-string helper. The `tests/cases/arrays-strings/02/str` corpus pins the runtime behavior.
 
-The method names intentionally resemble JavaScript, but the byte and code-point distinctions above are CP3's current behavior. For exact support, inspect `src/std/string` and the `tests/cases/arrays-strings` family in the same checkout as your compiler.
+The method names intentionally resemble JavaScript, but the byte and code-point distinctions above are CP3's current behavior; the conformance fixtures under `tests/cases/arrays-strings` pin it.
 
 ## Related pages
 

@@ -1,6 +1,5 @@
 ---
 title: JSON
-chapter: Chapter 3 · Standard library
 ---
 # JSON
 
@@ -113,6 +112,7 @@ Convert non-JSON values into explicit JSON-compatible records first. This makes 
 
 Malformed text and a typed-shape mismatch are runtime failures, not compile-time diagnostics. Catch them where external input enters the program, attach context that helps identify the source, and do not silently replace invalid input with a plausible default. After parsing, validate constraints that are not part of structural typing.
 
-## Test and implementation map
+## Related pages
 
-`tests/cases/stdlib/02/json` covers valid parse/stringify, escaping, typed shape validation, and failure cases; `tests/cases/stdlib/02/json/file` covers the file-oriented family (`parseFile`/`parseFileSync`/`stringifyToFile`/`stringifyToFileSync`/`verify`), including the missing-file, missing-required-field, duplicate-key, and overwrite cases. The semantic surface lives in `src/std/json/sema.cpp`; the runtime parse/serializer owns concrete behavior. When adding an option, update the member signature, call checker, codegen, runtime, and tests together.
+- [File system](./04-fs.md) — `JSON.parseFile` / `stringifyToFile` ride the file API; `fs.readFileSync` is the raw text path
+- [Cryptography](./10-crypto.md) — hashing and authenticating payloads before storage

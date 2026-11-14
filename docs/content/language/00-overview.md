@@ -1,6 +1,5 @@
 ---
 title: Chapter 1 · The language
-chapter: Chapter 1 · The language
 ---
 # Chapter 1 · The language
 
@@ -47,6 +46,8 @@ mode = "fast";
 
 CP3 intentionally uses familiar syntax, but it is not the complete TypeScript language. The type system is closed around supported forms. It does not silently accept every dynamic feature, index signature, declaration syntax, or third-party type definition. A feature that type-checks in TypeScript may require a rewrite or explicit supported API in CP3.
 
+Three names TypeScript developers reach for are not available: `any` is rejected (`CP3806`), and the `void` and `unknown` annotation spellings are rejected (`CP3420` and `CP3421`). Use a concrete type, `object` for an untyped value, or `undefined` for a result that carries nothing.
+
 Use the compiler diagnostic and tests as evidence. If a source form is rejected, do not assume the native backend can still compile it; unsupported source never reaches code generation through the ordinary pipeline.
 
 ## Project-selected native scalar types
@@ -57,9 +58,9 @@ Explicit prefixed forms such as `r_...`, `c_...`, and `ts_...` select a vocabula
 
 ## Source types versus runtime representation
 
-Source types express which operations are valid. They do not expose all details of the generated C++ representation. `number` is represented as a floating-point value; native integer annotations can use integer machine types with distinct arithmetic and conversion rules. Arrays and class instances use runtime representations described in Chapter 2.
+Source types express which operations are valid. They do not expose all details of the runtime representation. `number` is represented as a floating-point value; native integer annotations can use integer machine types with distinct arithmetic and conversion rules. Arrays and class instances use reference-shaped runtime representations.
 
-Do not infer stack allocation, non-atomic reference counting, or vectorization from a source-level type. These are compiler/runtime implementation questions and are documented separately in the [runtime chapter](../internal-engineering/00-overview.md) and [optimization pipeline](../cli-and-compiler/03-optimization-pipeline.md).
+Do not infer allocation strategy or lifetime behavior from a source-level type. Those are implementation questions; the deeper reading lives in the [runtime chapter](../internal-engineering/00-overview.md) and the [optimization pipeline](../cli-and-compiler/03-optimization-pipeline.md).
 
 ## Test corpus as the executable contract
 
@@ -78,3 +79,4 @@ The compiler test cases are grouped by language area under `tests/cases`: for ex
 - [Modules and exports](./06-modules-and-errors/01-modules.md)
 - [Errors and exceptions](./06-modules-and-errors/02-errors.md)
 - [Native type-system selection](./07-native-types/01-project-type-system.md)
+- [Global builtins](./99-global-builtins.md)

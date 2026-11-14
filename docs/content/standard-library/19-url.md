@@ -1,6 +1,5 @@
 ---
 title: URL and query strings
-chapter: Chapter 3 · Standard library
 ---
 # URL and query strings
 
@@ -19,7 +18,7 @@ import url from "std/url";
 
 ## The `URL` class
 
-`new URL(input, base?)` parses `input` with a hand-written RFC 3986 parser (no pattern matching). With two arguments, a relative `input` resolves against `base` (authority-relative, absolute-path and relative-path references follow RFC 3986 §5.2). A missing base for a relative input, or an unparseable input, throws a catchable `Error`.
+`new URL(input, base?)` parses `input` with an RFC 3986 parser. With two arguments, a relative `input` resolves against `base` (authority-relative, absolute-path and relative-path references follow RFC 3986 §5.2). A missing base for a relative input, or an unparseable input, throws a catchable `Error`.
 
 ```ts
 const u = new URL("https://example.com:8080/a/b?q=1#top");
@@ -78,6 +77,10 @@ Pairs use the `application/x-www-form-urlencoded` rules: `+` is a space on parse
 | `toString` | `() => string` | `a=1&b=2` serialization |
 | `entries()` | `() => [string, string][]` | Pairs as tuples |
 
-## Test and implementation boundary
+Together with the percent-encoding helpers, this module covers the RFC 3986 parser and the WHATWG `URL`/`URLSearchParams` surface; setters on `URL` components and live `search`/`href` rebinding are out of scope. `URL.toString()` is implemented and returns the same serialization as `href`. See [URL extensions](./24-url-extensions.md) for base resolution, normalization and form-urlencoded details.
 
-The conformance cases live under `tests/cases/stdlib/02/url` (`url_*` and `urlsearchparams_*`). The implementation and semantic member tables are under `src/std/url`; unknown members are compile-time errors rather than dynamic property access. Together with the percent-encoding helpers, this module covers the RFC 3986 parser and the WHATWG `URL`/`URLSearchParams` surface for v0.2; setters on `URL` components and live `search`/`href` rebinding are out of scope. `URL.toString()` is implemented and returns the same serialization as `href`.
+## Related pages
+
+- [URL extensions](./24-url-extensions.md) — base resolution, normalization and form-urlencoded details
+- [Text encoding](./20-text.md) — the UTF-8 byte rules percent-encoding is built on
+- [Buffers](./11-buffer.md) — hex/base64 byte rendering

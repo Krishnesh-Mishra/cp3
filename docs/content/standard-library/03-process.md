@@ -1,6 +1,5 @@
 ---
 title: Process arguments, environment, and child processes
-chapter: Chapter 3 · Standard library
 ---
 # Process arguments, environment, and child processes
 
@@ -70,8 +69,7 @@ const mode = process.argv.length > 1 ? process.argv[1] : "serve";
 console.log("mode:", mode);
 ```
 
-The exact argument values depend on how the executable is launched, especially when another tool or wrapper is involved. The `process_argv_is_array`
-and `process_args_not_array` standard-library cases pin the array contract and rejection of an invalid child-argument shape.
+The exact argument values depend on how the executable is launched, especially when another tool or wrapper is involved.
 
 ## The process environment map
 
@@ -119,8 +117,7 @@ Use `0` for success and a non-zero number for a failure according to your comman
 This is an immediate process-level operation, not a structured return from `main`; code after it does not run, and it is not a general guarantee that
 application-level cleanup callbacks will execute. Prefer returning normally when ordinary scope cleanup is required.
 
-The `process_exit_zero` and `process_exit_nonzero` cases check that the chosen status reaches the runner. The CLI also propagates a program's exit code
-when invoked through `cp3 run`.
+The CLI also propagates a program's exit code when invoked through `cp3 run`.
 
 ## Run a short child command with `exec`
 
@@ -152,8 +149,7 @@ launch the command. `exec` captures output until completion, so it is best for c
 memory while the output is buffered.
 
 The command and arguments are passed separately. This API does not document a shell command-string parser, so do not concatenate untrusted input into
-`cmd`. Select the executable deliberately and validate any user-controlled arguments. The `process_exec_signature` and
-`process_exec_spread_args` cases cover the accepted signatures and argument-array form.
+`cmd`. Select the executable deliberately and validate any user-controlled arguments.
 
 ## Observe a live child with `spawn`
 
@@ -188,8 +184,7 @@ The event loop must be allowed to drain for callbacks to run. A child that canno
 handle that later emits an ordinary exit event.
 
 The event name should be a string literal when the callback accepts a value, because the payload type depends on the event. A callback with no
-parameters can be used when it does not need the payload. The exact event signatures are checked by the compiler and exercised by the
-`process_spawn_signature`, `process_spawn_computed_event`, and `process_spawn_computed_event_payload` cases.
+parameters can be used when it does not need the payload. The compiler checks the event signatures.
 
 ### Writing to child stdin
 
@@ -243,7 +238,7 @@ const line = await process.stdin.readLine();
 console.log("got:", line);
 ```
 
-One sibling reader thread pumps the OS-level standard input and posts drain tasks to the event loop; `std/readline` shares this pump and line queue (its reads delegate to it). The console family (`console.input()` / `console.readKey()` / `console.on`) runs its own separate stdin pump, so mixing the console family with `process.stdin` in one program races on fd 0.
+One pump thread reads the OS-level standard input and posts drain tasks to the event loop; `std/readline` shares this pump and line queue (its reads delegate to it). The console family (`console.input()` / `console.readKey()` / `console.on`) runs its own separate stdin pump, so mixing the console family with `process.stdin` in one program races on fd 0.
 
 ## Lifecycle events and signals
 
@@ -282,8 +277,7 @@ Child I/O work runs away from the calling thread and posts results or events bac
 the language event loop while waiting for a child. `spawn` callbacks are also delivered as loop tasks; they are not synchronous callbacks from the OS
 pipe reader. Keep the event loop alive while your program expects child results or events.
 
-This is distinct from ordinary `async` syntax: `await` coordinates promise completion, while workers and parallel APIs represent separate concurrency
-boundaries. For those distinctions, see [Async and concurrency](../internal-engineering/07-async-and-concurrency.md) and [Thread safety](../internal-engineering/10-thread-safety.md).
+This is distinct from ordinary `async` syntax: `await` coordinates promise completion, while child-process APIs deliver their callbacks as event-loop tasks.
 
 ## Process information and high-resolution timing
 
@@ -332,14 +326,9 @@ provide an explicit native integration where the project needs functionality out
 - Treat `kill` as a termination request, not proof that a whole process tree has stopped.
 - Do not assume shared CP3 references make data accessed by native worker threads safe to mutate.
 
-## Related pages and implementation
+## Related pages
 
 - [Environment variables](./02-env.md)
 - [Console output and input](./01-console.md)
-- [Async and concurrency](../internal-engineering/07-async-and-concurrency.md)
-- [Thread safety and ownership boundaries](../internal-engineering/10-thread-safety.md)
-- [Native toolchains](../cli-and-compiler/05-native-toolchains.md)
-
-The semantic API table is in `src/std/process/sema.cpp`; C++ runtime behavior is in `src/std/process/include/cp3/std/process.hpp` and
-`src/std/process/child.cpp`; generated calls are lowered in `src/std/process/codegen.cpp`. The focused source tests live under
-`tests/cases/stdlib/03/process/`.
+- [Readline](./22-readline.md)
+- [Errors and exceptions](../language/06-modules-and-errors/02-errors.md)

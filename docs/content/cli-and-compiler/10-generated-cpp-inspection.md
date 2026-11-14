@@ -1,6 +1,5 @@
 ---
 title: Generated C++ inspection
-chapter: Chapter 4 · Compiler and tools
 ---
 # Generated C++ inspection
 
@@ -51,7 +50,7 @@ Build output can be deleted and regenerated. Commit compiler source, tests, runt
 
 ## Related pages
 
-- [Compilation pipeline](./02-compilation-pipeline.md)
-- [Optimization pipeline](./03-optimization-pipeline.md)
-- [Tests and compiler verification](./08-tests-and-verification.md)
-- [Inspecting runtime costs](../internal-engineering/11-inspecting-runtime-costs.md)
+- [How a build flows](./02-compilation-pipeline.md)
+- [Compiler optimization and guarantees](./03-optimization-pipeline.md)
+- [Tests and verification](./08-tests-and-verification.md)
+- [Compiler design](../internal-engineering/01-compiler-design.md)

@@ -1,6 +1,5 @@
 ---
 title: Scope, hoisting, and initialization
-chapter: Chapter 1 · The language
 ---
 # Scope, hoisting, and initialization
 
@@ -91,9 +90,7 @@ Module-level bindings belong to the module. An exported binding can be observed 
 
 ## Scope does not imply storage duration
 
-Lexical scope describes name visibility in CP3 source. It does not guarantee a particular C++ storage duration. A local reference can point to heap storage, a closure can extend the lifetime of a captured value, and compiler escape analysis may choose local storage only for patterns it proves safe.
-
-Do not infer “stack allocated” from “declared inside a function.” See [Escape analysis](../../internal-engineering/02-escape-analysis.md) for the current proof limits and generated-code verification steps.
+Lexical scope describes name visibility in CP3 source. It does not guarantee a particular storage location or lifetime; a closure can extend the lifetime of a captured value. Do not infer "stack allocated" from "declared inside a function." See [Functions and closures](../02-functions/01-functions-and-closures.md) for the language-level rules.
 
 ## Shadowing and closure examples
 
@@ -109,7 +106,7 @@ function makeCounter(): () => number {
 
 The returned closure outlives the call that created it, so it must retain its captured `count` state. A local block ending does not end a captured binding's lifetime while a closure that uses it remains reachable.
 
-This is one reason scope and ownership are related but not identical topics. Source scope controls lookup; closure storage controls lifetime. Read [Functions and closures](../02-functions/01-functions-and-closures.md) and [Closure storage and lifetime](../../internal-engineering/04-closures.md).
+This is one reason scope and ownership are related but not identical topics. Source scope controls lookup; closure storage controls lifetime. Read [Functions and closures](../02-functions/01-functions-and-closures.md) and [Closure storage and lifetime](../../internal-engineering/02-no-garbage-collector.md).
 
 ## Common mistakes
 
@@ -119,11 +116,11 @@ This is one reason scope and ownership are related but not identical topics. Sou
 - **Treating a returned closure's capture as a short-lived local.** The closure can keep it alive after the outer function returns.
 - **Treating source block exit as proof of stack allocation.** Code generation must prove that no use escapes.
 
-## Tests and related pages
+## Related pages
 
 The `tests/cases/variables` cases cover block scope, loop-scope non-leakage, same-scope redeclaration, lexical read-before-declaration, `var` hoisting, uninitialized locals, and shadowing. `tests/cases/functions-closures` covers captured values and lifetime behavior.
 
 - [Bindings and declarations](./01-bindings.md)
 - [Mutability](./03-mutability.md)
 - [Destructuring declarations](./05-destructuring.md)
-- [Closure storage](../../internal-engineering/04-closures.md)
+- [Closure storage](../../internal-engineering/02-no-garbage-collector.md)

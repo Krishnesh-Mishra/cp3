@@ -1,6 +1,5 @@
 ---
 title: Regular expressions
-chapter: Chapter 3 · Standard library
 ---
 # Regular expressions
 
@@ -90,9 +89,7 @@ The `u` and `v` flags select UTF handling in the current engine (`v` is treated 
 
 ## Engine and portability
 
-The runtime uses a pinned PCRE2 static archive behind a CP3 wrapper. This avoids exposing PCRE2 headers in generated source, but it also means pattern corner cases are governed by CP3's adapter and the pinned engine version. Do not assume all JavaScript RegExp syntax, error wording, or Unicode edge cases are identical.
-
-If the engine or supported flags change, update both the regex tests and this page. A pattern that works on one backend revision should be validated against the CP3 conformance corpus before being relied on for protocol or security decisions.
+Patterns are compiled by a vendored PCRE2 build. Pattern corner cases, error wording, and Unicode behavior are governed by that engine, not by the host's regex engine — do not assume JavaScript RegExp parity, and validate patterns relied on for protocol or security decisions.
 
 ## Safety and performance
 
@@ -100,9 +97,7 @@ Regex engines can spend substantial time on ambiguous patterns and large inputs.
 
 The API here is synchronous. A costly regex operation runs on the calling thread. If an input can be large, measure it with representative patterns and include adversarial cases. A benchmark on one easy string does not establish worst-case safety.
 
-## Tests and related pages
-
-The `tests/cases/regex` family covers literal flags, duplicate and unknown flags, invalid patterns, capture groups, no-match results, global cursor state, sticky state, and multiline flags. The `arrays-strings` cases cover passing a regex to `split`.
+## Related pages
 
 - [Strings](../language/04-values-and-objects/05-strings.md)
 - [Standard library overview](./00-overview.md)

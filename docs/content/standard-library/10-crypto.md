@@ -1,6 +1,5 @@
 ---
 title: Cryptography
-chapter: Chapter 3 · Standard library
 ---
 # Cryptography
 
@@ -82,7 +81,7 @@ A randomly generated value is not a substitute for a lifecycle policy. Keep secr
 
 SHA-256 and SHA-512 operate on the exact input bytes. A CP3 string is UTF-8, so non-ASCII text is hashed in its UTF-8 encoding. A Buffer input is processed without converting the bytes to text. The returned digest is lowercase hex, with fixed output lengths independent of input length.
 
-Hashes are deterministic and one-way; encryption is reversible with a key. Do not store passwords as a raw SHA-256/SHA-512 digest. This module does not expose a password-specific key derivation API. For repeated short identical SHA-256 inputs the runtime has a small per-thread cache; this is an implementation detail and must not be relied on for semantics or timing.
+Hashes are deterministic and one-way; encryption is reversible with a key. Do not store passwords as a raw SHA-256/SHA-512 digest. This module does not expose a password-specific key derivation API. For repeated short identical SHA-256 inputs the runtime keeps a small per-thread cache; this is an implementation detail and must not be relied on for semantics or timing.
 
 ## AES-256-GCM envelope
 
@@ -96,13 +95,9 @@ Hashes are deterministic and one-way; encryption is reversible with a key. Do no
 
 The key derivation here is a fixed hash of the key string, not a password-hardening function with a salt and work factor. Do not treat a human password as a strong encryption key merely because this API accepts a string. Supply high-entropy secret material from an appropriate secret-management process. The API does not accept associated data, binary Buffer plaintext, or caller-supplied nonces.
 
-## Dependency and platform notes
+## Requirements and platforms
 
-The implementation is backed by the compiler's bundled libsodium dependency. An application importing `std/crypto` therefore participates in the native crypto dependency/build path. This is different from `std/math.random()`, which is not cryptographically secure.
-
-## Relevant conformance cases
-
-The cases under `tests/cases/stdlib/01/crypto` cover signatures, empty and non-empty hashes, UTF-8 hashing, Buffer hashing, UUID shape, random byte sizes and failures, AES empty and multiline round trips, nonce randomization, malformed envelopes, wrong keys, and tampering. Use these as the behavior contract when changing the implementation or documentation.
+`std/crypto` is backed by the compiler's bundled libsodium dependency, which is vendored for windows-x64, windows-arm64, linux-x64 and linux-arm64. An application importing `std/crypto` therefore participates in the native crypto dependency/build path. `std/math.random()` is not cryptographically secure and does not carry this dependency.
 
 ## Safe usage outline
 
@@ -113,4 +108,10 @@ const token = crypto.randomBytes(32);
 const digest: string = crypto.sha256(token);
 ```
 
-This sketch demonstrates random bytes and byte-oriented hashing. To encrypt, obtain high-entropy key material through the deployment's secret-management process, avoid printing it, and define how ciphertext is versioned and stored. Do not copy a key literal into source. See [Buffers](./11-buffer.md) for byte/text encodings and [Environment](./02-env.md) for configuration.
+This sketch demonstrates random bytes and byte-oriented hashing. To encrypt, obtain high-entropy key material through the deployment's secret-management process, avoid printing it, and define how ciphertext is versioned and stored. Do not copy a key literal into source.
+
+## Related pages
+
+- [Buffers](./11-buffer.md) — byte/text encodings shared with `std/crypto`
+- [Environment variables](./02-env.md) — supplying keys through configuration
+- [Hash](./23-hash.md) — non-cryptographic checksums for cache keys and change detection

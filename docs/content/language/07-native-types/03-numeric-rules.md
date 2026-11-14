@@ -1,6 +1,5 @@
 ---
 title: Native numeric behavior and conversions
-chapter: Chapter 1 · The language
 ---
 # Native numeric behavior and conversions
 
@@ -89,18 +88,18 @@ With strict mode, assigning a `number` variable to a native numeric type is reje
 
 ## Explicit conversions
 
-Two forms convert runtime values. The result type is the target type:
+Conversions from 64-bit integers can lose precision above the exact range of `number`, so write the conversion deliberately with `as` or `parseTo<T>`. Both forms check the value before it narrows: a narrowing conversion to a native numeric type range-checks at runtime and throws an `Error` on an out-of-range or fractional value; a widening passes the value through. In the default mode, native-to-native assignments are accepted with C++-style conversion rules (as the `widths` fixture shows); `strictNumericCasts` refuses them and requires the exact same native type or an explicit conversion:
 
 ```ts
 let n: number = 70000;
-let code: r_'u16' = n as r_'u16';        // checked narrowing
+let code: r_'u16' = n as r_'u16';        // checked, range-checked at runtime
 let parsed: r_'u32' = parseTo<r_'u32'>("4294967295");
 let text: string = parseTo(code, string);
 ```
 
 - **Widening is implicit.** A narrower native integer can be used where a wider one of the same signedness is expected, and a fitting literal initializes a native value directly.
-- **A 64-bit integer to `number` is explicit.** `i64`/`u64` can exceed the exact range of a `number`, so write `value as number` (or `Number(value)`) and accept the documented precision loss.
-- **Narrowing is explicit and checked.** `value as u16` and `parseTo<u16>(value)` verify the value at runtime and throw an `Error` when it is fractional or out of range; they never truncate silently. `parseTo` also converts strings, numbers and booleans in both directions.
+- **`i64`/`u64` to `number` is implicit in the default mode** (it may lose precision above 2^53 — prefer the explicit `as number` spelling where the code's survival depends on it) and **rejected in strict mode**.
+- **Narrowing is not silent truncation.** `value as u16` and `parseTo<u16>(value)` verify the value at runtime; they never wrap or saturate silently. `parseTo` also converts strings, numbers and booleans in both directions.
 
 `parseTo` is a global builtin: no import is required.
 
@@ -143,7 +142,7 @@ let maybeCode: r_'u32' | undefined = undefined;
 let maybeOffset: r_'i64' | null = null;
 ```
 
-This represents an optional native value. A union of two different non-nullish native alternatives is rejected because CP3 does not have a general tagged native numeric variant lowering for that combination. Convert to one common supported type before combining values.
+This represents an optional native value. A union of two different non-nullish native alternatives is rejected because CP3 does not have a general representation for arbitrary native alternatives. Convert to one common supported type before combining values.
 
 ## Native values in arrays and APIs
 
@@ -154,12 +153,12 @@ The native type checker knows the element type of declared native arrays where t
 Use a narrow parser/validation boundary and keep the rest of the program in the domain type it needs:
 
 ```ts
-function addToOffset(offset: r_'u64', amount: r_'u32'): r_'u64 {
+function addToOffset(offset: r_'u64', amount: r_'u32'): r_'u64' {
   return offset + amount;
 }
 ```
 
-This example is valid only when the checker finds a common result and return conversion under the active settings. For complex mixed-width inputs, explicitly normalize both values to one supported type before arithmetic. The signature documents the width assumption for callers.
+This example is valid because the checker finds a common result type for the two native operands. For mixed-width inputs whose common type is ambiguous, normalize both values to one supported type before arithmetic. The signature documents the width assumption for callers.
 
 ## Debugging a numeric mismatch
 

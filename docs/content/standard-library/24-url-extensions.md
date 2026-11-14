@@ -1,6 +1,5 @@
 ---
 title: URL extensions
-chapter: Chapter 3 · Standard library
 ---
 # URL extensions
 
@@ -17,7 +16,7 @@ Both the named bindings (for the classes) and the default namespace (for the per
 
 | Member | Signature (exact types) | Semantics |
 | --- | --- | --- |
-| `new URL(input)` | `URL(input: string): URL` | Parses an absolute URL with the hand-written RFC 3986 parser. Relative input without a base, or unparseable input, throws a catchable `Error` (`TypeError: Invalid URL`). |
+| `new URL(input)` | `URL(input: string): URL` | Parses an absolute URL with an RFC 3986 parser. Relative input without a base, or unparseable input, throws a catchable `Error` (`TypeError: Invalid URL`). |
 | `new URL(input, base)` | `URL(input: string, base: string): URL` | Resolves `input` against `base` per RFC 3986 §5.2. The base must itself parse as an absolute URL; otherwise it throws a catchable `Error`. |
 | `URL.href` | `href: string` | Serialized URL (snapshot at construction). Pathless authority URLs serialize with `/`. |
 | `URL.protocol` | `protocol: string` | Scheme with trailing colon, lowercased (e.g. `"https:"`). |
@@ -84,7 +83,7 @@ Parse and serialize use the WHATWG `application/x-www-form-urlencoded` byte set:
 
 ### Failure behavior
 
-Invalid-URL construction throws a catchable CP3 `Error` (`Thrown::make`), never a raw `std::exception` the `catch` model cannot take. The message is `"TypeError: Invalid URL"`.
+Invalid-URL construction throws a catchable CP3 `Error` whose message is `"TypeError: Invalid URL"`.
 
 ## Limits
 

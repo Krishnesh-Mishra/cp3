@@ -1,6 +1,5 @@
 ---
 title: Native scalar types
-chapter: Chapter 1 · The language
 ---
 # Native scalar types
 

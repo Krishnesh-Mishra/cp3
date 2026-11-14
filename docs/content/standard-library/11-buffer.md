@@ -1,6 +1,5 @@
 ---
 title: Byte buffers
-chapter: Chapter 3 · Standard library
 ---
 # Byte buffers
 
@@ -125,10 +124,12 @@ function encodeRecord(text: string): Buffer {
 
 The method and encoding surface is closed. Node methods such as `write`, `copy`, `readUInt32LE`, `subarray`, `concat`, and mutable index assignment are not implied by the familiar name. Use the typed-array/DataView APIs for numeric layout, and check their separate bounds and endianness rules.
 
-## Conformance cases and implementation
-
-`tests/cases/stdlib/01/buffer` covers allocation, zero fill, lengths, construction, encodings, and slices. Compiler member typing and encoding validation are in `src/std/buffer/sema.cpp`; the runtime implementation is header-only in `src/std/buffer/include/cp3/std/buffer.hpp`. Keep semantic checks, generated calls, and runtime failure behavior aligned when changing the surface.
-
 ## Choosing Buffer or a typed array
 
 Use Buffer when the main abstraction is a byte string that is immutable and converted with UTF-8, hex, base64, or base64url. Use a typed array when you need indexed fixed-width numeric values over an ArrayBuffer. Use DataView when fields have byte offsets, mixed widths, or explicit endian interpretation. Do not assume a Buffer can be passed to every Node Buffer API.
+
+## Related pages
+
+- [Typed arrays](./16-typed-arrays.md) — the `ArrayBuffer`/`DataView` family for indexed numeric storage
+- [Text encoding](./20-text.md) — `TextEncoder` / `TextDecoder` for UTF-8 text
+- [Cryptography](./10-crypto.md) — hashing and encryption that consume `Buffer` inputs

@@ -1,6 +1,5 @@
 ---
 title: Standard library overview
-chapter: Chapter 3 · Standard library
 ---
 # Standard library overview
 
@@ -22,10 +21,20 @@ Some modules use named exports because their values are types or singleton objec
 ```ts
 import { env } from "std/env";
 import { Buffer } from "std/buffer";
-import { Map, Set } from "std/collections";
 ```
 
-Imports are resolved by the compiler's standard module registry. Unknown module names and unknown closed-surface members are compile-time errors. See [Modules and imports](../language/06-modules-and-errors/01-modules.md).
+The collections family is TypeScript-style ambient: `Map`, `Set`, `LRUCache`, `MultiMap`, `ConcurrentMap`, `Queue`, `Stack`, `PriorityQueue`, `RingBuffer` and `BitSet` resolve with no import, mirroring TypeScript. `import { Map, Set } from "std/collections"` still works and narrows identically.
+
+For annotation positions, `std/<module>/types` modules re-export the type names of `std/network`, `std/buffer`, `std/url`, `std/date` and `std/text` so they can be imported as types without pulling in the runtime surface:
+
+```ts
+import { URL, URLSearchParams } from "std/url/types";
+import { Buffer } from "std/buffer/types";
+```
+
+Type-only imports exercise no runtime loader. There is no `std/collections/types` by design.
+
+The compiler recognizes the `std/*` module specifiers; unknown module names and unknown members of a closed surface are compile-time errors. See [Modules and imports](../language/06-modules-and-errors/01-modules.md).
 
 Strings and arrays are language builtins, not stdlib modules: see
 [Built-in strings](../language/04-values-and-objects/05-strings.md) and
@@ -47,7 +56,7 @@ Strings and arrays are language builtins, not stdlib modules: see
 | [Cryptography](./10-crypto.md) | Random bytes, hashes, UUIDs, and authenticated encryption |
 | [Buffer](./11-buffer.md) | Byte buffers and text encodings |
 | [Collections](./12-collections.md) | Map, Set, LRUCache, Queue, Stack, PriorityQueue, RingBuffer, BitSet, MultiMap, ConcurrentMap |
-| [Network](./13-network.md) | Fetch, WebSockets, and HTTP server APIs |
+| [Network](./13-network.md) | Fetch, HTTP server and TLS, WebSockets, raw TCP/UDP/TLS sockets |
 | [Typed arrays](./16-typed-arrays.md) | Fixed-width numeric arrays, buffers, and DataView |
 | [Regular expressions](./17-regular-expressions.md) | Core regex literals, flags, match results, and string splitting |
 | [I/O readiness](./18-io.md) | Non-blocking fd readiness and `pollUntilDone` for native socket libraries |
@@ -64,4 +73,4 @@ The exact failure behavior differs by API. Some operations throw synchronously; 
 
 ## Surface versus compatibility
 
-The compiler's semantic tables define the supported call surface. For example, `std/process` exposes `argv`, `env`, `exit`, `exec`, and `spawn`, plus the `stdout`/`stderr` write streams, `stdin`, and the `process.on` lifecycle events (`SIGINT`, `SIGTERM`, `exit`, `unhandledRejection`); it does not expose every Node process property. The `exec` result provides captured `stdout` and `stderr` after completion. Use `SpawnHandle` when output must be processed while a child is running. See [Process](./03-process.md) for the precise distinction.
+The standard library is deliberately small. For example, `std/process` exposes `argv`, `env`, `exit`, `exec`, and `spawn`, plus the `stdout`/`stderr` write streams, `stdin`, and the `process.on` lifecycle events (`SIGINT`, `SIGTERM`, `exit`, `unhandledRejection`); it does not expose every Node process property. The `exec` result provides captured `stdout` and `stderr` after completion. Use `SpawnHandle` when output must be processed while a child is running. See [Process](./03-process.md) for the precise distinction.

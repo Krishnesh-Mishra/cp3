@@ -1,6 +1,5 @@
 ---
 title: Paths
-chapter: Chapter 3 · Standard library
 ---
 # Paths
 
@@ -68,3 +67,8 @@ Normalization is lexical. It does not resolve symbolic links and is not a substi
 ## Supported surface
 
 The closed namespace contains `sep`, `join`, `resolve`, `extname`, `dirname`, `normalize`, `basename`, and `isAbsolute`. A misspelled or unsupported member is reported by the compiler.
+
+## Related pages
+
+- [File system](./04-fs.md) — operations that take the paths built here
+- [URL and query strings](./19-url.md) — percent-encoding and URL handling, a different surface

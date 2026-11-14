@@ -1,77 +1,33 @@
 ---
-title: Generics and specialization
-chapter: Chapter 4 · Compiler and tools
+title: Generics and the build
 ---
-# Generics and specialization
+# Generics and the build
 
-CP3 supports generic functions, classes, interfaces, and type aliases where the parser and analyzer accept type parameters. Type arguments are checked at compile time; generic code is not a dynamically typed escape hatch.
-
-```ts
-function identity<T>(value: T): T {
-  return value;
-}
-
-const label: string = identity<string>("ready");
-```
-
-## Inference and explicit type arguments
-
-The analyzer can infer type arguments from call arguments in supported contexts. Add explicit arguments when inference is ambiguous or when the public API reads more clearly with them. Generic constraints and unsupported inference forms are diagnosed during semantic analysis.
-
-## Native lowering
-
-Generic instantiations are lowered through the compiler's C++ generation strategy. The generated source may contain specialized template or helper forms depending on the construct. This is an implementation detail, not a guarantee that every generic has zero runtime cost.
-
-## Performance interpretation
-
-Generic code can still allocate, copy references, or call runtime helpers. Specialization alone does not prove escape analysis, stack allocation, devirtualization, or SIMD. Inspect generated C++ and benchmark the target operation.
-
-## Compatibility boundary
-
-CP3's generic syntax resembles TypeScript in common cases, but the accepted grammar and semantic rules are those of the CP3 compiler. A TypeScript construct that is not implemented should be expected to produce a CP3 diagnostic rather than pass through to C++.
-
-## Type argument resolution
-
-A generic declaration introduces type parameters that are substituted when the compiler checks a use. Calls can provide explicit type arguments or rely on inference from arguments in supported cases:
+Type arguments on generic functions, classes, interfaces, and type aliases are **checked at compile time** and instantiated into concrete native forms in the generated code — they are not a dynamically typed escape hatch, and they are not implicitly free either.
 
 ```ts
-function identity<T>(value: T): T {
-  return value;
-}
+function identity<T>(value: T): T { return value; }
 
-const name = identity<string>("Ada");
-const count = identity(3);
+const name = identity<string>("Ada"); // explicit
+const count = identity(3);            // inferred
 ```
 
-Use an explicit argument when inference is ambiguous or when it makes a public boundary easier to read. An explicit argument still has to satisfy the declaration's supported constraints and argument types.
+Practical expectations:
 
-## Supported declarations
+- **Inference when supported, explicit arguments when not** — add `<...>` when inference is ambiguous or the API reads clearly with them.
+- **Generic classes with empty constructors need arguments**: `new Map<string, number>()` — the checker cannot guess element types from nothing.
+- **Not all of TypeScript's type-level machinery exists.** Arbitrary conditional, mapped, indexed-access, and higher-kinded types are not implemented; unsupported forms get diagnostics, not silent pass-through.
+- **"Compiles" is not "zero cost."** Generic instantiation improves type knowledge; calls, allocation, and reference operations in the body still cost. If a hot generic path matters, look at the generated C++ rather than trusting the angles.
 
-CP3 supports generic functions, classes, interfaces, and type aliases where the parser and checker implement the form. Generic parameters flow into parameter types, result types, member signatures, and collection element types. Inference behavior is tied to those supported type positions; it is not the complete TypeScript inference algorithm.
+The language guide covers the rules in full: [Generics](../language/05-generics/01-generics.md). For how instantiation is spelled in the emitted code, see [Compiler design](../internal-engineering/01-compiler-design.md).
 
-Unsupported TypeScript features include arbitrary conditional, mapped, indexed-access, and higher-kinded type operations. A familiar angle-bracket syntax does not establish support for every TypeScript type expression.
+## Checking a generic build
 
-## Generic classes and collections
+Use `cp3 check` for type-level feedback and `cp3 build` for the native result. When a generic instantiation behaves unexpectedly, compile with `--show-runtime` and read the code that was emitted for it — that, not the source angles alone, determines what runs.
 
-Provide type arguments for generic classes whose empty constructor gives no evidence about their element types:
+## Related pages
 
-```ts
-const lookup = new Map<string, number>();
-const names = new Set<string>();
-```
-
-The compiler checks method calls against the declared arguments. A missing or incompatible type argument can fail before code generation. See [Collections](../standard-library/12-collections.md) for the generic Map/Set API.
-
-## Generated-code cost
-
-The compiler lowers generic uses into concrete generated forms according to its implementation strategy. Do not assume every use creates a distinct native type, that every generic is monomorphized exactly like Rust, or that generics are always zero-cost. Generated templates, helper calls, reference copies, and allocations can still occur.
-
-For a performance claim, inspect the generated C++ for the instantiation and profile the executed path. Specialization can improve type knowledge while leaving allocation or call overhead unchanged.
-
-## Generic design guidance
-
-Keep constraints narrow and express them in parameter/result types the checker understands. Prefer one useful generic interface over a conditional-type metaprogramming pattern CP3 does not implement. Test inference, explicit types, invalid substitutions, empty collections, and imported generic functions.
-
-## Tests and implementation
-
-Generic call checking lives under `src/sema/src/checks/call/generic_check.cpp`; type substitution and codegen helpers have separate owners. Tests appear under `tests/cases/generics` and `tests/cases/modules` for generic imports. When changing generic behavior, cover both front-end acceptance and run-mode behavior for runtime instantiations.
+- [Generics, in the language guide](../language/05-generics/01-generics.md)
+- [Collection generics (Map/Set)](../standard-library/12-collections.md)
+- [Compiler design](../internal-engineering/01-compiler-design.md)
+- [CLI commands](./01-cli-commands.md)

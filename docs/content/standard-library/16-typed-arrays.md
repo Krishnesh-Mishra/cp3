@@ -1,6 +1,5 @@
 ---
 title: Typed arrays, buffers, and DataView
-chapter: Chapter 3 · Standard library
 ---
 # Typed arrays, buffers, and DataView
 
@@ -36,7 +35,7 @@ The runtime defines these element types:
 | `BigInt64Array` | 8 bytes | signed 64-bit storage |
 | `BigUint64Array` | 8 bytes | unsigned 64-bit storage |
 
-The currently exposed indexed value type is `number`. In particular, the BigInt-named arrays do not expose JavaScript `bigint` values: the runtime converts their stored 64-bit values through `double`, so integers above the exact range of binary64 can lose precision when read. The conformance tests explicitly pin rounding beyond `2^53`. Do not use these classes for exact large-integer arithmetic through CP3 indexed reads.
+The currently exposed indexed value type is `number`. In particular, the BigInt-named arrays do not expose JavaScript `bigint` values: the runtime converts their stored 64-bit values through `double`, so integers above the exact range of binary64 can lose precision when read. Do not use these classes for exact large-integer arithmetic through CP3 indexed reads.
 
 ## Construction
 
@@ -66,11 +65,11 @@ const wrapped = new Uint8Array([257, -1]);
 const clamped = new Uint8ClampedArray([257, -1]);
 ```
 
-The test cases cover wrap, clamp, NaN handling, and typed writes. Use the smallest example matching the target class before depending on an edge case.
+Write the smallest example matching the target class before depending on an edge case: plain integer arrays wrap, `Uint8ClampedArray` clamps, and floating-point element types round to the target precision.
 
 ## Indexed access and out-of-range behavior
 
-Typed-array indexing is zero-based. An in-range read returns a number; a read that is negative, fractional, or out of bounds yields `undefined` according to the tested behavior. Out-of-range writes are ignored. The compiler can narrow some reads when a literal index or loop range is proven in bounds, but normal source semantics remain checked.
+Typed-array indexing is zero-based. An in-range read returns a number; a read that is negative, fractional, or out of bounds yields `undefined`. Out-of-range writes are ignored.
 
 ```ts
 const bytes = new Uint8Array(2);
@@ -100,7 +99,7 @@ Mutating methods modify the shared backing bytes. A `const` view binding does no
 
 `ArrayBuffer` owns a fixed-length byte sequence. It can be sliced to make a separate buffer, then viewed as a typed array or DataView. Views retain access to the same storage while they exist.
 
-`SharedArrayBuffer` is the shared-storage family supported by the runtime. Sharing storage does not make every access atomic or synchronized. If multiple workers or parallel tasks can touch the same bytes, coordinate access using the supported concurrency mechanisms. See [Thread safety](../internal-engineering/10-thread-safety.md).
+`SharedArrayBuffer` is the shared-storage family supported by the runtime. Sharing storage does not make every access atomic or synchronized. If multiple workers or parallel tasks can touch the same bytes, coordinate access explicitly; do not assume a write in one worker is visible or safe in another.
 
 ## DataView construction
 
@@ -133,33 +132,11 @@ Do not rely on host endianness when a file or network protocol specifies byte or
 
 When defining a file format, document offsets, widths, signedness, and endianness next to the code. For example, an integer field at byte 4 with four bytes should be read using the matching 32-bit method and the protocol's stated endianness.
 
-## Compiler optimizations and guarantees
+## Index guarantees
 
-The compiler has narrow range-analysis facts for some typed-array indices. A fact can remove an unnecessary union with `undefined` in the type system for a proven case. This is distinct from general raw-pointer lowering.
-
-The current DataView analysis records some possible loop facts, but the facts are not consumed by the per-read emitter. Therefore this compiler does not currently guarantee that a DataView helper call disappears or that a numeric loop is vectorized. Check the generated C++ for the exact loop and require a backend vectorization remark that points to that loop before claiming SIMD.
-
-If the compiler cannot prove an index safe, the checked path preserves out-of-range behavior. Do not modify benchmark input or disable checks to manufacture a faster result. See [Optimization pipeline](../cli-and-compiler/03-optimization-pipeline.md) and [Inspecting generated C++](../cli-and-compiler/10-generated-cpp-inspection.md).
-
-## Test families to consult
-
-The typed-array tests cover construction, element conversion, typed writes, buffer sharing, byte offsets, copies versus shared subarrays, bounds, and DataView byte order and range checks. Important cases include:
-
-- typed read out of range returns `undefined`;
-- typed write out of range is ignored;
-- fractional and negative indices are rejected or handled as pinned by the case;
-- a subarray shares bytes with the original view;
-- a slice has independent storage;
-- a DataView validates the complete read/write width;
-- a multi-byte DataView can use an unaligned offset;
-- a multi-byte typed-array view enforces element alignment;
-- 64-bit BigInt-named storage read as `number` may round.
-
-These are semantic constraints for optimization: removing a check is correct only if the compiler proves the corresponding access valid.
+Typed-array reads and writes behave exactly as documented above, in every build: out-of-range reads yield `undefined` and out-of-range writes are ignored. There is no mode in which an indexing mistake silently corrupts memory.
 
 ## Related pages
 
 - [Byte buffers](./11-buffer.md)
 - [Arrays](../language/04-values-and-objects/04-arrays.md)
-- [Typed arrays in the runtime](../internal-engineering/06-typed-arrays.md)
-- [Thread safety](../internal-engineering/10-thread-safety.md)

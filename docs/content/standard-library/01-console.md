@@ -1,6 +1,5 @@
 ---
 title: Console
-chapter: Chapter 3 · Standard library
 ---
 # Console
 
@@ -118,7 +117,7 @@ console.countReset("hits");
 console.count("hits");      // hits: 1
 ```
 
-`count` and `countReset` are real members of the `std/console` namespace (verified run-mode cases live under `tests/cases/stdlib/01/console/helpers`).
+`count` and `countReset` are part of the `std/console` namespace.
 
 ## Debugging helpers
 
@@ -175,3 +174,9 @@ Prints an `(index) (value)` header followed by one `i value` line per array elem
 | `clear()` | `void` | Clear terminal |
 | `hide()` / `show()` | `void` | Hide or restore Windows console window |
 | `time(label?)` / `timeEnd(label?)` | `void` | Per-label monotonic timers — see [Time and stopwatches](./21-time.md) |
+
+## Related pages
+
+- [Time and stopwatches](./21-time.md) — `console.time` / `console.timeEnd` monotonic timers
+- [Process and child processes](./03-process.md) — `process.stdout` / `process.stderr` / `process.stdin` streams
+- [Readline](./22-readline.md) — line reading over stdin
