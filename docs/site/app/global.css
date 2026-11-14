@@ -12,6 +12,66 @@ html {
   scrollbar-gutter: stable;
 }
 
+/* indent a folder's children one step to the right of the folder header,
+   with a guide line, so the tree hierarchy is readable */
+#nd-sidebar [data-state] > .flex.flex-col {
+  margin-inline-start: 0.5rem;
+  padding-inline-start: 0.75rem;
+  border-inline-start: 1px solid var(--color-fd-border);
+}
+
+/* glass renders page items inline-flex, which makes the icon links flow
+   side by side like a grid; every page row should be a full-width column */
+#nd-sidebar a.inline-flex.rounded-lg {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 2.5rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
+#nd-sidebar a.inline-flex.rounded-lg svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: none;
+}
+
+/* a folder heading (Language, Standard Library, ...) shows a dashed
+   underline on hover, but it disappears after navigation; keep it while
+   the folder is active, matching the hover style */
+#nd-sidebar a[aria-current="page"]:not(.rounded-lg) {
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-color: var(--color-fd-muted-foreground);
+  text-underline-offset: 4px;
+}
+
+/* top-left brand row: roomier layout, larger icon buttons, and a subtle
+   divider so the corner reads as a proper header instead of floating */
+#nd-sidebar > div:first-child {
+  align-items: center;
+  padding-top: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--color-fd-border);
+}
+
+#nd-sidebar a[aria-label="GitHub"],
+#nd-sidebar button[aria-label="Hide Sidebar"],
+#nd-sidebar button[aria-label="Show Sidebar"] {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.65rem;
+}
+
+#nd-sidebar a[aria-label="GitHub"] svg,
+#nd-sidebar button[aria-label="Hide Sidebar"] svg,
+#nd-sidebar button[aria-label="Show Sidebar"] svg {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
 html > body[data-scroll-locked] {
   margin-right: 0px !important;
   --removed-body-scroll-bar-size: 0px !important;

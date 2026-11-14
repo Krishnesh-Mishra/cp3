@@ -8,7 +8,7 @@ export default function NotFound() {
       </p>
       <h1 className="text-4xl font-bold tracking-tight text-fd-foreground">This page does not exist</h1>
       <p className="max-w-md text-fd-muted-foreground">
-        The page you are looking for was moved or never existed. Try the documentation overview instead.
+        The page you are looking for was moved or never existed. Try the introduction instead.
       </p>
       <div className="flex flex-wrap items-center justify-center gap-3">
         <Link
@@ -18,10 +18,10 @@ export default function NotFound() {
           Home
         </Link>
         <Link
-          href="/overview"
+          href="/introduction"
           className="rounded-lg border border-fd-border bg-fd-card px-5 py-2.5 text-sm font-medium text-fd-foreground transition-colors hover:bg-fd-accent hover:text-fd-accent-foreground"
         >
-          Documentation overview
+          Introduction
         </Link>
       </div>
     </main>

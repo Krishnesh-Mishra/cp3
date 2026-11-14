@@ -1,0 +1,15 @@
+{
+  "title": "Language",
+  "defaultOpen": false,
+  "pagesIndex": "00-overview",
+  "pages": [
+    "...01-variables-and-bindings",
+    "...02-functions",
+    "...03-control-flow",
+    "...04-values-and-objects",
+    "...05-generics",
+    "...06-modules-and-errors",
+    "...07-native-types",
+    "99-global-builtins"
+  ]
+}

@@ -23,13 +23,13 @@ export default function HomePage() {
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
             <Link
-              href="/00-welcome/00-welcome"
+              href="/quick-start"
               className="rounded-lg bg-fd-primary px-5 py-2.5 text-sm font-medium text-fd-primary-foreground transition-opacity hover:opacity-90"
             >
-              Start the guide
+              Get started
             </Link>
             <Link
-              href="/00-welcome/03-javascript-typescript-developers"
+              href="/for-js-developers"
               className="rounded-lg border border-fd-border bg-fd-card px-5 py-2.5 text-sm font-medium text-fd-foreground transition-colors hover:bg-fd-accent hover:text-fd-accent-foreground"
             >
               For JS & TypeScript developers
@@ -67,12 +67,12 @@ export default function HomePage() {
             aria-label="Documentation quick links"
             className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-fd-muted-foreground"
           >
-            <DocLink href="/overview">Overview</DocLink>
-            <DocLink href="/00-welcome/02-performance">Performance</DocLink>
-            <DocLink href="/01-language/00-overview">Language</DocLink>
-            <DocLink href="/02-runtime/00-overview">Runtime model</DocLink>
-            <DocLink href="/03-standard-library/00-overview">Standard library</DocLink>
-            <DocLink href="/04-compiler-cli/00-overview">Compiler & tools</DocLink>
+            <DocLink href="/introduction">Introduction</DocLink>
+            <DocLink href="/quick-start">Quick start</DocLink>
+            <DocLink href="/language/00-overview">Language</DocLink>
+            <DocLink href="/standard-library/00-overview">Standard Library</DocLink>
+            <DocLink href="/cli-and-compiler/00-overview">CLI & compiler</DocLink>
+            <DocLink href="/internal-engineering/00-overview">Internal Engineering</DocLink>
           </nav>
         </section>
       </main>

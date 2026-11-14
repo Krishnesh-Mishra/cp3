@@ -1,0 +1,29 @@
+{
+  "title": "Standard Library",
+  "defaultOpen": false,
+  "pagesIndex": "00-overview",
+  "pages": [
+    "01-console",
+    "02-env",
+    "03-process",
+    "04-fs",
+    "05-path",
+    "06-os",
+    "07-math",
+    "08-date",
+    "09-json",
+    "10-crypto",
+    "11-buffer",
+    "12-collections",
+    "13-network",
+    "16-typed-arrays",
+    "17-regular-expressions",
+    "18-io",
+    "19-url",
+    "20-text",
+    "21-time",
+    "22-readline",
+    "23-hash",
+    "24-url-extensions"
+  ]
+}

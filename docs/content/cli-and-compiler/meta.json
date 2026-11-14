@@ -1,0 +1,18 @@
+{
+  "title": "CLI & compiler",
+  "defaultOpen": false,
+  "pagesIndex": "00-overview",
+  "pages": [
+    "01-cli-commands",
+    "02-compilation-pipeline",
+    "03-optimization-pipeline",
+    "04-generics",
+    "05-native-toolchains",
+    "06-diagnostics",
+    "07-native-interop",
+    "08-tests-and-verification",
+    "09-project-settings-and-cache",
+    "10-generated-cpp-inspection",
+    "11-build-profiles-and-pgo"
+  ]
+}
