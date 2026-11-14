@@ -25,6 +25,16 @@ namespace cp3::cli {
 
 namespace {
 
+// The incremental fragment cache keys fragments on compilerKey|profile. The
+// compilerKey covers the clang toolchain only; cp3c's own semantics are not
+// captured by it. Revisions that change sema/codegen diagnostics would keep
+// expensive caches warm for sources the new semantics reject, silently
+// replaying stale fragments with exit codes the new diagnostics never produce
+// (the namespace-import case: fragments from the pre-CP3304 compiler replayed
+// with no diagnostics and exit 0, oscillating with cache presence). Bump this
+// constant on any commit that changes sema or codegen diagnostics.
+constexpr unsigned kIncrementalSemanticsEpoch = 2;
+
 // Length-prefixed field writer/reader: "<len>:<bytes>".
 void putStr(std::string& out, const std::string& text) {
     out += std::to_string(text.size());
@@ -224,6 +234,8 @@ std::string configHashOf(const std::string& compilerKey,
     std::string material = compilerKey;
     material += '|';
     material += profile;
+    material += '|';
+    material += std::to_string(kIncrementalSemanticsEpoch);
     return hex64(fnv1a(material));
 }
 
