@@ -402,7 +402,22 @@ Type Analyzer::inferAssignment(AssignmentExpr& ae) {
         if (ae.value) inferExpr(*ae.value);
         return Type::unknown();
     }
-    Type valType = ae.value ? inferExpr(*ae.value) : Type::unknown();
+    Type valType;
+    if (ae.value && ae.value->kind == NodeKind::ArrowFunction) {
+        // A member-typed arrow RHS gets the declared signature as the
+        // contextual type, mirroring call arguments: `obj.f = (s) => ...`
+        // types `s` from the field's declared parameter type.
+        const Type targetType = targetTypeOf(*ae.target);
+        if (targetType.kind == TypeKind::Function && ae.value->nodeId != 0) {
+            contextualArrowTypes_[ae.value->nodeId] = targetType;
+            valType = inferExpr(*ae.value);
+            contextualArrowTypes_.erase(ae.value->nodeId);
+        } else {
+            valType = inferExpr(*ae.value);
+        }
+    } else {
+        valType = ae.value ? inferExpr(*ae.value) : Type::unknown();
+    }
     // Assignment invalidates member narrowing for that target (fail closed).
     // After the RHS has been read: `cur = cur.next` still sees the old
     // narrowing on the RHS, and only later reads are un-narrowed.

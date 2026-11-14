@@ -112,6 +112,11 @@ bool Analyzer::tryInferFillCall(CallExpr& call, MemberExpr& m, Type& out) {
                                ? Type::unknown()
                                : widen(typeOfExpr(*call.arguments.front()));
         out = withType(call, Type::array(value));
+        // The receiver's stored type still says `unknown[]`; narrow it to
+        // the call's elem so the chain below (`Array(n).fill(...)` as an
+        // argument, a binding the codegen lowers from the node) sees the
+        // element type the fill fixed.
+        if (m.object) setType(*m.object, Type::array(value));
         return true;
     }
     out = withType(call, ot);
