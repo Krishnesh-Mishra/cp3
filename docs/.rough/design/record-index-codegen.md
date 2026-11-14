@@ -13,7 +13,7 @@ diagnostic, no object-literal initialization.
 | `src/sema/src/checks/expr/member_check.cpp` (`indexOfProbe`, `Class` branch only) | `Map` (string-key part) subscript types to `V \| undefined`; non-string key is CP3803 (see §1). |
 | `src/codegen/src/emit/expr/expr.cpp` (`exprPlain` `IndexExpr` dispatch, `emitUpdateIndex`, `isStringKeyMap` helper) | `r[k]` read + `r[k]++`/`--` lowering. |
 | `src/codegen/src/emit/control/assignment.cpp` (`AssignEmitter::mapIndexWrite`, `isStringKeyMapTarget` helper, one dispatch call) | `r[k] = v` + compound lowering. |
-| `docs/design/record-index-codegen.md` | this note. |
+| `docs/.rough/design/record-index-codegen.md` | this note. |
 
 Nothing else touched (`generator.h`, `type_map.h`, `typed-arrays`,
 `collections/codegen.cpp`, build files unchanged). The helpers are

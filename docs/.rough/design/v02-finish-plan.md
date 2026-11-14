@@ -26,7 +26,7 @@ test cases.
 ## Docs status
 - DONE: `docs/content/03-standard-library/19-url.md` … `24-url-extensions.md` (19-url, 20-text, 21-time, 23-hash, 24-url-extensions; `22-log` retired with `std/log` removal)
 - DONE: `00-overview.md` index rows (19, 20, 21, 23, 24) and `mkdocs.yml` nav (19, 20, 21, 23, 24)
-- DONE: `12-collections.md` (9-type API table), `docs/design/*` (record, utility-types, rule3, hash-placement, import-suggestions, internal-libs, xxhash64, install-dir, cycle-*, remove-void-unknown, generic-constraints, verified-gaps)
+- DONE: `12-collections.md` (9-type API table), `docs/.rough/design/*` (record, utility-types, rule3, hash-placement, import-suggestions, internal-libs, xxhash64, install-dir, cycle-*, remove-void-unknown, generic-constraints, verified-gaps)
 - DONE: JS/TS developers guide (`03-javascript-typescript-developers.md`) is now the single-file agent/migration reference; `docs/llm.md` deleted in `7efe8c10` (guide supersedes it — cheat-sheet, recipes, diagnostics quick refs folded in)
 - DONE: `docs/content/00-welcome/03-javascript-typescript-developers.md` linked from README header
 - DONE: `ROADMAP.md` v0.2 section flipped to **Done** (2026-11-07)
@@ -43,7 +43,7 @@ test cases.
 9. [x] Generic constraints producer (enterClassTypeParams) + CP3412 at instantiation
 10. [x] Object freeze completion + Object.fromEntries/groupBy (pinned by `stdlib/02/map/from_entries_ctor`; UAF fixed in `af72c7d9`)
 11. [ ] cp3 install <dir> + cp3 test (landed; CLI harness runs before the tag)
-12. [x] Cycle stages 2-3 (analysis/fuzzer tooling: `vendor/tools/cycle_stats.py`, `vendor/tools/fuzz_graphs.py`, `docs/design/cycle-proof.md`)
+12. [x] Cycle stages 2-3 (analysis/fuzzer tooling: `vendor/tools/cycle_stats.py`, `vendor/tools/fuzz_graphs.py`, `docs/.rough/design/cycle-proof.md`)
 13. [x] Linux archives (xxhash, simdutf, pcre2 linux-x64 built, committed, staged in the Linux package; linux-arm64 xxhash/simdutf still placeholders)
 14. [x] Docs: 00-overview, mkdocs, guide replaces llm.md, README link, ROADMAP flip (Done)
 15. [x] Full corpus green + commit each green unit + tell user (Windows 2115/2092 green; Linux green on the final build)

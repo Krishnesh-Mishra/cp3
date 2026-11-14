@@ -20,7 +20,7 @@ Scope of this change (only these paths were touched):
 - `vendor/third_party/simdutf/lib/linux-x64/README.md` (new) — placeholder
 - `vendor/third_party/simdutf/lib/linux-arm64/README.md` (new) — placeholder
 - `vendor/third_party/build.ps1` — new §11 (dirs + recipe pointer; see below)
-- `docs/design/linux-packaging-simdutf.md` (new) — this document
+- `docs/.rough/design/linux-packaging-simdutf.md` (new) — this document
 
 Explicitly **not** touched (out of scope, wiring listed verbatim
 below): `vendor/third_party/MANIFEST.md`, `src/std/text/native.hpp`,

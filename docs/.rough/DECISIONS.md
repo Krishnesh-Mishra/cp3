@@ -1440,7 +1440,7 @@ the compiler cannot prove is safe to collect automatically, and it is retired
 for one only when it can. A cycle dies with the last strong reference to any
 member, exactly like an acyclic island, without a `weak` edge from the user.
 
-Design (docs/design/cycle-collector.md):
+Design (docs/.rough/design/cycle-collector.md):
 
 - **Compile-time classification.** The sema builds the whole-program
   strong-reference graph (class fields incl. inherited and statics, arrays,

@@ -22,7 +22,7 @@ that must happen on (or cross-compiling for) Linux.
 | `vendor/third_party/xxhash/lib/linux-x64/README.md` | created — placeholder (no `libxxhash.a` yet) |
 | `vendor/third_party/xxhash/lib/linux-arm64/README.md` | created — placeholder (no `libxxhash.a` yet) |
 | `vendor/third_party/build.ps1` | edited — header + commented Linux-xxHash section only (no logic change; see §5) |
-| `docs/design/linux-packaging.md` | created — this file |
+| `docs/.rough/design/linux-packaging.md` | created — this file |
 
 Not touched (out of scope, listed as wiring instead): `vendor/third_party/MANIFEST.md`
 (§3 gives the exact rows to add), `vendor/third_party/build-linux.sh` (§5),
@@ -168,7 +168,7 @@ link:    -L vendor/third_party/xxhash/lib/<triple> -lxxhash     # <triple> ∈ {
 
 Consumers must not define `XXH_STATIC_LINKING_ONLY`, `XXH_PRIVATE_API`,
 or `XXH_INLINE_ALL` (the last is incompatible with linking
-`libxxhash.a`; see `docs/design/xxhash64.md`).
+`libxxhash.a`; see `docs/.rough/design/xxhash64.md`).
 
 ## 4. native.hpp wiring lines (NOT applied — out of scope)
 
@@ -195,7 +195,7 @@ and replace the comment paragraph "Only the windows-x64 archive is
 vendored so far … Do not add linux platform rows pointing at the
 windows archive." with: "All three archives are vendored
 (windows-x64 COFF, linux-x64 / linux-arm64 ELF; see
-vendor/third_party/MANIFEST.md and docs/design/linux-packaging.md). Do not
+vendor/third_party/MANIFEST.md and docs/.rough/design/linux-packaging.md). Do not
 add platform rows pointing at another triple's archive."
 
 ### src/std/collections/native.hpp (linux rows currently libsodium-only)
@@ -247,7 +247,7 @@ This closes the documented failure mode (undefined reference to
   `XXH64("",0,0) == 0xEF46DB3751D8E999`, and `XXH3_64bits_withSeed`
   cross-checked against the windows-x64 build) — bit-identical results
   across triples are the acceptance bar (see
-  `docs/design/xxhash64.md` §Verification vectors).
+  `docs/.rough/design/xxhash64.md` §Verification vectors).
 - **XXH3 is not a checksum** and must stay internal to the bucket hash;
   this packaging changes nothing about that split.
 - **Single-TU vs CMake.** The recipe compiles the vendored `xxhash.c`

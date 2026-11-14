@@ -64,7 +64,7 @@ The three editable files (`src/std/collections/native.hpp`,
 `src/std/hash/native.hpp`, `src/std/text/native.hpp`) therefore keep their
 existing platform rows unchanged in semantics; each gained only a one-line
 pointer in the platform-row comment above the row to this audit doc
-(`docs/design/linux-crosscompat.md`), so the next person to vendor a linux
+(`docs/.rough/design/linux-crosscompat.md`), so the next person to vendor a linux
 archive knows exactly which rows to extend. `std/collections` linux rows
 already exist for libsodium and must gain the xxhash lib dir + `-lxxhash`
 **only once** `libxxhash.a` lands for that triple (see below).
@@ -98,7 +98,7 @@ Do NOT point a NativePackage linux row at this dir until `libxxhash.a`
 exists here; do NOT reuse `lib/windows-x64/libxxhash.a` (COFF).
 Once built: record bytes + SHA-256 in `vendor/third_party/MANIFEST.md`, then add
 the linux row to `src/std/hash/native.hpp` / `src/std/collections/native.hpp`.
-Audit: `docs/design/linux-crosscompat.md`.
+Audit: `docs/.rough/design/linux-crosscompat.md`.
 ```
 
 For simdutf the expected artefact is `libsimdutf.a` (v6.1.0,
@@ -108,7 +108,7 @@ CMake build — there is no vendored `.c` amalgamation under
 `vendor/third_party/simdutf/include/`), so its linux build needs the upstream
 CMake recipe (or a system `libsimdutf-dev` cross-check) rather than the
 xxhash one-liner, plus a SIMD-baseline decision (generic vs arch-specific;
-see `docs/design/internal-libs.md` limitations). Same row target:
+see `docs/.rough/design/internal-libs.md` limitations). Same row target:
 `src/std/text/native.hpp`, plus `-pthread`/`-ldl` only if the linux build
 actually needs them (verify from real link errors, per MANIFEST practice).
 

@@ -19,7 +19,7 @@ code 0, in **3 link variants**, evidence to
 | `vendor/third_party/smokes/fast_float_smoke.cpp` | smoke source |
 | `vendor/third_party/smokes/concurrentqueue_smoke.cpp` | smoke source |
 | `vendor/third_party/smokes/run_smokes.ps1` | smoke runner (3-variant matrix + `SMOKE-RUNS.txt` evidence) |
-| `docs/design/vendor-smoke.md` | this document |
+| `docs/.rough/design/vendor-smoke.md` | this document |
 
 No other file is touched: `vendor/third_party/build.ps1`, `vendor/third_party/MANIFEST.md`,
 `src/**` CMake, and the existing scratch smoke evidence are unchanged.
