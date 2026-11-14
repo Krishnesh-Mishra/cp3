@@ -683,6 +683,9 @@ struct DevSession {
     std::vector<StatFingerprint> lastStat;
     ChildProcess child{};
     std::chrono::steady_clock::time_point lastChangeAt{};
+    // The moment the change (or the command) was observed; the rebuild
+    // reports how long it took from observation to build completion.
+    std::chrono::steady_clock::time_point changeStartedAt{};
     bool pendingChange = false;
     bool forceRebuild = false;
     bool usedFallback = false;
@@ -880,8 +883,13 @@ void rebuild(DevSession& session, bool isInitial) {
     effective.internalDeferExeReplace = true;
     std::unique_ptr<FrontendResult> frontend;
     const int rc = cmdBuildOrRun(effective, false, &frontend);
-    std::fprintf(stderr, "cp3c: build %s (exit %d)\n",
-                 rc == kExitSuccess ? "ok" : "reported problems", rc);
+    const auto buildElapsed = std::chrono::duration_cast<
+        std::chrono::milliseconds>(std::chrono::steady_clock::now() -
+                                   session.changeStartedAt)
+                                       .count();
+    std::fprintf(stderr, "cp3c: build %s - %lldms (exit %d)\n",
+                 rc == kExitSuccess ? "ok" : "reported problems",
+                 static_cast<long long>(buildElapsed), rc);
     if (!isInitial && session.opt.verbose && frontend) {
         classifyEdit(session, frontend.get(), baselineCache);
     }
@@ -983,9 +991,15 @@ int cmdDev(const CliOptions& opt) {
     if (opt.once) {
         CliOptions effective = opt;
         effective.internalDeferExeReplace = true;
+        const auto onceStartedAt = std::chrono::steady_clock::now();
         const int rc = cmdBuildOrRun(effective, true, nullptr);
-        std::fprintf(stderr, "cp3c: build %s (exit %d)\n",
-                     rc == kExitSuccess ? "ok" : "reported problems", rc);
+        const auto onceElapsed = std::chrono::duration_cast<
+            std::chrono::milliseconds>(std::chrono::steady_clock::now() -
+                                       onceStartedAt)
+                                           .count();
+        std::fprintf(stderr, "cp3c: build %s - %lldms (exit %d)\n",
+                     rc == kExitSuccess ? "ok" : "reported problems",
+                     static_cast<long long>(onceElapsed), rc);
         return rc;
     }
 
@@ -996,6 +1010,7 @@ int cmdDev(const CliOptions& opt) {
 
     // Initial build: start the app when the build succeeds (spawned after the
     // executable is ready, as with every restart).
+    session.changeStartedAt = std::chrono::steady_clock::now();
     rebuild(session, true);
 
     for (;;) {
@@ -1053,6 +1068,7 @@ int cmdDev(const CliOptions& opt) {
                                  "not rebuilding\n");
                 }
             } else {
+                session.changeStartedAt = session.lastChangeAt;
                 rebuild(session, false);
             }
         }
