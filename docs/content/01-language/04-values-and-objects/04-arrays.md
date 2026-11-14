@@ -173,8 +173,8 @@ The method names resemble JavaScript, but use the signatures and semantics descr
 
 ## Related pages and tests
 
-- [Strings](05-strings.md)
+- [Strings](./05-strings.md)
 - [Typed arrays, buffers, and DataView](../../03-standard-library/16-typed-arrays.md)
-- [Arrays and object literals](01-arrays-and-objects.md)
+- [Arrays and object literals](./01-arrays-and-objects.md)
 - [Runtime allocation and arrays](../../02-runtime/05-allocation-and-arrays.md)
 - Array behavior is covered across the `arrays-strings`, `perf-array`, and general test families.

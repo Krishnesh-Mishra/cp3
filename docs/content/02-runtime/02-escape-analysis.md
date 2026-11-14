@@ -97,7 +97,7 @@ The implementation is intentionally conservative. Adding an accepted pattern req
 
 Scalar replacement of aggregates usually means decomposing an object into its independent fields and eliminating the aggregate completely. CP3's current optimization can use local object/value storage for constrained cases, but it does not scalarize arbitrary class graphs into registers. It also does not allocate all short-lived objects from a thread-local arena and does not replace every `std::shared_ptr` with a local reference count.
 
-See [Reference counts, cycles, and threads](03-reference-ownership.md) for the ordinary reference path. A benchmark may still be dominated by heap allocation and reference counts if the objects escape or fail this proof.
+See [Reference counts, cycles, and threads](./03-reference-ownership.md) for the ordinary reference path. A benchmark may still be dominated by heap allocation and reference counts if the objects escape or fail this proof.
 
 ## How to prove it fired
 

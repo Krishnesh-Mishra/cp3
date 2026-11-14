@@ -87,7 +87,7 @@ The exact locations can move as the compiler evolves. Search for `WeakRef`, `rea
 
 ## Related pages
 
-- [Value model](01-value-model.md)
-- [Reference counts, cycles, and threads](03-reference-ownership.md)
+- [Value model](./01-value-model.md)
+- [Reference counts, cycles, and threads](./03-reference-ownership.md)
 - [Classes and interfaces](../01-language/04-values-and-objects/02-classes-and-interfaces.md)
-- [Garbage collection: what CP3 does not provide](08-no-tracing-gc.md)
+- [Garbage collection: what CP3 does not provide](./08-no-tracing-gc.md)

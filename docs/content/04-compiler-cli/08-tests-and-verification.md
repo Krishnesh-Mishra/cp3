@@ -78,7 +78,7 @@ This sequence avoids treating a successful compile or one green test as broad pr
 
 ## Related pages
 
-- [Compilation pipeline](02-compilation-pipeline.md)
-- [Diagnostics](06-diagnostics.md)
-- [Generated C++ inspection](10-generated-cpp-inspection.md)
-- [Optimization pipeline](03-optimization-pipeline.md)
+- [Compilation pipeline](./02-compilation-pipeline.md)
+- [Diagnostics](./06-diagnostics.md)
+- [Generated C++ inspection](./10-generated-cpp-inspection.md)
+- [Optimization pipeline](./03-optimization-pipeline.md)

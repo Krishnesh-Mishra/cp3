@@ -51,7 +51,7 @@ Build output can be deleted and regenerated. Commit compiler source, tests, runt
 
 ## Related pages
 
-- [Compilation pipeline](02-compilation-pipeline.md)
-- [Optimization pipeline](03-optimization-pipeline.md)
-- [Tests and compiler verification](08-tests-and-verification.md)
+- [Compilation pipeline](./02-compilation-pipeline.md)
+- [Optimization pipeline](./03-optimization-pipeline.md)
+- [Tests and compiler verification](./08-tests-and-verification.md)
 - [Inspecting runtime costs](../02-runtime/11-inspecting-runtime-costs.md)

@@ -87,7 +87,7 @@ Avoid submitting only a timing or a screenshot if the command output and source 
 
 ## Related pages
 
-- [Compilation pipeline](02-compilation-pipeline.md)
-- [Generated C++ inspection](10-generated-cpp-inspection.md)
-- [Tests and compiler verification](08-tests-and-verification.md)
+- [Compilation pipeline](./02-compilation-pipeline.md)
+- [Generated C++ inspection](./10-generated-cpp-inspection.md)
+- [Tests and compiler verification](./08-tests-and-verification.md)
 - [The standard library](../03-standard-library/00-overview.md)

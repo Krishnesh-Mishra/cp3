@@ -159,7 +159,7 @@ These are semantic constraints for optimization: removing a check is correct onl
 
 ## Related pages
 
-- [Byte buffers](11-buffer.md)
+- [Byte buffers](./11-buffer.md)
 - [Arrays](../01-language/04-values-and-objects/04-arrays.md)
 - [Typed arrays in the runtime](../02-runtime/06-typed-arrays.md)
 - [Thread safety](../02-runtime/10-thread-safety.md)

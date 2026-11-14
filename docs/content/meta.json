@@ -1,0 +1,10 @@
+{
+  "pages": [
+    "overview",
+    "00-welcome",
+    "01-language",
+    "02-runtime",
+    "03-standard-library",
+    "04-compiler-cli"
+  ]
+}

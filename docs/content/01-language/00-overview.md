@@ -8,13 +8,13 @@ This chapter describes CP3 source rules: how names are declared, how values are 
 
 ## A useful reading order
 
-1. [Bindings and declarations](01-variables-and-bindings/01-bindings.md): `const`, `let`, `var`, annotations, and initialization.
-2. [Types and inference](01-variables-and-bindings/02-types.md): primitives, arrays, unions, inference, and native type vocabularies.
-3. [Mutability](01-variables-and-bindings/03-mutability.md): binding reassignment versus mutation through a reference.
-4. [Scope and initialization](01-variables-and-bindings/04-scope-and-initialization.md): lexical scope, hoisting, shadowing, and reads before declaration.
-5. [Functions](02-functions/01-functions-and-closures.md) and [control flow](03-control-flow/01-conditions-and-loops.md).
-6. [Arrays and objects](04-values-and-objects/01-arrays-and-objects.md), [classes and interfaces](04-values-and-objects/02-classes-and-interfaces.md), then [enums](04-values-and-objects/03-enums.md).
-7. [Generics](05-generics/01-generics.md), [modules](06-modules-and-errors/01-modules.md), and [errors](06-modules-and-errors/02-errors.md).
+1. [Bindings and declarations](./01-variables-and-bindings/01-bindings.md): `const`, `let`, `var`, annotations, and initialization.
+2. [Types and inference](./01-variables-and-bindings/02-types.md): primitives, arrays, unions, inference, and native type vocabularies.
+3. [Mutability](./01-variables-and-bindings/03-mutability.md): binding reassignment versus mutation through a reference.
+4. [Scope and initialization](./01-variables-and-bindings/04-scope-and-initialization.md): lexical scope, hoisting, shadowing, and reads before declaration.
+5. [Functions](./02-functions/01-functions-and-closures.md) and [control flow](./03-control-flow/01-conditions-and-loops.md).
+6. [Arrays and objects](./04-values-and-objects/01-arrays-and-objects.md), [classes and interfaces](./04-values-and-objects/02-classes-and-interfaces.md), then [enums](./04-values-and-objects/03-enums.md).
+7. [Generics](./05-generics/01-generics.md), [modules](./06-modules-and-errors/01-modules.md), and [errors](./06-modules-and-errors/02-errors.md).
 
 ## Language map
 
@@ -53,7 +53,7 @@ Use the compiler diagnostic and tests as evidence. If a source form is rejected,
 
 The `typeSystem` property in the nearest `package.json` can be `typescript`, `cpp`, or `rust`. This selects how supported unprefixed native scalar names are resolved. It does not switch the generated backend from C++ to Rust or C++ source code: CP3 still compiles through its C++ backend.
 
-Explicit prefixed forms such as `r_...`, `c_...`, and `ts_...` select a vocabulary at a type annotation site. These are closed scalar types. Pointer, reference, array, and arbitrary user-defined native type spellings are not general CP3 reference or FFI declarations. See [Project type-system selection](07-native-types/01-project-type-system.md), [Prefixed types](07-native-types/02-prefixed-types.md), and [Native type limitations](07-native-types/04-limitations.md).
+Explicit prefixed forms such as `r_...`, `c_...`, and `ts_...` select a vocabulary at a type annotation site. These are closed scalar types. Pointer, reference, array, and arbitrary user-defined native type spellings are not general CP3 reference or FFI declarations. See [Project type-system selection](./07-native-types/01-project-type-system.md), [Prefixed types](./07-native-types/02-prefixed-types.md), and [Native type limitations](./07-native-types/04-limitations.md).
 
 ## Source types versus runtime representation
 
@@ -67,14 +67,14 @@ The compiler test cases are grouped by language area under `tests/cases`: for ex
 
 ## Chapter pages
 
-- [Bindings and declarations](01-variables-and-bindings/01-bindings.md)
-- [Types and inference](01-variables-and-bindings/02-types.md)
-- [Functions and closures](02-functions/01-functions-and-closures.md)
-- [Conditions and loops](03-control-flow/01-conditions-and-loops.md)
-- [Arrays and object literals](04-values-and-objects/01-arrays-and-objects.md)
-- [Classes and interfaces](04-values-and-objects/02-classes-and-interfaces.md)
-- [Enums](04-values-and-objects/03-enums.md)
-- [Generics](05-generics/01-generics.md)
-- [Modules and exports](06-modules-and-errors/01-modules.md)
-- [Errors and exceptions](06-modules-and-errors/02-errors.md)
-- [Native type-system selection](07-native-types/01-project-type-system.md)
+- [Bindings and declarations](./01-variables-and-bindings/01-bindings.md)
+- [Types and inference](./01-variables-and-bindings/02-types.md)
+- [Functions and closures](./02-functions/01-functions-and-closures.md)
+- [Conditions and loops](./03-control-flow/01-conditions-and-loops.md)
+- [Arrays and object literals](./04-values-and-objects/01-arrays-and-objects.md)
+- [Classes and interfaces](./04-values-and-objects/02-classes-and-interfaces.md)
+- [Enums](./04-values-and-objects/03-enums.md)
+- [Generics](./05-generics/01-generics.md)
+- [Modules and exports](./06-modules-and-errors/01-modules.md)
+- [Errors and exceptions](./06-modules-and-errors/02-errors.md)
+- [Native type-system selection](./07-native-types/01-project-type-system.md)

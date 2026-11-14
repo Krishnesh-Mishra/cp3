@@ -133,7 +133,7 @@ The variable cases cover rejected reassignment of constants, permitted array and
 
 ## Related pages
 
-- [Bindings and declarations](01-bindings.md)
-- [Types and inference](02-types.md)
-- [Scope and initialization](04-scope-and-initialization.md)
+- [Bindings and declarations](./01-bindings.md)
+- [Types and inference](./02-types.md)
+- [Scope and initialization](./04-scope-and-initialization.md)
 - [Escape analysis](../../02-runtime/02-escape-analysis.md)

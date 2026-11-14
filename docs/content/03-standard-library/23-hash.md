@@ -10,7 +10,7 @@ chapter: Chapter 3 · Standard library
 import hash from "std/hash";
 ```
 
-Checksums are **not security**. They are easy to forge and must never be used for passwords, signatures, tokens, or integrity against an adversary. They are useful for cache keys, change detection, and corruption checks against accidents. Use [Cryptography](10-crypto.md) (`std/crypto`: SHA-256/512, AES-256-GCM) for anything adversarial.
+Checksums are **not security**. They are easy to forge and must never be used for passwords, signatures, tokens, or integrity against an adversary. They are useful for cache keys, change detection, and corruption checks against accidents. Use [Cryptography](./10-crypto.md) (`std/crypto`: SHA-256/512, AES-256-GCM) for anything adversarial.
 
 ## Exact signatures and results
 
@@ -32,7 +32,7 @@ All five functions are deterministic and stateless: the same bytes give the same
 
 ## Limits
 
-- Checksums, not security: checksums are easy to forge and must never be used for passwords, signatures, tokens, or integrity against an adversary. They are suitable only for cache keys, change detection, and corruption checks against accidents. Use [Cryptography](10-crypto.md) (`std/crypto`: SHA-256/512, AES-256-GCM) for anything adversarial.
+- Checksums, not security: checksums are easy to forge and must never be used for passwords, signatures, tokens, or integrity against an adversary. They are suitable only for cache keys, change detection, and corruption checks against accidents. Use [Cryptography](./10-crypto.md) (`std/crypto`: SHA-256/512, AES-256-GCM) for anything adversarial.
 - No seed parameter on `xxhash64`: the seed is fixed to 0 by design, so results are deterministic across runs; use `std/crypto` digests if you need keyed hashing.
 - No hex/base64 rendering of the checksum itself: format the numeric result at the call site if you need text.
 - No streaming or incremental hashing: each call hashes one complete `string | Buffer` value.

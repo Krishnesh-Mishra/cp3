@@ -116,5 +116,5 @@ Use `std/math` for general floating-point calculations. Use native integer types
 
 - [Types and inference](../01-language/01-variables-and-bindings/02-types.md)
 - [Native numeric types](../01-language/07-native-types/03-numeric-rules.md)
-- [Cryptography](10-crypto.md) for secure random APIs
-- [Typed arrays](16-typed-arrays.md) for fixed-width numeric storage
+- [Cryptography](./10-crypto.md) for secure random APIs
+- [Typed arrays](./16-typed-arrays.md) for fixed-width numeric storage

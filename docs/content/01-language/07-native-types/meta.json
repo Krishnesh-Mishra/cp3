@@ -1,0 +1,10 @@
+{
+  "title": "Native types",
+  "pages": [
+    "00-overview",
+    "01-project-type-system",
+    "02-prefixed-types",
+    "03-numeric-rules",
+    "04-limitations"
+  ]
+}

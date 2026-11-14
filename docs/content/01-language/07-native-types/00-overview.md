@@ -10,10 +10,10 @@ It is deliberately narrower than either C++ or Rust. CP3 maps supported names in
 
 ## Pages in this guide
 
-- [Select the project vocabulary](01-project-type-system.md): configure `typeSystem` and `strictNumericCasts` in `package.json`.
-- [Use explicit prefixes](02-prefixed-types.md): understand `r_`, `c_`, and `ts_`, plus supported mappings.
-- [Apply numeric rules](03-numeric-rules.md): learn literal ranges, promotion, mixed arithmetic, and strict checking.
-- [Understand limitations](04-limitations.md): pointers, unsupported ecosystem types, unions, and diagnostics.
+- [Select the project vocabulary](./01-project-type-system.md): configure `typeSystem` and `strictNumericCasts` in `package.json`.
+- [Use explicit prefixes](./02-prefixed-types.md): understand `r_`, `c_`, and `ts_`, plus supported mappings.
+- [Apply numeric rules](./03-numeric-rules.md): learn literal ranges, promotion, mixed arithmetic, and strict checking.
+- [Understand limitations](./04-limitations.md): pointers, unsupported ecosystem types, unions, and diagnostics.
 
 ## A short example
 

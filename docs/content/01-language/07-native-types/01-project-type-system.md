@@ -125,7 +125,7 @@ Matching parameters (for example `res.status(code)` and `app.listen(port)`) use 
 }
 ```
 
-This switch does not change the chosen spelling vocabulary. For example, `typeSystem: rust` plus `strictNumericCasts: true` still resolves plain `i64` as Rust-style native integer, but applies stricter conversion checks to its use. See [Native numeric behavior](03-numeric-rules.md).
+This switch does not change the chosen spelling vocabulary. For example, `typeSystem: rust` plus `strictNumericCasts: true` still resolves plain `i64` as Rust-style native integer, but applies stricter conversion checks to its use. See [Native numeric behavior](./03-numeric-rules.md).
 
 ## How to verify a project's setting
 
@@ -133,7 +133,7 @@ This switch does not change the chosen spelling vocabulary. For example, `typeSy
 2. Read `typeSystem` and check it is one of the three supported strings.
 3. Confirm your source spelling matches the selected vocabulary or uses an explicit prefix.
 4. Run `cp3 check` on the same project entry point, so the manifest is loaded.
-5. If a native name is rejected, check its exact supported spelling on [Prefixed native types](02-prefixed-types.md).
+5. If a native name is rejected, check its exact supported spelling on [Prefixed native types](./02-prefixed-types.md).
 
 Do not infer the type mode from the operating system or the installed `g++`/`rustc`. It comes from the CP3 project setting.
 
@@ -157,7 +157,7 @@ Do not switch a whole application to a native mode only to change one variable. 
 ## Related pages
 
 - [Types and inference](../01-variables-and-bindings/02-types.md) explains ordinary CP3 types.
-- [Prefixed types](02-prefixed-types.md) lists the supported name families.
-- [Numeric rules](03-numeric-rules.md) explains promotions, literals, and strict conversion checks.
-- [Limitations](04-limitations.md) lists unsupported forms and common diagnostics.
+- [Prefixed types](./02-prefixed-types.md) lists the supported name families.
+- [Numeric rules](./03-numeric-rules.md) explains promotions, literals, and strict conversion checks.
+- [Limitations](./04-limitations.md) lists unsupported forms and common diagnostics.
 - [Native interop](../../04-compiler-cli/07-native-interop.md) covers ABI and ownership boundaries.

@@ -12,10 +12,10 @@ The language is designed for developers who value familiar syntax and compiler f
 
 | If you want to… | Start here |
 | --- | --- |
-| Learn CP3 with JS/TS experience | [For JavaScript and TypeScript developers](03-javascript-typescript-developers.md) |
-| Understand the project's design | [Why CP3 exists](01-why-cp3.md) |
-| Create and run a program | [Create your first project](04-first-project.md) |
-| Learn how performance claims are measured | [Performance, measured carefully](02-performance.md) |
+| Learn CP3 with JS/TS experience | [For JavaScript and TypeScript developers](./03-javascript-typescript-developers.md) |
+| Understand the project's design | [Why CP3 exists](./01-why-cp3.md) |
+| Create and run a program | [Create your first project](./04-first-project.md) |
+| Learn how performance claims are measured | [Performance, measured carefully](./02-performance.md) |
 | Find exact declaration and type rules | [Chapter 1 · The language](../01-language/00-overview.md) |
 | Understand memory and ownership | [Chapter 2 · Runtime model](../02-runtime/00-overview.md) |
 | Check a built-in module's API | [Chapter 3 · Standard library](../03-standard-library/00-overview.md) |
@@ -43,4 +43,4 @@ Pages use links to connect related concepts. A code example is intended to illus
 
 The guide is built into the compiler from Markdown under `docs/content`. Its API descriptions are maintained alongside the compiler and runtime. If your installed compiler differs from this source checkout, use that compiler's `help` output, diagnostics, and test results as the final authority for available flags and behavior.
 
-For performance, treat benchmark data as a dated observation rather than a language-wide ranking. The same program can change speed with the backend compiler, target architecture, release flags, host load, and measurement method. Read [Performance, measured carefully](02-performance.md) before drawing conclusions from one median.
+For performance, treat benchmark data as a dated observation rather than a language-wide ranking. The same program can change speed with the backend compiler, target architecture, release flags, host load, and measurement method. Read [Performance, measured carefully](./02-performance.md) before drawing conclusions from one median.

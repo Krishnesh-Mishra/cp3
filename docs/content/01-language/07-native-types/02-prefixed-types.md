@@ -140,7 +140,7 @@ An external function declaration that needs pointer semantics requires a separat
 
 ## Prefix use does not cast a value
 
-The prefix is part of a type annotation; it chooses a type name. It is not a runtime conversion operator. Assignments and expressions still pass normal type checking. Numeric literals that fit a native type can be initialized as in the examples, while nonliteral implicit conversions are governed by the analyzer and `strictNumericCasts` setting. See [Numeric rules](03-numeric-rules.md).
+The prefix is part of a type annotation; it chooses a type name. It is not a runtime conversion operator. Assignments and expressions still pass normal type checking. Numeric literals that fit a native type can be initialized as in the examples, while nonliteral implicit conversions are governed by the analyzer and `strictNumericCasts` setting. See [Numeric rules](./03-numeric-rules.md).
 
 ## Why use explicit prefixes?
 
@@ -154,7 +154,7 @@ The mapping is a closed resolver table, not a promise to accept every spelling i
 
 ## Related pages
 
-- [Project type-system selection](01-project-type-system.md)
-- [Numeric behavior and conversions](03-numeric-rules.md)
-- [Limitations and diagnostics](04-limitations.md)
+- [Project type-system selection](./01-project-type-system.md)
+- [Numeric behavior and conversions](./03-numeric-rules.md)
+- [Limitations and diagnostics](./04-limitations.md)
 - [Native interop](../../04-compiler-cli/07-native-interop.md)

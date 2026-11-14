@@ -68,9 +68,11 @@ tests/cases/**/.cp3/
 !vendor/third_party/**/*.lib
 benchmarks/cases/health-server/cp3/merged.txt
 
-# ---- documentation site ----
-docs/site/
-docs/.venv-docs/
+# ---- documentation site (fumadocs / Next.js static export) ----
+docs/site/.next/
+docs/site/.source/
+docs/site/out/
+docs/site/next-env.d.ts
 
 # ---- local scratch (build/corpus logs, probe fixtures; never committed) ----
 .log/

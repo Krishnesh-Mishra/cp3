@@ -294,7 +294,7 @@ const names: string[] = [];
 names.push("Asha");
 ```
 
-Arrays are mutable reference-shaped values. `const` prevents rebinding the array variable; it does not freeze the array contents. Two bindings can refer to the same array, so a mutation through either binding is visible through the other. See [Arrays and objects](../04-values-and-objects/01-arrays-and-objects.md) and [Mutability](03-mutability.md).
+Arrays are mutable reference-shaped values. `const` prevents rebinding the array variable; it does not freeze the array contents. Two bindings can refer to the same array, so a mutation through either binding is visible through the other. See [Arrays and objects](../04-values-and-objects/01-arrays-and-objects.md) and [Mutability](./03-mutability.md).
 
 ## Object shapes and named interfaces
 
@@ -557,8 +557,8 @@ analysis; run-mode fixtures are needed to check generated values and observable 
 
 ## Related guides
 
-- [Bindings and declarations](01-bindings.md)
-- [Mutability and immutability](03-mutability.md)
+- [Bindings and declarations](./01-bindings.md)
+- [Mutability and immutability](./03-mutability.md)
 - [Project native type-system selection](../07-native-types/01-project-type-system.md)
 - [Prefixed native types](../07-native-types/02-prefixed-types.md)
 - [Native numeric behavior](../07-native-types/03-numeric-rules.md)

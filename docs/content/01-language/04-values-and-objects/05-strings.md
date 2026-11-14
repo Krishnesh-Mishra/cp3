@@ -156,7 +156,7 @@ The method names intentionally resemble JavaScript, but the byte and code-point 
 
 ## Related pages
 
-- [Arrays](04-arrays.md)
+- [Arrays](./04-arrays.md)
 - [Byte buffers](../../03-standard-library/11-buffer.md)
 - [Typed arrays and DataView](../../03-standard-library/16-typed-arrays.md)
 - [Functions and closures](../02-functions/01-functions-and-closures.md)

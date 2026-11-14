@@ -29,7 +29,7 @@ The index expression is checked and lowered through the array family’s runtime
 
 ## Array methods
 
-CP3 implements a broad array method surface, including `push`, `pop`, `shift`, `unshift`, `map`, `filter`, `reduce`, `find`, `some`, `every`, `slice`, `sort`, `includes`, and `indexOf`. Exact callbacks and return types are defined by the compiler’s array member table. See [Array methods](04-arrays.md) for the full reference.
+CP3 implements a broad array method surface, including `push`, `pop`, `shift`, `unshift`, `map`, `filter`, `reduce`, `find`, `some`, `every`, `slice`, `sort`, `includes`, and `indexOf`. Exact callbacks and return types are defined by the compiler’s array member table. See [Array methods](./04-arrays.md) for the full reference.
 
 Some operations mutate the existing array (`push`, `pop`, `sort`, `unique`, `shuffle`); others return a new array (`map`, `filter`, `slice`). Read the individual method description before assuming JS behavior or a copy boundary.
 

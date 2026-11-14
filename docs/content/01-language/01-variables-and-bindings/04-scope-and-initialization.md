@@ -123,7 +123,7 @@ This is one reason scope and ownership are related but not identical topics. Sou
 
 The `tests/cases/variables` cases cover block scope, loop-scope non-leakage, same-scope redeclaration, lexical read-before-declaration, `var` hoisting, uninitialized locals, and shadowing. `tests/cases/functions-closures` covers captured values and lifetime behavior.
 
-- [Bindings and declarations](01-bindings.md)
-- [Mutability](03-mutability.md)
-- [Destructuring declarations](05-destructuring.md)
+- [Bindings and declarations](./01-bindings.md)
+- [Mutability](./03-mutability.md)
+- [Destructuring declarations](./05-destructuring.md)
 - [Closure storage](../../02-runtime/04-closures.md)

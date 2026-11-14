@@ -87,6 +87,6 @@ The clock is `std::chrono::steady_clock` (`QueryPerformanceCounter` on Windows, 
 
 ## Limits
 
-- Monotonic only, never wall clock: a system-clock adjustment (NTP step, manual set, DST) never moves a measurement. Do not use `std/time` to read the current wall time, to schedule at a wall instant, or to compare across processes; use [Date](08-date.md) for wall-clock time.
+- Monotonic only, never wall clock: a system-clock adjustment (NTP step, manual set, DST) never moves a measurement. Do not use `std/time` to read the current wall time, to schedule at a wall instant, or to compare across processes; use [Date](./08-date.md) for wall-clock time.
 - No durations as integers: `elapsed()` is always `number`; there is no exact integer width for a duration.
 - No timeouts or scheduling here: `sleep`, `setTimeout`, and `setInterval` are separate timer APIs, not stopwatch methods.

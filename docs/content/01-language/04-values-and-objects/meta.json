@@ -1,0 +1,10 @@
+{
+  "title": "Values and objects",
+  "pages": [
+    "01-arrays-and-objects",
+    "02-classes-and-interfaces",
+    "03-enums",
+    "04-arrays",
+    "05-strings"
+  ]
+}

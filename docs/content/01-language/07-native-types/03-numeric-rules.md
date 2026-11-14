@@ -174,6 +174,6 @@ When a type error appears:
 
 ## Related pages
 
-- [Project type-system selection](01-project-type-system.md)
-- [Prefixed native types](02-prefixed-types.md)
-- [Limitations and diagnostics](04-limitations.md)
+- [Project type-system selection](./01-project-type-system.md)
+- [Prefixed native types](./02-prefixed-types.md)
+- [Limitations and diagnostics](./04-limitations.md)

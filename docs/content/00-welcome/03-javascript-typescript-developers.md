@@ -1869,9 +1869,9 @@ Porting advice: classify each external API as a language feature, a `std/...` mo
 - [Chapter 2 · Runtime](../02-runtime/00-overview.md) — value model, escape analysis, ownership, closures, async/concurrency, threads, costs
 - [Chapter 3 · Standard library](../03-standard-library/00-overview.md) — module index and import conventions
 - [Chapter 4 · Compiler and tools](../04-compiler-cli/00-overview.md) — CLI, pipeline, optimization, diagnostics, toolchains, cache, tests, native interop
-- [For JavaScript and TypeScript developers](03-javascript-typescript-developers.md) — this page
-- [Create and run your first project](04-first-project.md) — scaffolding walkthrough
-- [Performance, measured carefully](02-performance.md) — benchmark discipline
+- [For JavaScript and TypeScript developers](./03-javascript-typescript-developers.md) — this page
+- [Create and run your first project](./04-first-project.md) — scaffolding walkthrough
+- [Performance, measured carefully](./02-performance.md) — benchmark discipline
 - [URL extensions](../03-standard-library/24-url-extensions.md) — WHATWG form-urlencoded and normalization details
 
 When an API detail matters, the module page is authoritative. Compiler diagnostics, conformance tests under `tests/cases/`, and the implementation (`src/std/...`, `src/sema/...`, `src/codegen/...`) are the final word when prose and behavior disagree.

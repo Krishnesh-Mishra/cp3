@@ -150,7 +150,7 @@ Prints an `(index) (value)` header followed by one `i value` line per array elem
 
 ## Output streams and compatibility limits
 
-`console.log` and its related methods are complete calls, not writable stream objects. The console surface does not define `console.stdout.write`, ANSI styling helpers, or a general terminal event emitter. For writable/readable process streams (`process.stdout` / `process.stderr` / `process.stdin`), see [Process and child processes](03-process.md).
+`console.log` and its related methods are complete calls, not writable stream objects. The console surface does not define `console.stdout.write`, ANSI styling helpers, or a general terminal event emitter. For writable/readable process streams (`process.stdout` / `process.stderr` / `process.stdin`), see [Process and child processes](./03-process.md).
 
 ## Method summary
 
@@ -174,4 +174,4 @@ Prints an `(index) (value)` header followed by one `i value` line per array elem
 | `off(event, listener)` | `void` | Remove stdin listener |
 | `clear()` | `void` | Clear terminal |
 | `hide()` / `show()` | `void` | Hide or restore Windows console window |
-| `time(label?)` / `timeEnd(label?)` | `void` | Per-label monotonic timers — see [Time and stopwatches](21-time.md) |
+| `time(label?)` / `timeEnd(label?)` | `void` | Per-label monotonic timers — see [Time and stopwatches](./21-time.md) |

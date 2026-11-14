@@ -105,5 +105,5 @@ The API here is synchronous. A costly regex operation runs on the calling thread
 The `tests/cases/regex` family covers literal flags, duplicate and unknown flags, invalid patterns, capture groups, no-match results, global cursor state, sticky state, and multiline flags. The `arrays-strings` cases cover passing a regex to `split`.
 
 - [Strings](../01-language/04-values-and-objects/05-strings.md)
-- [Standard library overview](00-overview.md)
+- [Standard library overview](./00-overview.md)
 - [Errors and exceptions](../01-language/06-modules-and-errors/02-errors.md)

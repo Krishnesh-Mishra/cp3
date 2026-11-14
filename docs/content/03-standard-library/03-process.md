@@ -102,7 +102,7 @@ process.env.set("APP_MODE", "production");
 
 This changes the CP3 process map. It does **not** call the operating system's environment mutation API. Child processes inherit the operating-system
 environment, not later mutations made only to this CP3 map. Use `std/env` if you need typed reads, defaults, required-value checks, or to load values
-from a `.env` file. See [Environment variables](02-env.md).
+from a `.env` file. See [Environment variables](./02-env.md).
 
 ## Choosing an exit code
 
@@ -334,8 +334,8 @@ provide an explicit native integration where the project needs functionality out
 
 ## Related pages and implementation
 
-- [Environment variables](02-env.md)
-- [Console output and input](01-console.md)
+- [Environment variables](./02-env.md)
+- [Console output and input](./01-console.md)
 - [Async and concurrency](../02-runtime/07-async-and-concurrency.md)
 - [Thread safety and ownership boundaries](../02-runtime/10-thread-safety.md)
 - [Native toolchains](../04-compiler-cli/05-native-toolchains.md)

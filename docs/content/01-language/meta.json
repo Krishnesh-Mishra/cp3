@@ -1,0 +1,14 @@
+{
+  "title": "Chapter 1 · The language",
+  "pages": [
+    "00-overview",
+    "01-variables-and-bindings",
+    "02-functions",
+    "03-control-flow",
+    "04-values-and-objects",
+    "05-generics",
+    "06-modules-and-errors",
+    "07-native-types",
+    "99-global-builtins"
+  ]
+}

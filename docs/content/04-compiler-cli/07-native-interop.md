@@ -116,7 +116,7 @@ Native packages can be target-specific. Test each operating system and architect
 
 ## Related pages
 
-- [Native toolchains](05-native-toolchains.md)
-- [Project settings and cache](09-project-settings-and-cache.md)
+- [Native toolchains](./05-native-toolchains.md)
+- [Project settings and cache](./09-project-settings-and-cache.md)
 - [Native scalar type limitations](../01-language/07-native-types/04-limitations.md)
 - [Thread safety](../02-runtime/10-thread-safety.md)

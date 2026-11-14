@@ -113,4 +113,4 @@ const token = crypto.randomBytes(32);
 const digest: string = crypto.sha256(token);
 ```
 
-This sketch demonstrates random bytes and byte-oriented hashing. To encrypt, obtain high-entropy key material through the deployment's secret-management process, avoid printing it, and define how ciphertext is versioned and stored. Do not copy a key literal into source. See [Buffers](11-buffer.md) for byte/text encodings and [Environment](02-env.md) for configuration.
+This sketch demonstrates random bytes and byte-oriented hashing. To encrypt, obtain high-entropy key material through the deployment's secret-management process, avoid printing it, and define how ciphertext is versioned and stored. Do not copy a key literal into source. See [Buffers](./11-buffer.md) for byte/text encodings and [Environment](./02-env.md) for configuration.

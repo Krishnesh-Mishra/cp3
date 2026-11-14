@@ -53,7 +53,7 @@ Project JSON parsing and compile settings live under `src/cli/src/pkg` and `src/
 
 ## Related pages
 
-- [CLI commands](01-cli-commands.md)
-- [Native toolchains](05-native-toolchains.md)
+- [CLI commands](./01-cli-commands.md)
+- [Native toolchains](./05-native-toolchains.md)
 - [Native type selection](../01-language/07-native-types/01-project-type-system.md)
-- [Compilation pipeline](02-compilation-pipeline.md)
+- [Compilation pipeline](./02-compilation-pipeline.md)

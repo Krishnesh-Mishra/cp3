@@ -36,7 +36,7 @@ Freeze is tracked only for the syntactic forms codegen can see — a frozen obje
 Error.captureStackTrace(error, fn?)
 ```
 
-Refreshes `error.stack` from its current representation. CP3 captures no JavaScript stack in v0.2: `stack` is `name: message` at construction, and the captured text gains one `at <fn>` frame when the optional `fn` is given. The first argument must be an `Error`. Returns `void`. See [Errors and exceptions](06-modules-and-errors/02-errors.md).
+Refreshes `error.stack` from its current representation. CP3 captures no JavaScript stack in v0.2: `stack` is `name: message` at construction, and the captured text gains one `at <fn>` frame when the optional `fn` is given. The first argument must be an `Error`. Returns `void`. See [Errors and exceptions](./06-modules-and-errors/02-errors.md).
 
 ## `EventEmitter`
 
@@ -151,6 +151,6 @@ The closures given to `parallel.*` are synchronous by contract: they cannot be `
 
 ## Related pages
 
-- [Errors and exceptions](06-modules-and-errors/02-errors.md)
+- [Errors and exceptions](./06-modules-and-errors/02-errors.md)
 - [Async and concurrency](../02-runtime/07-async-and-concurrency.md)
 - [Standard library overview](../03-standard-library/00-overview.md)

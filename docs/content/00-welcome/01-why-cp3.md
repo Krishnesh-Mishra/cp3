@@ -36,7 +36,7 @@ JavaScript and TypeScript syntax is approachable to many application developers.
 - Strings are UTF-8 byte strings, and some APIs expose byte-oriented behavior.
 - Errors, asynchronous execution, process APIs, and filesystem operations follow CP3's implementation and tests.
 
-The [JavaScript and TypeScript guide](03-javascript-typescript-developers.md) is a migration map. The language chapter is the authority for CP3 rules.
+The [JavaScript and TypeScript guide](./03-javascript-typescript-developers.md) is a migration map. The language chapter is the authority for CP3 rules.
 
 ## Why use a C++ backend?
 
@@ -74,8 +74,8 @@ For a language feature, begin with its page in Chapter 1 and follow the linked t
 
 Useful next pages:
 
-- [Create and run a project](04-first-project.md)
+- [Create and run a project](./04-first-project.md)
 - [Project type-system selection](../01-language/07-native-types/01-project-type-system.md)
 - [Runtime value model](../02-runtime/01-value-model.md)
-- [Performance measurements](02-performance.md)
+- [Performance measurements](./02-performance.md)
 - [Compiler pipeline](../04-compiler-cli/02-compilation-pipeline.md)

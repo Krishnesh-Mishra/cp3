@@ -10,17 +10,17 @@ This chapter is the practical guide to the CP3 compiler, CLI, native toolchain, 
 
 | Task | Page |
 | --- | --- |
-| Create, check, run, build, clean, or package a project | [CLI commands](01-cli-commands.md) |
-| Understand what happens from `.cp3` to executable | [Compilation pipeline](02-compilation-pipeline.md) |
-| Learn the existing optimization proofs and limits | [Optimization pipeline](03-optimization-pipeline.md) |
-| Understand generic lowering | [Generics and specialization](04-generics.md) |
-| Select or diagnose a native compiler | [Native toolchains](05-native-toolchains.md) |
-| Read a compiler error and open its related documentation | [Diagnostics and generated help](06-diagnostics.md) |
-| Integrate a native SDK | [Native packages and ABI boundaries](07-native-interop.md) |
-| Find conformance test families | [Tests and verification](08-tests-and-verification.md) |
-| Understand `package.json`, output paths, and cache reuse | [Project settings and build cache](09-project-settings-and-cache.md) |
-| Trace a CP3 expression into its C++ output | [Generated C++ inspection](10-generated-cpp-inspection.md) |
-| Choose debug, incremental, release, or PGO | [Build profiles and PGO](11-build-profiles-and-pgo.md) |
+| Create, check, run, build, clean, or package a project | [CLI commands](./01-cli-commands.md) |
+| Understand what happens from `.cp3` to executable | [Compilation pipeline](./02-compilation-pipeline.md) |
+| Learn the existing optimization proofs and limits | [Optimization pipeline](./03-optimization-pipeline.md) |
+| Understand generic lowering | [Generics and specialization](./04-generics.md) |
+| Select or diagnose a native compiler | [Native toolchains](./05-native-toolchains.md) |
+| Read a compiler error and open its related documentation | [Diagnostics and generated help](./06-diagnostics.md) |
+| Integrate a native SDK | [Native packages and ABI boundaries](./07-native-interop.md) |
+| Find conformance test families | [Tests and verification](./08-tests-and-verification.md) |
+| Understand `package.json`, output paths, and cache reuse | [Project settings and build cache](./09-project-settings-and-cache.md) |
+| Trace a CP3 expression into its C++ output | [Generated C++ inspection](./10-generated-cpp-inspection.md) |
+| Choose debug, incremental, release, or PGO | [Build profiles and PGO](./11-build-profiles-and-pgo.md) |
 
 ## Two workflows, two build trees
 
@@ -57,14 +57,14 @@ The CLI flags and compiler implementation evolve. Use the installed compiler's `
 
 ## Pages in this chapter
 
-- [CLI commands](01-cli-commands.md)
-- [Compilation pipeline](02-compilation-pipeline.md)
-- [Optimization pipeline](03-optimization-pipeline.md)
-- [Generics and specialization](04-generics.md)
-- [Native toolchains](05-native-toolchains.md)
-- [Diagnostics](06-diagnostics.md)
-- [Native packages and ABI boundaries](07-native-interop.md)
-- [Tests and verification](08-tests-and-verification.md)
-- [Project settings and cache](09-project-settings-and-cache.md)
-- [Generated C++ inspection](10-generated-cpp-inspection.md)
-- [Build profiles and PGO](11-build-profiles-and-pgo.md)
+- [CLI commands](./01-cli-commands.md)
+- [Compilation pipeline](./02-compilation-pipeline.md)
+- [Optimization pipeline](./03-optimization-pipeline.md)
+- [Generics and specialization](./04-generics.md)
+- [Native toolchains](./05-native-toolchains.md)
+- [Diagnostics](./06-diagnostics.md)
+- [Native packages and ABI boundaries](./07-native-interop.md)
+- [Tests and verification](./08-tests-and-verification.md)
+- [Project settings and cache](./09-project-settings-and-cache.md)
+- [Generated C++ inspection](./10-generated-cpp-inspection.md)
+- [Build profiles and PGO](./11-build-profiles-and-pgo.md)

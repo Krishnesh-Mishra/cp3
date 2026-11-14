@@ -12,7 +12,7 @@ Class and array reference values normally use the `Ref<T>` / `std::shared_ptr` m
 
 ## Proven local objects
 
-Escape analysis can change selected class allocations into stack objects and selected local arrays into value storage. Eligibility depends on known constructors, scalar field operations, same-frame use, and non-escape. See the detailed [escape analysis rules](02-escape-analysis.md).
+Escape analysis can change selected class allocations into stack objects and selected local arrays into value storage. Eligibility depends on known constructors, scalar field operations, same-frame use, and non-escape. See the detailed [escape analysis rules](./02-escape-analysis.md).
 
 ## Counted-loop reserve hint
 
@@ -91,7 +91,7 @@ The implementation is `src/codegen/src/emit/misc/push_reserve.cpp`. It is separa
 
 ## Related pages
 
-- [Escape analysis and stack storage](02-escape-analysis.md)
-- [The CP3 value model](01-value-model.md)
-- [Reference counts, cycles, and threads](03-reference-ownership.md)
-- [Inspecting runtime costs](11-inspecting-runtime-costs.md)
+- [Escape analysis and stack storage](./02-escape-analysis.md)
+- [The CP3 value model](./01-value-model.md)
+- [Reference counts, cycles, and threads](./03-reference-ownership.md)
+- [Inspecting runtime costs](./11-inspecting-runtime-costs.md)

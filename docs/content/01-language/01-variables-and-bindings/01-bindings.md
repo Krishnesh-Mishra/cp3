@@ -22,7 +22,7 @@ const port: number = 8080;
 // port = 9000; // compile-time error
 ```
 
-`const` restricts the binding, not the complete object graph reachable through it. A constant array reference can still call `push` or assign an element when the array and element types permit it. See [Mutability and immutability](03-mutability.md).
+`const` restricts the binding, not the complete object graph reachable through it. A constant array reference can still call `push` or assign an element when the array and element types permit it. See [Mutability and immutability](./03-mutability.md).
 
 ## `let`: a reassignable binding
 
@@ -53,7 +53,7 @@ function example(): number {
 }
 ```
 
-`var` does not have the block-local visibility of `let` and `const`. Its declaration is hoisted within the containing function (or module-level function context), but its initializer still executes at its source position. A read before the initializer is not a read of the later initialized value. See [Scope, hoisting, and initialization](04-scope-and-initialization.md).
+`var` does not have the block-local visibility of `let` and `const`. Its declaration is hoisted within the containing function (or module-level function context), but its initializer still executes at its source position. A read before the initializer is not a read of the later initialized value. See [Scope, hoisting, and initialization](./04-scope-and-initialization.md).
 
 Prefer `const` or `let` for new code unless `var` behavior is specifically required. The tests under `tests/cases/variables` pin CP3's behavior for use before declaration and reassignment.
 
@@ -97,7 +97,7 @@ An empty collection does not reveal an element type by inspection. Annotate it:
 const names: string[] = [];
 ```
 
-For more about union compatibility, inference, and project-dependent native type names, see [Types and inference](02-types.md).
+For more about union compatibility, inference, and project-dependent native type names, see [Types and inference](./02-types.md).
 
 ## Initializers and absent values
 
@@ -135,7 +135,7 @@ const [x, y] = [4, 9];
 const { name: displayName } = { name: "Ada" };
 ```
 
-The extracted names obey the same `const`/`let`/`var` reassignment rules as ordinary identifiers. The source shape is also checked. Read [Destructuring declarations](05-destructuring.md) for tuple rest, object rest, parameter forms, and errors.
+The extracted names obey the same `const`/`let`/`var` reassignment rules as ordinary identifiers. The source shape is also checked. Read [Destructuring declarations](./05-destructuring.md) for tuple rest, object rest, parameter forms, and errors.
 
 ## Binding lifetime and captured names
 
@@ -169,8 +169,8 @@ The exact diagnostic code is emitted by the compiler. The per-error help page ra
 
 ## Related pages and tests
 
-- [Types and inference](02-types.md)
-- [Mutability and immutability](03-mutability.md)
-- [Scope and initialization](04-scope-and-initialization.md)
-- [Destructuring](05-destructuring.md)
+- [Types and inference](./02-types.md)
+- [Mutability and immutability](./03-mutability.md)
+- [Scope and initialization](./04-scope-and-initialization.md)
+- [Destructuring](./05-destructuring.md)
 - Test family: `tests/cases/variables` and `tests/cases/destructuring`

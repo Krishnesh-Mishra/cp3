@@ -72,7 +72,7 @@ cp3 toolchain use clang@18 --project
 cp3 toolchain clear --project
 ```
 
-`list` reports candidates and the effective selection; `detect` shows automatic discovery; `current` prints a single line naming the effective toolchain and where the choice came from (the packaging shims consume it verbatim); `use` stores a project or global choice; `clear` removes a stored choice. `cp3 toolchain list --json` is available for scripts. `cp3 toolchain help` (or `cp3 toolchain --help`) prints the toolchain usage. See [Native toolchains](05-native-toolchains.md) for scope and precedence.
+`list` reports candidates and the effective selection; `detect` shows automatic discovery; `current` prints a single line naming the effective toolchain and where the choice came from (the packaging shims consume it verbatim); `use` stores a project or global choice; `clear` removes a stored choice. `cp3 toolchain list --json` is available for scripts. `cp3 toolchain help` (or `cp3 toolchain --help`) prints the toolchain usage. See [Native toolchains](./05-native-toolchains.md) for scope and precedence.
 
 ## Package commands
 
@@ -95,13 +95,13 @@ Package operations can create caches or write output archives. Consult `cp3 help
 
 ## Native and editor commands
 
-`native-install` creates bindings from a native SDK using libclang support. It depends on the SDK headers and platform libraries; read [Native packages and ABI boundaries](07-native-interop.md) before exposing foreign values to application code.
+`native-install` creates bindings from a native SDK using libclang support. It depends on the SDK headers and platform libraries; read [Native packages and ABI boundaries](./07-native-interop.md) before exposing foreign values to application code.
 
 `lsp` starts the language server, usually over stdio for an editor integration. `dap` starts the debug adapter. `editor-plugin` manages the supported editor extension workflow. Their availability and options are versioned with the installed CLI.
 
 ## Documentation commands
 
-`cp3 docs` serves the Markdown guide embedded in the compiler on loopback. `cp3 docs --port 0` asks the operating system for a free port and prints the selected address. The server runs until interrupted. See [Diagnostics and generated help](06-diagnostics.md) for a per-error help file, which is separate from the full docs server.
+`cp3 docs` serves the Markdown guide embedded in the compiler on loopback. `cp3 docs --port 0` asks the operating system for a free port and prints the selected address. The server runs until interrupted. See [Diagnostics and generated help](./06-diagnostics.md) for a per-error help file, which is separate from the full docs server.
 
 ## Argument forwarding and exit status
 
@@ -128,7 +128,7 @@ On a terminal, `cp3 init` asks five questions (type, name, description, author, 
 ## Related pages
 
 - [Create and run your first project](../00-welcome/04-first-project.md)
-- [Project settings and build cache](09-project-settings-and-cache.md)
-- [Native toolchains](05-native-toolchains.md)
-- [Build profiles and PGO](11-build-profiles-and-pgo.md)
-- [Tests and compiler verification](08-tests-and-verification.md)
+- [Project settings and build cache](./09-project-settings-and-cache.md)
+- [Native toolchains](./05-native-toolchains.md)
+- [Build profiles and PGO](./11-build-profiles-and-pgo.md)
+- [Tests and compiler verification](./08-tests-and-verification.md)

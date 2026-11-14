@@ -73,7 +73,7 @@ Do not describe a type as ABI-compatible solely because its name resembles a Rus
 
 ## Related pages
 
-- [Project type-system selection](01-project-type-system.md)
-- [Prefixed native types](02-prefixed-types.md)
-- [Numeric behavior](03-numeric-rules.md)
+- [Project type-system selection](./01-project-type-system.md)
+- [Prefixed native types](./02-prefixed-types.md)
+- [Numeric behavior](./03-numeric-rules.md)
 - [Types and inference](../01-variables-and-bindings/02-types.md)

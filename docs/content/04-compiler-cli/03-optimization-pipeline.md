@@ -77,4 +77,4 @@ Report the benchmark name and unchanged source status, expected output, exact co
 - [Escape analysis](../02-runtime/02-escape-analysis.md)
 - [Allocation and arrays](../02-runtime/05-allocation-and-arrays.md)
 - [Typed arrays](../02-runtime/06-typed-arrays.md)
-- [Build profiles and PGO](11-build-profiles-and-pgo.md)
+- [Build profiles and PGO](./11-build-profiles-and-pgo.md)

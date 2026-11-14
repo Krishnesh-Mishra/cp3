@@ -35,28 +35,28 @@ Strings and arrays are language builtins, not stdlib modules: see
 
 | Module | What it provides |
 | --- | --- |
-| [Console](01-console.md) | Terminal output, line and key input, and stdin listeners |
-| [Environment](02-env.md) | Environment lookup and `.env` loading |
-| [Process](03-process.md) | Arguments, environment map, child processes, exit, stdio streams, and lifecycle signals |
-| [File system](04-fs.md) | Synchronous and promise-based file and directory operations |
-| [Path](05-path.md) | Platform-aware path manipulation |
-| [Operating system](06-os.md) | Host and machine information |
-| [Math](07-math.md) | Numeric constants and common functions |
-| [Date](08-date.md) | Current time, parsing, formatting, and date arithmetic |
-| [JSON](09-json.md) | Serialization and checked parsing |
-| [Cryptography](10-crypto.md) | Random bytes, hashes, UUIDs, and authenticated encryption |
-| [Buffer](11-buffer.md) | Byte buffers and text encodings |
-| [Collections](12-collections.md) | Map, Set, LRUCache, Queue, Stack, PriorityQueue, RingBuffer, BitSet, MultiMap, ConcurrentMap |
-| [Network](13-network.md) | Fetch, WebSockets, and HTTP server APIs |
-| [Typed arrays](16-typed-arrays.md) | Fixed-width numeric arrays, buffers, and DataView |
-| [Regular expressions](17-regular-expressions.md) | Core regex literals, flags, match results, and string splitting |
-| [I/O readiness](18-io.md) | Non-blocking fd readiness and `pollUntilDone` for native socket libraries |
-| [URL and query strings](19-url.md) | Percent-encoding, `URL`, `URLSearchParams` |
-| [Text encoding](20-text.md) | UTF-8 `TextEncoder`/`TextDecoder` |
-| [Time and stopwatches](21-time.md) | Monotonic `Stopwatch`, `console.time`/`timeEnd` |
-| [Readline](22-readline.md) | Line reading over stdin: `readLine()`/`readLines()`/`readAll()` promises and `createReader()` |
-| [Checksums](23-hash.md) | Non-crypto `crc32`/`crc32c`/`fnv1a32`/`fnv1a64`/`xxhash64` |
-| [URL extensions](24-url-extensions.md) | Base resolution, normalization, form-urlencoded details |
+| [Console](./01-console.md) | Terminal output, line and key input, and stdin listeners |
+| [Environment](./02-env.md) | Environment lookup and `.env` loading |
+| [Process](./03-process.md) | Arguments, environment map, child processes, exit, stdio streams, and lifecycle signals |
+| [File system](./04-fs.md) | Synchronous and promise-based file and directory operations |
+| [Path](./05-path.md) | Platform-aware path manipulation |
+| [Operating system](./06-os.md) | Host and machine information |
+| [Math](./07-math.md) | Numeric constants and common functions |
+| [Date](./08-date.md) | Current time, parsing, formatting, and date arithmetic |
+| [JSON](./09-json.md) | Serialization and checked parsing |
+| [Cryptography](./10-crypto.md) | Random bytes, hashes, UUIDs, and authenticated encryption |
+| [Buffer](./11-buffer.md) | Byte buffers and text encodings |
+| [Collections](./12-collections.md) | Map, Set, LRUCache, Queue, Stack, PriorityQueue, RingBuffer, BitSet, MultiMap, ConcurrentMap |
+| [Network](./13-network.md) | Fetch, WebSockets, and HTTP server APIs |
+| [Typed arrays](./16-typed-arrays.md) | Fixed-width numeric arrays, buffers, and DataView |
+| [Regular expressions](./17-regular-expressions.md) | Core regex literals, flags, match results, and string splitting |
+| [I/O readiness](./18-io.md) | Non-blocking fd readiness and `pollUntilDone` for native socket libraries |
+| [URL and query strings](./19-url.md) | Percent-encoding, `URL`, `URLSearchParams` |
+| [Text encoding](./20-text.md) | UTF-8 `TextEncoder`/`TextDecoder` |
+| [Time and stopwatches](./21-time.md) | Monotonic `Stopwatch`, `console.time`/`timeEnd` |
+| [Readline](./22-readline.md) | Line reading over stdin: `readLine()`/`readLines()`/`readAll()` promises and `createReader()` |
+| [Checksums](./23-hash.md) | Non-crypto `crc32`/`crc32c`/`fnv1a32`/`fnv1a64`/`xxhash64` |
+| [URL extensions](./24-url-extensions.md) | Base resolution, normalization, form-urlencoded details |
 
 ## Error and asynchronous behavior
 
@@ -64,4 +64,4 @@ The exact failure behavior differs by API. Some operations throw synchronously; 
 
 ## Surface versus compatibility
 
-The compiler's semantic tables define the supported call surface. For example, `std/process` exposes `argv`, `env`, `exit`, `exec`, and `spawn`, plus the `stdout`/`stderr` write streams, `stdin`, and the `process.on` lifecycle events (`SIGINT`, `SIGTERM`, `exit`, `unhandledRejection`); it does not expose every Node process property. The `exec` result provides captured `stdout` and `stderr` after completion. Use `SpawnHandle` when output must be processed while a child is running. See [Process](03-process.md) for the precise distinction.
+The compiler's semantic tables define the supported call surface. For example, `std/process` exposes `argv`, `env`, `exit`, `exec`, and `spawn`, plus the `stdout`/`stderr` write streams, `stdin`, and the `process.on` lifecycle events (`SIGINT`, `SIGTERM`, `exit`, `unhandledRejection`); it does not expose every Node process property. The `exec` result provides captured `stdout` and `stderr` after completion. Use `SpawnHandle` when output must be processed while a child is running. See [Process](./03-process.md) for the precise distinction.

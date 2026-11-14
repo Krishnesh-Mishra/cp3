@@ -35,7 +35,7 @@ The safety scan is unit-wide rather than a precise per-reference proof. One disq
 
 Escape analysis can also replace a few tightly constrained class objects or local object arrays with direct local storage. That optimization can avoid a reference handle and allocation for the candidate it proves. It is separate from `LocalRef`, which still has an allocated control block and shared alias behavior.
 
-The escape-analysis proof is narrow: class shape, fields, constructor, aliases, and uses must all be recognized. An object that escapes or uses unsupported members remains on the reference path. Read [Escape analysis](02-escape-analysis.md) for positive and negative proof conditions.
+The escape-analysis proof is narrow: class shape, fields, constructor, aliases, and uses must all be recognized. An object that escapes or uses unsupported members remains on the reference path. Read [Escape analysis](./02-escape-analysis.md) for positive and negative proof conditions.
 
 ## Strong cycles
 
@@ -47,7 +47,7 @@ parent ─strong→ child
    └────strong────┘
 ```
 
-Use a weak reference for a non-owning back-link when the relationship permits it. Reading an expired weak link yields the absent value rather than a live object. See [Weak links and reference cycles](09-reference-cycles-and-weak-links.md).
+Use a weak reference for a non-owning back-link when the relationship permits it. Reading an expired weak link yields the absent value rather than a live object. See [Weak links and reference cycles](./09-reference-cycles-and-weak-links.md).
 
 ## Atomic count does not mean synchronized object
 
@@ -82,7 +82,7 @@ For a performance claim, preserve generated C++ from the measured build and veri
 
 ## Related pages
 
-- [Value model](01-value-model.md)
-- [Escape analysis](02-escape-analysis.md)
-- [Thread safety](10-thread-safety.md)
-- [No tracing GC](08-no-tracing-gc.md)
+- [Value model](./01-value-model.md)
+- [Escape analysis](./02-escape-analysis.md)
+- [Thread safety](./10-thread-safety.md)
+- [No tracing GC](./08-no-tracing-gc.md)

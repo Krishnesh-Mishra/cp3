@@ -140,7 +140,7 @@ The parameter and return annotations are checked by CP3. Change one argument to 
 
 ## Related pages
 
-- [For JavaScript and TypeScript developers](03-javascript-typescript-developers.md)
+- [For JavaScript and TypeScript developers](./03-javascript-typescript-developers.md)
 - [Bindings and declarations](../01-language/01-variables-and-bindings/01-bindings.md)
 - [Type-system selection](../01-language/07-native-types/01-project-type-system.md)
 - [CLI commands](../04-compiler-cli/01-cli-commands.md)

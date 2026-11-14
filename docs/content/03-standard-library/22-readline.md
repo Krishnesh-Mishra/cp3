@@ -99,6 +99,6 @@ All reads delegate to the process family's stdin pump (`process.stdin`): one sib
 
 ## Related pages
 
-- [Console](01-console.md) — `console.input`, `console.readKey`, and the `keypress` / `line` / `close` stdin listeners
-- [Process](03-process.md) — `process.stdin`, the shared pump behind every read here
-- [Time and stopwatches](21-time.md) — monotonic timers for the same event loop
+- [Console](./01-console.md) — `console.input`, `console.readKey`, and the `keypress` / `line` / `close` stdin listeners
+- [Process](./03-process.md) — `process.stdin`, the shared pump behind every read here
+- [Time and stopwatches](./21-time.md) — monotonic timers for the same event loop

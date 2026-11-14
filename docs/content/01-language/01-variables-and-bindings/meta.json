@@ -1,0 +1,10 @@
+{
+  "title": "Variables and bindings",
+  "pages": [
+    "01-bindings",
+    "02-types",
+    "03-mutability",
+    "04-scope-and-initialization",
+    "05-destructuring"
+  ]
+}

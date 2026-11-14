@@ -52,7 +52,7 @@ UTF-8 decoding is appropriate for text bytes; choose hex, base64 or base64url wh
 
 ## Buffer and typed arrays
 
-Buffers and typed arrays serve related but distinct needs. Buffer is the byte-oriented standard-library type. Numeric typed arrays interpret storage as fixed-width values and are documented in [Typed arrays](16-typed-arrays.md).
+Buffers and typed arrays serve related but distinct needs. Buffer is the byte-oriented standard-library type. Numeric typed arrays interpret storage as fixed-width values and are documented in [Typed arrays](./16-typed-arrays.md).
 
 ## API summary
 

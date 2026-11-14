@@ -4,7 +4,7 @@ chapter: Chapter 3 · Standard library
 ---
 # URL extensions
 
-`std/url` is documented in [URL and query strings](19-url.md). This page covers the extension behaviors layered on top of that surface: RFC 3986 base resolution, normalization, IPv6/userinfo handling, form-urlencoded serialization details, and permissive percent-decoding. It lists the same import forms and full signatures so it can be read alongside the core page.
+`std/url` is documented in [URL and query strings](./19-url.md). This page covers the extension behaviors layered on top of that surface: RFC 3986 base resolution, normalization, IPv6/userinfo handling, form-urlencoded serialization details, and permissive percent-decoding. It lists the same import forms and full signatures so it can be read alongside the core page.
 
 ```ts
 import { URL, URLSearchParams } from "std/url";
@@ -96,7 +96,7 @@ Invalid-URL construction throws a catchable CP3 `Error` (`Thrown::make`), never 
 
 ## Related pages
 
-- [Core URL surface](19-url.md)
-- [Buffers](11-buffer.md) — hex/base64 byte rendering
-- [Text encoding](20-text.md) — `TextEncoder` / `TextDecoder` (UTF-8-only)
-- [Network](13-network.md) — fetch and HTTP server APIs that consume URLs
+- [Core URL surface](./19-url.md)
+- [Buffers](./11-buffer.md) — hex/base64 byte rendering
+- [Text encoding](./20-text.md) — `TextEncoder` / `TextDecoder` (UTF-8-only)
+- [Network](./13-network.md) — fetch and HTTP server APIs that consume URLs
