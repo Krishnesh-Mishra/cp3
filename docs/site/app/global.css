@@ -48,6 +48,26 @@ html {
   text-underline-offset: 4px;
 }
 
+/* the "Documentation" separator: quiet section label — smaller, muted,
+   with tighter top/bottom spacing so it doesn't dominate the tree */
+#nd-sidebar p.inline-flex.text-sm {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-fd-muted-foreground);
+  margin-top: 0.75rem;
+  margin-bottom: 0.125rem;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+
+/* every top-level row carries mt-4; don't stack that on top of the
+   separator's own spacing — the row right after it sits tight */
+#nd-sidebar p.inline-flex.text-sm + div {
+  margin-top: 0.25rem;
+}
+
 /* top-left brand row: roomier layout, larger icon buttons, and a subtle
    divider so the corner reads as a proper header instead of floating */
 #nd-sidebar > div:first-child {
