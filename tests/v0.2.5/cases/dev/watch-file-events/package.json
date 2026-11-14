@@ -1,0 +1,6 @@
+﻿{
+  "name": "watch-file-events",
+  "version": "0.0.1",
+  "type": "application",
+  "main": "src/index.cp3"
+}

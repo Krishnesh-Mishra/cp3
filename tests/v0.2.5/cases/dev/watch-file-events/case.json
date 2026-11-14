@@ -1,0 +1,11 @@
+﻿{
+  "args": ["dev", "src/index.cp3"],
+  "scenario": "watch",
+  "requiresE2E": true,
+  "env": { "CP3_DEV_WATCH_DEBUG": "1" },
+  "stdoutContains": ["9", "10"],
+  "stderrContains": ["build ok - ", "source changed; rebuilding..."],
+  "stderrNotContains": ["file events failed", "file events unavailable", "GetOverlappedResult failed", "terminate called"],
+  "filesExist": [".cp3/out/index.exe"],
+  "timeoutSeconds": 150
+}

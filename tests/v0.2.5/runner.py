@@ -24,6 +24,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -154,6 +156,104 @@ def assert_spec(case: dict, proc, tmp: Path, prefix: str) -> list[str]:
     return failures
 
 
+class WatchOutcome:
+    """Minimal stand-in for subprocess.CompletedProcess for watch cases."""
+    def __init__(self, stdout: str, stderr: str, returncode: int):
+        self.stdout = stdout
+        self.stderr = stderr
+        self.returncode = returncode
+
+
+def run_watch_case(case: dict, cp3c: str, tmp: Path):
+    """Spawn `cp3 dev`, wait for the first build, edit a watched file, wait
+    for the rebuild, kill the watcher. Asserts what assert_spec can only
+    check for completed processes."""
+    case_dir = Path(case["_dir"])
+    name = case.get("name") or case["_path"]
+    timeout = float(case.get("timeoutSeconds", 150.0))
+    args = case.get("args", ["dev", "src/index.cp3"])
+    env = dict(case.get("env", {}))
+    prefix = f"{name}: "
+    full_env = dict(os.environ)
+    full_env.update(env)
+    out_lines: list[str] = []
+    err_lines: list[str] = []
+    proc = subprocess.Popen(
+        [cp3c] + args,
+        cwd=str(tmp),
+        env=full_env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+
+    def drain(stream, bucket):
+        for line in iter(stream.readline, ""):
+            bucket.append(line)
+
+    threads = [
+        threading.Thread(target=drain, args=(proc.stdout, out_lines), daemon=True),
+        threading.Thread(target=drain, args=(proc.stderr, err_lines), daemon=True),
+    ]
+    for t in threads:
+        t.start()
+
+    def count_build_ok():
+        return sum(1 for line in err_lines if "build ok - " in line)
+
+    def wait_until(predicate, seconds):
+        deadline = time.time() + seconds
+        while time.time() < deadline:
+            if predicate():
+                return True
+            if proc.poll() is not None:
+                return predicate()
+            time.sleep(0.05)
+        return predicate()
+
+    def stop_watcher():
+        if proc.poll() is not None:
+            return proc.returncode
+        if os.name == "nt":
+            # /T takes the child tree with it; the spawned exe exits on its
+            # own, but a restarting child must never outlive the watcher.
+            subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           timeout=10)
+        else:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+        return proc.wait(timeout=5) if proc.poll() is None else proc.returncode
+
+    failures = []
+    try:
+        if not wait_until(lambda: count_build_ok() >= 1, timeout):
+            stop_watcher()
+            failures.append(f"{prefix}initial build never reported 'build ok -' "
+                            f"(timeout {timeout}s)")
+        else:
+            apply_edits(case_dir, tmp)
+            if not wait_until(lambda: count_build_ok() >= 2, timeout):
+                failures.append(f"{prefix}edited file produced no rebuild "
+                                f"(timeout {timeout}s)")
+            else:
+                # Give the respawned child a moment to print.
+                wait_until(lambda: bool(out_lines), 3.0)
+        stop_watcher()
+        for t in threads:
+            t.join(timeout=1.0)
+        return failures, WatchOutcome("".join(out_lines), "".join(err_lines),
+                                      proc.returncode or 0)
+    except OSError as exc:
+        stop_watcher()
+        return [f"{prefix}could not run the watch loop: {exc}"], None
+
+
 def run_case(case: dict, cp3c: str) -> tuple[str, list[str], subprocess.CompletedProcess | None]:
     case_dir = Path(case["_dir"])
     name = case.get("name") or case["_path"]
@@ -165,7 +265,12 @@ def run_case(case: dict, cp3c: str) -> tuple[str, list[str], subprocess.Complete
     tmp = prepare_tmp(case_dir, case["_path"])
     try:
         pass
-        if scenario in ("fresh", "dev-once"):
+        watch_failures: list[str] = []
+        if scenario == "watch":
+            watch_failures, proc = run_watch_case(case, cp3c, tmp)
+            if proc is None:
+                return ("FAIL", watch_failures, None)
+        elif scenario in ("fresh", "dev-once"):
             proc = run_cp3c(cp3c, args, tmp, env, timeout)
             pass_n = 1
         elif scenario in ("rebuild", "incremental", "module-libs"):
@@ -199,7 +304,7 @@ def run_case(case: dict, cp3c: str) -> tuple[str, list[str], subprocess.Complete
         else:
             return ("FAIL", [f"unknown scenario {scenario!r} (infra)"], None)
 
-        failures = assert_spec(case, proc, tmp, prefix)
+        failures = assert_spec(case, proc, tmp, prefix) + watch_failures
         # Extra guard for the crash class this suite exists to catch.
         for banned in ("terminate called without an active exception",):
             if banned in proc.stderr:
