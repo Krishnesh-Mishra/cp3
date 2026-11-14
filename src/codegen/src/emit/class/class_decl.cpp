@@ -197,7 +197,15 @@ void Generator::emitAllClasses() {
                      });
     for (ClassModel* cm : ordered) {
         if (!modelEmitted_.insert(cm->decl->nodeId).second) continue;
-        emitClassStruct(*cm, classDecls_, 0, &classDefs_);
+        if (cm->typeParams.empty()) {
+            emitClassStruct(*cm, classDecls_, 0, &classDefs_);
+        } else {
+            // A generic class's members must be visible in every TU that
+            // instantiates it. Emit every body inline inside the shared
+            // header's struct; the unit TU emits no duplicate (the header's
+            // copy is identical).
+            emitClassStruct(*cm, classDecls_, 0, nullptr);
+        }
     }
 }
 

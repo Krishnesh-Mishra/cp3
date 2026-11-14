@@ -213,8 +213,8 @@ void Generator::emitExport(const ExportDeclaration& ed, std::string& decls,
                     expected_ = ci.type;
                     const std::string initText = expr(*ed.defaultExpr);
                     expected_ = savedExpected;
-                    if (scaleMode_) line(decls, 1, "inline thread_local " + ci.cpp + " " + name + "{};");
-                    else line(decls, 1, "inline " + ci.cpp + " " + name + "{};");
+                    moduleStateLine(decls, 1, scaleMode_ ? "thread_local " : "",
+                                    "", ci.cpp, name);
                     line(mainBody, 1, moduleRef(rawName) + " = " + initText + ";");
                     declare(rawName, std::optional<Type>(initType),
                             /*cell=*/false, /*global=*/true);
@@ -287,13 +287,18 @@ void Generator::addFunction(const FunctionDeclaration& fd, std::string& decls,
         defs += intSignature(fd) + " {\n" + fastBody + "}\n\n";
     }
     const std::string prologue = fastKept ? intWrapperPrologue(fd) : std::string();
-    emitLineDirective(fd, defs);
-    defs += signatureDef + " {\n";
+    // A function template: the definition must be visible in every TU that
+    // instantiates it. Emit its body in the shared header instead of this
+    // unit's TU; the unit TU emits no matching definition (the header's copy
+    // is identical). Non-generic functions keep the unit-TU definition.
+    std::string& bodyDecls = fd.typeParams.empty() ? defs : decls;
+    emitLineDirective(fd, bodyDecls);
+    bodyDecls += signatureDef + " {\n";
     // The prologue is structural: pin its lines to the function line so the
     // wrapper's argument stores cannot pose as statements of their own (the
     // source line counter would otherwise drift one line per statement).
-    emitMappedRaw(fd, prologue, defs);
-    defs += body + "}\n\n";
+    emitMappedRaw(fd, prologue, bodyDecls);
+    bodyDecls += body + "}\n\n";
 }
 
 // The ordinary lowering of a function body: cp3 `number` stays a double. This
