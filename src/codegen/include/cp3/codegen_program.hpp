@@ -47,6 +47,11 @@ struct GenerateProgramInput {
     DiagnosticSink& sink;
     bool lineDirectives = false;
     CodegenOptions options;
+    // Dev hot-patch seam (CP3_DEV_MODULE_LIBS): emit one DLL-shaped TU per
+    // unit (extern "C" initializer + entry export) and NO monolithic entry
+    // TU. Unsupported programs (top-level await) fall back to the ordinary
+    // plural emission with moduleLibsUnsupported set on the result.
+    bool moduleLibs = false;
 };
 
 // Lowers a local-module program to one C++20 translation unit. Out-of-scope
@@ -77,7 +82,12 @@ struct GeneratedProgramUnit {
 struct GeneratedProgramModules {
     GeneratedModule sharedHeader;   // .source = the shared .hpp text
     std::vector<GeneratedProgramUnit> units;
-    GeneratedModule entry;          // .source = the entry TU text
+    GeneratedModule entry;          // .source = the entry TU text (empty in module-libs mode)
+    // Set when the caller asked for the dev module-libs emission but the
+    // program is not supported (top-level await). The result is the ordinary
+    // plural emission in that case; the caller should treat this as a
+    // request to fall back to the whole-program dev build.
+    bool moduleLibsUnsupported = false;
 };
 
 // Lowers a local-module program to one shared header plus ONE .cpp per

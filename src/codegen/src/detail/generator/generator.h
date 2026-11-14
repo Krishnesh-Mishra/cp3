@@ -141,14 +141,39 @@ public:
               const std::string& moduleName, bool lineDirectives = false,
               const CodegenOptions& options = CodegenOptions{});
 
+    // Dev module-libs build (CP3_DEV_MODULE_LIBS): namespace-scope module
+    // state splits between the shared header (an `extern` declaration every
+    // TU sees) and the owning unit's TU (the definition the DLL exports).
+    // The generated libraries share address space only if the variable
+    // exists once, in the defining module's DLL. Off by default: the
+    // ordinary inline emission is untouched.
+    bool moduleLibs_ = false;
+    // The owning unit's state definitions, appended verbatim inside its
+    // namespace block by the assembly (program.cpp) before the module
+    // initializer. Empty in the ordinary build.
+    std::string splitStateDefs_;
+    // Emit the header side of a namespace-scope module-state variable and
+    // record its definition for the owning unit's TU. `initText` is the
+    // initializer expression without `= `. With moduleLibs_ off this is the
+    // ordinary inline definition in the header.
+    void moduleStateLine(std::string& decls, int indent,
+                         const std::string& tl, const std::string& cv,
+                         const std::string& typeCpp, const std::string& name,
+                         const std::string& initText = "");
+
     // Top-level orchestration: collect names, emit every statement, assemble.
     GeneratedModule run(const Program& program);
 
     // The whole-program entry and its per-unit emission (emit/program.cpp).
     GeneratedModule runProgram(const ModuleGraph& graph,
                                const std::vector<CheckedModuleUnit>& units);
+    // `moduleLibs` asks for the dev module-libs emission (CP3_DEV_MODULE_LIBS):
+    // the plural TUs plus the split-ABI exports instead of the monolithic
+    // entry TU. Unsupported programs fall back to the ordinary plural
+    // emission with moduleLibsUnsupported set on the result.
     GeneratedProgramModules runProgramModules(
-        const ModuleGraph& graph, const std::vector<CheckedModuleUnit>& units);
+        const ModuleGraph& graph, const std::vector<CheckedModuleUnit>& units,
+        bool moduleLibs = false);
 
 private:
     // The assembly both pipelines share (link + virtual set + per-unit texts).

@@ -161,6 +161,11 @@ struct BuildRequest {
         std::string moduleName;         // output stem, e.g. "worker_impl"
         const GeneratedModule* module = nullptr;  // generated C++ (cpp/hpp)
         std::string sourceKey;          // incremental cache key (the .cp3 path)
+        // Dev module-libs build (CP3_DEV_MODULE_LIBS): the unit's C++
+        // namespace and whether it is the entry unit (its DLL carries
+        // `cp3_module_entry_v1`). Empty for ordinary builds.
+        std::string namesp;
+        bool isEntryUnit = false;
     };
 
     // One implementation unit of an installed package. The package's generated
@@ -193,6 +198,12 @@ struct BuildRequest {
     // travel with the compile options: their include roots, defines,
     // libraries and runtime DLLs join the build.
     bool execute = false;                     // `cp3c run` was requested
+    // Dev module-libs build (CP3_DEV_MODULE_LIBS, Incremental only): the
+    // plural units link as one DLL per module, the runtime TUs as
+    // cp3runtime_dev.dll, and a tiny generated bootstrap exe loads and
+    // verifies them at process start instead of one static exe. The normal
+    // dev build is unchanged when this is false.
+    bool moduleLibs = false;
 };
 
 // Compiles + links the generated module through the detected toolchain,

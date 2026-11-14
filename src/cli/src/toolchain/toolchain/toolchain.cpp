@@ -219,4 +219,101 @@ std::vector<std::string> linkArgs(const Toolchain& tc, BuildProfile profile,
     return args;
 }
 
+std::vector<std::string> devDllLinkArgs(const Toolchain& tc,
+                                        BuildProfile profile,
+                                        const fs::path& dll,
+                                        const fs::path& importLib,
+                                        const std::vector<fs::path>& objects,
+                                        const std::vector<fs::path>& importLibs,
+                                        const std::vector<std::string>& nativeLink,
+                                        const BuildOptimizations& optimizations,
+                                        const fs::path& exportDef) {
+    std::vector<std::string> args;
+    args.push_back(tc.program);
+    for (const std::string& flag : tc.targetFlags) args.push_back(flag);
+    args.push_back("-shared");
+    args.push_back("-o");
+    args.push_back(dll.string());
+    // A unit DLL has exactly one object; the runtime DLL's object list fits
+    // an argv on this target. No response file needed. The module-definition
+    // file is a regular link input: its EXPORTS list is exactly the set of
+    // symbols the DLL publishes.
+    for (const fs::path& obj : objects) args.push_back(obj.string());
+    if (!exportDef.empty()) args.push_back(exportDef.string());
+    // Same LTO/optimization visibility as the exe link.
+    for (const std::string& f : optimizationFlags(profile, optimizations)) {
+        args.push_back(f);
+    }
+    if (profile != BuildProfile::Debug) args.push_back("-Wl,--gc-sections");
+    args.push_back("-Wl,--out-implib," + importLib.string());
+#if defined(_WIN32)
+    if (usesMingwTarget(tc)) {
+        std::error_code ec;
+        const fs::path lld = fs::path(tc.program).parent_path() / "ld.lld.exe";
+        if (fs::is_regular_file(lld, ec)) args.push_back("-fuse-ld=lld");
+    }
+    // Self-contained DLLs (the exe convention is -static): never hunt for a
+    // libstdc++/libgcc sibling of the sysroot at load time. libstdc++'s
+    // std::mutex lowers to pthread_* on MinGW; winpthread must resolve to
+    // the static archive (-lwinpthread alone would bind the DLL import).
+    args.push_back("-static-libgcc");
+    args.push_back("-static-libstdc++");
+    if (usesMingwTarget(tc)) {
+        args.push_back("-Wl,-Bstatic");
+        args.push_back("-lwinpthread");
+        args.push_back("-Wl,-Bdynamic");
+    }
+#else
+    {
+        std::error_code ec;
+        const fs::path lld = fs::path(tc.program).parent_path() / "ld.lld";
+        if (fs::is_regular_file(lld, ec)) args.push_back("-fuse-ld=lld");
+    }
+#endif
+    // Native-backend libraries last, minus the exe-only -static startup flag.
+    // -lwinpthread stays: libstdc++'s std::mutex lowers to pthread_mutex_*
+    // on MinGW and every self-contained DLL needs it.
+    for (const std::string& f : nativeLink) {
+        if (f == "-static") continue;
+        args.push_back(f);
+    }
+    for (const fs::path& lib : importLibs) args.push_back(lib.string());
+    return args;
+}
+
+std::vector<std::string> bootstrapLinkArgs(const Toolchain& tc,
+                                           BuildProfile profile,
+                                           const fs::path& exe,
+                                           const fs::path& cpp,
+                                           const fs::path& runtimeInclude,
+                                           const BuildOptimizations& optimizations) {
+    std::vector<std::string> args;
+    args.push_back(tc.program);
+    for (const std::string& flag : tc.targetFlags) args.push_back(flag);
+    args.push_back("-std=c++20");
+    args.push_back("-o");
+    args.push_back(exe.string());
+    args.push_back(cpp.string());
+    args.push_back("-I" + runtimeInclude.string());
+    for (const std::string& f : optimizationFlags(profile, optimizations)) {
+        args.push_back(f);
+    }
+#if defined(_WIN32)
+    if (usesMingwTarget(tc)) {
+        std::error_code ec;
+        const fs::path lld = fs::path(tc.program).parent_path() / "ld.lld.exe";
+        if (fs::is_regular_file(lld, ec)) args.push_back("-fuse-ld=lld");
+    }
+    args.push_back("-static");
+    if (usesMingwTarget(tc)) args.push_back("-lwinpthread");
+#else
+    {
+        std::error_code ec;
+        const fs::path lld = fs::path(tc.program).parent_path() / "ld.lld";
+        if (fs::is_regular_file(lld, ec)) args.push_back("-fuse-ld=lld");
+    }
+#endif
+    return args;
+}
+
 }  // namespace cp3::cli

@@ -34,9 +34,13 @@
 #include <string>
 #include <system_error>
 #include <thread>
+#include <unordered_set>
 #include <vector>
+#include <sstream>
+#include <iterator>
 
 #include "detail/core/lane_b.hpp"
+#include "detail/hotpatch/bootstrap.hpp"
 
 #if defined(_WIN32)
 #  include <windows.h>
@@ -597,6 +601,30 @@ void laneBBody(const CliOptions opt, const std::string entryString) {
 // Forward declaration - defined below with the link-stamp helpers.
 std::string fileStamp(const fs::path& path);
 
+// The object-file path for one runtime TU. Every runtime TU compiles from
+// its real source location, so its object mirrors that location under
+// cache/_runtime/ (a runtime source outside the repository root keeps a
+// parent-qualified flat name). Shared by buildJobs and the dev module-libs
+// link path, which reassembles the runtime DLL from the same objects.
+fs::path runtimeObjectFor(const fs::path& runtimeSource,
+                          const fs::path& cacheDir) {
+    const fs::path runtimeRoot = repositoryRoot();
+    std::error_code relEc;
+    fs::path rel;
+    if (!runtimeRoot.empty()) {
+        rel = fs::relative(runtimeSource, runtimeRoot, relEc);
+    }
+    if (!runtimeRoot.empty() && !relEc && !rel.empty() &&
+        rel.generic_string().find("..") != 0) {
+        fs::path objRel = rel;
+        objRel.replace_extension(".o");
+        return cacheDir / "_runtime" / objRel;
+    }
+    return cacheDir / "_runtime" /
+           ("_cp3_runtime_" + runtimeSource.parent_path().filename().string() +
+            "_" + runtimeSource.stem().string() + ".o");
+}
+
 // Builds the job list for the extra TU modules (spec 13), the entry TU, the
 // runtime TUs, and the package implementations. The manifest is NOT saved
 // here; compileAll saves it after every TU settles.
@@ -647,39 +675,26 @@ bool buildJobs(BuildState& st, const BuildRequest& request,
         }
     }
     // Entry TU first, then the runtime TUs the program actually needs.
-    ObjectJob entryJob;
-    entryJob.sourceKey = entryKey;
-    entryJob.cpp = cppPath;
-    entryJob.obj = objPath;
-    entryJob.dependencyHash = unitFingerprint;
-    entryJob.extraFlags = userInclude;
-    jobs.push_back(std::move(entryJob));
-    // The runtime TUs compile from their real source location, so the
-    // object files mirror that location under cache/_runtime/: the object
-    // for <repo>/src/std/console/runtime.cpp is cache/_runtime/src/std/
-    // console/runtime.o. That gives every runtime TU a unique path without
-    // any mangling. Vendored runtime sources outside the repository root
-    // keep a parent-qualified flat name.
-    const fs::path runtimeRoot = repositoryRoot();
+    // The dev module-libs build has no monolithic entry TU: the entry
+    // unit's DLL carries the statements (cp3_module_entry_v1) and the
+    // generated bootstrap exe loads everything.
+    if (!request.moduleLibs) {
+        ObjectJob entryJob;
+        entryJob.sourceKey = entryKey;
+        entryJob.cpp = cppPath;
+        entryJob.obj = objPath;
+        entryJob.dependencyHash = unitFingerprint;
+        entryJob.extraFlags = userInclude;
+        jobs.push_back(std::move(entryJob));
+    }
+    // Vendored runtime sources outside the repository root keep a
+    // parent-qualified flat name.
     for (const fs::path& rt : st.layout.runtimeSources) {
         ObjectJob rtJob;
         rtJob.sourceKey = rt.string();
         rtJob.cpp = rt;
+        rtJob.obj = runtimeObjectFor(rt, st.layout.cacheDir);
         std::error_code relEc;
-        fs::path rel;
-        if (!runtimeRoot.empty()) {
-            rel = fs::relative(rt, runtimeRoot, relEc);
-        }
-        if (!runtimeRoot.empty() && !relEc && !rel.empty() &&
-            rel.generic_string().find("..") != 0) {
-            fs::path objRel = rel;
-            objRel.replace_extension(".o");
-            rtJob.obj = st.layout.cacheDir / "_runtime" / objRel;
-        } else {
-            rtJob.obj = st.layout.cacheDir / "_runtime" /
-                        ("_cp3_runtime_" + rt.parent_path().filename().string() +
-                         "_" + rt.stem().string() + ".o");
-        }
         fs::create_directories(rtJob.obj.parent_path(), relEc);
         jobs.push_back(std::move(rtJob));
     }
@@ -923,6 +938,389 @@ bool linkProgram(BuildState& st, const fs::path& exePath) {
         return false;
     }
     writeTextFile(stampPath, stamp, nullptr);
+    return true;
+}
+
+// Atomically replace `dest` with `src` (rename-over-mapped-image semantics on
+// Windows: the running dev child keeps its mapped image). Same contract as the
+// exe link's tmp-then-move.
+bool replaceFileAtomic(const fs::path& src, const fs::path& dest) {
+    std::error_code renameEc;
+#if defined(_WIN32)
+    if (MoveFileExW(src.c_str(), dest.c_str(),
+                    MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        return true;
+    }
+    return false;
+#else
+    fs::rename(src, dest, renameEc);
+    return !renameEc;
+#endif
+}
+
+// Writes `<buildDir>/<stem>.def` exporting exactly the symbols that belong to
+// cp3. Every cp3 symbol - the cp3:: namespaces and the extern "C" module
+// hooks - contains "cp3"; the static archives a DLL absorbs (libstdc++,
+// libuv, uWebSockets, OpenSSL, ...) never do. lld has no --exclude-libs, so
+// this module-definition file is how the module DLLs keep their export
+// tables limited to the cp3 surface their consumers import.
+bool writeModuleExportDef(const Toolchain& tc,
+                          const std::vector<fs::path>& objects,
+                          const fs::path& defPath,
+                          const std::string& libraryStem) {
+    const fs::path nmDir = fs::path(tc.program).parent_path();
+    fs::path nm = nmDir / "llvm-nm.exe";
+    if (!fs::is_regular_file(nm)) nm = nmDir / "llvm-nm";
+    if (!fs::is_regular_file(nm)) nm = nmDir / "nm.exe";
+    if (!fs::is_regular_file(nm)) nm = nmDir / "nm";
+    if (!fs::is_regular_file(nm)) {
+        std::fprintf(stderr,
+                     "cp3c: dev module libs: llvm-nm (or nm) not found beside "
+                     "the compiler at '%s'\n",
+                     nmDir.string().c_str());
+        return false;
+    }
+    std::vector<std::string> args{nm.string(), "--defined-only", "-g"};
+    for (const fs::path& obj : objects) args.push_back(obj.string());
+    std::string out;
+    if (runProcessCapture(args, out) != 0) {
+        std::fprintf(stderr,
+                     "cp3c: dev module libs: %s failed to dump the object symbols\n",
+                     nm.string().c_str());
+        return false;
+    }
+    std::vector<std::string> functions;
+    std::vector<std::string> dataSymbols;
+    std::string line;
+    const auto flushLine = [&line, &functions, &dataSymbols] {
+        while (!line.empty() && line.back() == '\r') line.pop_back();
+        std::istringstream iss(line);
+        std::vector<std::string> tokens{std::istream_iterator<std::string>(iss),
+                                        std::istream_iterator<std::string>()};
+        line.clear();
+        if (tokens.size() < 3) return;
+        if (tokens[1].size() != 1) return;
+        const char type = tokens[1][0];
+        const std::string& symbol = tokens.back();
+        if (symbol.find("cp3") == std::string::npos) return;
+        switch (type) {
+            // Text: plain EXPORTS (the implib exports a call-stub).
+            case 'T': case 't': case 'W': case 'w': case 'I': case 'i':
+                functions.push_back(symbol);
+                break;
+            // Data: EXPORTS ... DATA (the implib exports a data pointer;
+            // without the keyword the symbol exports as a function and
+            // consumers would read the jump stub as the address of the
+            // variable - observed as denormal garbage at runtime).
+            case 'D': case 'd': case 'B': case 'b': case 'R': case 'r':
+            case 'S': case 's': case 'G': case 'g': case 'C': case 'c':
+            case 'V': case 'v':
+                dataSymbols.push_back(symbol);
+                break;
+            default:
+                break;  // unknown letter: skip (a missing export is a loud link error, not silent corruption)
+        }
+    };
+    for (const char c : out) {
+        if (c == '\n') flushLine();
+        else line.push_back(c);
+    }
+    flushLine();
+    std::sort(functions.begin(), functions.end());
+    std::sort(dataSymbols.begin(), dataSymbols.end());
+    functions.erase(std::unique(functions.begin(), functions.end()),
+                    functions.end());
+    dataSymbols.erase(std::unique(dataSymbols.begin(), dataSymbols.end()),
+                      dataSymbols.end());
+    if (functions.empty() && dataSymbols.empty()) {
+        std::fprintf(stderr,
+                     "cp3c: dev module libs: no cp3 symbols found in the objects "
+                     "for '%s'\n",
+                     libraryStem.c_str());
+        return false;
+    }
+    std::string def = "LIBRARY " + libraryStem + "\nEXPORTS\n";
+    for (const std::string& symbol : functions) {
+        def += symbol;
+        def += '\n';
+    }
+    for (const std::string& symbol : dataSymbols) {
+        def += symbol;
+        def += " DATA\n";
+    }
+    if (!writeTextFile(defPath, def, nullptr)) {
+        std::fprintf(stderr,
+                     "cp3c: dev module libs: cannot write %s\n",
+                     defPath.string().c_str());
+        return false;
+    }
+    return true;
+}
+
+// Forward declarations - defined below with the link helpers.
+std::string fileContentDigest(const fs::path& path);
+bool linkModuleLib(BuildState& st, const BuildLayout& layout,
+                   const fs::path& dll, const fs::path& importLib,
+                   const std::vector<fs::path>& objects,
+                   const std::vector<fs::path>& importLibs,
+                   const std::vector<std::string>& nativeLink,
+                   const std::string& label);
+
+// Content digest of a file: used to decide whether a module-library's
+// import stubs changed. An import library can be rewritten byte-identically
+// while its mtime changes - downstream module DLLs must not relink for that,
+// so mtime-based stamps are not enough.
+std::string fileContentDigest(const fs::path& path) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) return std::string();
+    std::uint64_t hash = 14695981039346656037ull;  // FNV offset basis
+    char buf[8192];
+    for (;;) {
+        in.read(buf, sizeof buf);
+        const std::streamsize got = in.gcount();
+        if (got <= 0) break;
+        for (std::streamsize i = 0; i < got; ++i) {
+            hash ^= static_cast<unsigned char>(buf[i]);
+            hash *= 1099511628211ull;  // FNV prime
+        }
+    }
+    return std::to_string(hash);
+}
+
+// The identity of one dev module-libs DLL: the profile, header fingerprint,
+// compiler key, the vendored archives, every object's path + TU content
+// hash from the manifest, and the import libraries' BYTES (linker stubs do
+// not change when the DLL is rebuilt without its symbols changing, so an
+// edited leaf module never relinks its consumers).
+std::string moduleLibStampKey(const BuildState& st,
+                              const std::string& libraryStem,
+                              const std::vector<fs::path>& objects,
+                              const std::vector<fs::path>& importLibs) {
+    std::string material = st.profile;
+    material += '\n';
+    material += st.headerFingerprint;
+    material += '\n';
+    material += st.compilerKey;
+    material += '\n';
+    material += libraryStem;
+    for (const std::string& flag : st.nativeFlags.link) {
+        material += '\n';
+        material += flag;
+    }
+    material += vendoredArchiveStamps(st.nativeFlags.link);
+    for (const fs::path& obj : objects) {
+        material += '\n';
+        material += obj.string();
+        material += '\t';
+        for (const CacheEntry& e : st.manifest) {
+            if (e.obj == obj.string()) {
+                material += e.hash;
+                break;
+            }
+        }
+    }
+    for (const fs::path& lib : importLibs) {
+        material += '\n';
+        material += lib.string();
+        material += '\t';
+        material += fileContentDigest(lib);
+    }
+    return std::to_string(fnv1a64(material));
+}
+
+// One dev module-libs DLL with content-stamp reuse: the DLL and its import
+// library are kept when nothing that affects them changed. The first build
+// links; every later no-change build does nothing.
+bool linkModuleLibStamped(BuildState& st, const BuildLayout& layout,
+                          const fs::path& dll, const fs::path& implib,
+                          const std::vector<fs::path>& objects,
+                          const std::vector<fs::path>& importLibs,
+                          const std::vector<std::string>& nativeLink,
+                          const std::string& label) {
+    const CliOptions& opt = st.opt;
+    const std::string libraryStem = fs::path(dll).stem().string();
+    const fs::path stampDir = layout.cacheDir / "module-libs";
+    std::error_code stampEc;
+    fs::create_directories(stampDir, stampEc);
+    const fs::path stampPath = stampDir / (libraryStem + ".stamp");
+    if (!st.force) {
+        const std::string key =
+            moduleLibStampKey(st, libraryStem, objects, importLibs);
+        std::string previous;
+        if (fs::is_regular_file(dll, stampEc) &&
+            fs::is_regular_file(implib, stampEc) &&
+            readTextFile(stampPath, previous) && previous == key) {
+            if (opt.verbose) {
+                std::fprintf(stderr,
+                             "cp3c: dev module libs: reusing %s\n",
+                             dll.string().c_str());
+            }
+            return true;
+        }
+        const bool ok = linkModuleLib(st, layout, dll, implib, objects,
+                                      importLibs, nativeLink, label);
+        if (ok) writeTextFile(stampPath, key, nullptr);
+        return ok;
+    }
+    return linkModuleLib(st, layout, dll, implib, objects, importLibs,
+                         nativeLink, label);
+}
+
+// Link ONE shared library for the dev module-libs pipeline. The output is
+// linked to a sibling temp file and moved into place atomically, so a
+// still-running dev child keeps its mapped image. The import library is
+// emitted beside the DLL so later links can name it explicitly.
+bool linkModuleLib(BuildState& st, const BuildLayout& layout,
+                   const fs::path& dll,
+                   const fs::path& importLib,
+                   const std::vector<fs::path>& objects,
+                   const std::vector<fs::path>& importLibs,
+                   const std::vector<std::string>& nativeLink,
+                   const std::string& label) {
+    const CliOptions& opt = st.opt;
+    const std::string libraryStem = fs::path(dll).stem().string();
+    const fs::path defPath = layout.buildDir / (libraryStem + ".def");
+    if (!writeModuleExportDef(st.tc, objects, defPath, libraryStem)) {
+        return false;
+    }
+    const fs::path tmp = fs::path(dll.string() + ".link-tmp");
+    const fs::path tmpImplib = fs::path(importLib.string() + ".link-tmp");
+    std::vector<std::string> args = cp3::cli::devDllLinkArgs(
+        st.tc, st.opt.compile.profile, tmp, tmpImplib, objects, importLibs,
+        nativeLink, st.optimizations, defPath);
+    if (opt.verbose) {
+        std::fprintf(stderr, "cp3c: %s\n", describeCommand(args).c_str());
+    }
+    const int rc = runProcess(args);
+    if (rc != 0) {
+        std::remove(tmp.string().c_str());
+        std::remove(tmpImplib.string().c_str());
+        std::fprintf(stderr,
+                     "cp3c: dev module libs: linking %s failed (exit %d)\n",
+                     label.c_str(), rc);
+        return false;
+    }
+    if (!replaceFileAtomic(tmp, dll)) {
+        std::remove(tmp.string().c_str());
+        std::fprintf(stderr,
+                     "cp3c: dev module libs: cannot replace '%s' (the image is "
+                     "mapped or the file is read-only); stop the running app and "
+                     "rebuild\n",
+                     dll.string().c_str());
+        return false;
+    }
+    if (!replaceFileAtomic(tmpImplib, importLib)) {
+        std::remove(tmpImplib.string().c_str());
+        std::fprintf(stderr,
+                     "cp3c: dev module libs: cannot replace import library '%s'\n",
+                     importLib.string().c_str());
+        return false;
+    }
+    return true;
+}
+
+// The dev module-libs link (CP3_DEV_MODULE_LIBS): cp3runtime_dev.dll from the
+// runtime TUs, one DLL per unit in dependency-first emission order, and a
+// small generated bootstrap exe that loads and verifies them at process
+// start. Replaces the monolithic exe link when request.moduleLibs is set.
+// The module graph is acyclic (checked by the caller), so each link sees the
+// import libraries of everything it depends on.
+bool linkModuleLibs(BuildState& st, const BuildLayout& layout,
+                    const fs::path& exePath, const BuildRequest& request) {
+    const CliOptions& opt = st.opt;
+    const std::vector<std::string>& nativeLink = st.nativeFlags.link;
+    const fs::path& outDir = layout.outDir;
+    const fs::path& cacheDir = st.layout.cacheDir;
+
+    std::vector<fs::path> runtimeObjs;
+    runtimeObjs.reserve(st.layout.runtimeSources.size());
+    for (const fs::path& rt : st.layout.runtimeSources) {
+        runtimeObjs.push_back(runtimeObjectFor(rt, cacheDir));
+    }
+    for (const fs::path& obj : runtimeObjs) {
+        if (!fs::is_regular_file(obj)) {
+            std::fprintf(stderr,
+                         "cp3c: dev module libs: missing runtime object '%s'\n",
+                         obj.string().c_str());
+            return false;
+        }
+    }
+
+    // 1) cp3runtime_dev.dll: everything generated code calls lives behind
+    // this one image.
+    const fs::path runtimeDll = outDir / "cp3runtime_dev.dll";
+    const fs::path runtimeImplib = outDir / "libcp3runtime_dev.dll.a";
+    if (!linkModuleLibStamped(st, layout, runtimeDll, runtimeImplib,
+                              runtimeObjs, {}, nativeLink, "cp3runtime_dev.dll")) {
+        return false;
+    }
+
+    // 2) Unit DLLs in emission order (dependency-first). Import libraries of
+    // everything linked so far are visible; the linker ignores unused ones.
+    std::vector<fs::path> importLibs{runtimeImplib};
+    std::vector<std::string> dllNames;
+    std::unordered_set<std::string> stems;
+    std::string entryDllName;
+    for (const BuildRequest::ExtraModule& extra : *request.extraModules) {
+        std::string stem = cp3::cli::hotpatch::moduleLibDllStem(extra.sourceKey);
+        if (!stems.insert(stem).second) {
+            stem += "-" + std::to_string(fnv1a64(extra.sourceKey) & 0xffffffffu);
+        }
+        const std::string dllName = stem + ".dll";
+        const fs::path dll = outDir / dllName;
+        const fs::path implib = outDir / ("lib" + stem + ".dll.a");
+        const fs::path obj = cacheDir / (extra.moduleName + ".o");
+        if (!fs::is_regular_file(obj)) {
+            std::fprintf(stderr,
+                         "cp3c: dev module libs: missing unit object '%s'\n",
+                         obj.string().c_str());
+            return false;
+        }
+        if (!linkModuleLibStamped(st, layout, dll, implib, {obj}, importLibs,
+                                  nativeLink, dllName)) {
+            return false;
+        }
+        importLibs.push_back(implib);
+        dllNames.push_back(dllName);
+        if (extra.isEntryUnit) entryDllName = dllName;
+    }
+    if (entryDllName.empty()) {
+        std::fprintf(stderr,
+                     "cp3c: dev module libs: the entry unit is not among the "
+                     "plural units\n");
+        return false;
+    }
+
+    // 3) The bootstrap exe: generated C++, no module DLL linked at build time.
+    const fs::path repoRoot = repositoryRoot();
+    if (repoRoot.empty()) {
+        std::fprintf(stderr,
+                     "cp3c: dev module libs: cannot resolve the repository root\n");
+        return false;
+    }
+    const std::string source = cp3::cli::hotpatch::emitBootstrapSource(
+        dllNames, entryDllName, fnv1a64(st.compilerKey));
+    const fs::path bootstrapCpp = layout.buildDir / "cp3_bootstrap.cpp";
+    if (!writeTextFile(bootstrapCpp, source, nullptr)) {
+        std::fprintf(stderr,
+                     "cp3c: dev module libs: cannot write %s\n",
+                     bootstrapCpp.string().c_str());
+        return false;
+    }
+    const fs::path runtimeInclude = repoRoot / "src" / "runtime" / "include";
+    std::vector<std::string> bArgs = cp3::cli::bootstrapLinkArgs(
+        st.tc, st.opt.compile.profile, exePath, bootstrapCpp, runtimeInclude,
+        st.optimizations);
+    if (opt.verbose) {
+        std::fprintf(stderr, "cp3c: %s\n", describeCommand(bArgs).c_str());
+    }
+    const int rc = runProcess(bArgs);
+    if (rc != 0) {
+        std::fprintf(stderr,
+                     "cp3c: dev module libs: bootstrap link failed (exit %d)\n",
+                     rc);
+        return false;
+    }
     return true;
 }
 
@@ -1418,7 +1816,11 @@ int buildWithToolchain(const BuildRequest& request) {
     if (!compileAll(state, request, cppPath, objPath, entry.string())) {
         return kExitCompileError;
     }
-    if (!linkProgram(state, layout.exePath)) {
+    if (request.moduleLibs) {
+        if (!linkModuleLibs(state, layout, layout.exePath, request)) {
+            return kExitCompileError;
+        }
+    } else if (!linkProgram(state, layout.exePath)) {
         return kExitCompileError;
     }
 

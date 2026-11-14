@@ -22,10 +22,17 @@ namespace cp3::cli::hotpatch {
 // logical module name ("src/lib/base/b0"); `namesp` its C++ namespace.
 // The hashes are 16-hex-character strings without a `0x` prefix (as produced
 // by incrementalHex64). Emits valid C++ referencing cp3/dev/hotpatch.hpp.
+// `exportSymbols` selects the module-library ABI: TU-local statics (the
+// default, for the single-binary dev build) or extern "C" exports plus a
+// `cp3_module_run_initializer_v1` entry point (for CP3_DEV_MODULE_LIBS).
+// `entryUnit` makes the run-initializer a no-op: the entry module carries
+// the statements, not a module initializer.
 std::string emitModuleDescriptor(const std::string& moduleName,
                                  const std::string& namesp,
                                  const std::string& interfaceHashHex,
                                  const std::string& compilerKeyHex,
-                                 const std::string& stateLayoutHashHex);
+                                 const std::string& stateLayoutHashHex,
+                                 bool exportSymbols = false,
+                                 bool entryUnit = false);
 
 }  // namespace cp3::cli::hotpatch

@@ -90,6 +90,28 @@ bool isAmbientDeclared(const Type& t) {
 
 }  // namespace
 
+// Emit a namespace-scope module-state declaration for the shared header and
+// record the matching definition for the owning unit's TU. In the ordinary
+// build this is the single inline definition every TU of the monolithic
+// binary shares. In the dev module-libs build every DLL would get its own
+// copy of an inline variable, so the shared header carries `extern` and the
+// owning unit's TU is the one image that defines it.
+void Generator::moduleStateLine(std::string& decls, int indent,
+                                const std::string& tl, const std::string& cv,
+                                const std::string& typeCpp,
+                                const std::string& name,
+                                const std::string& initText) {
+    if (moduleLibs_) {
+        line(decls, indent, "extern " + tl + cv + typeCpp + " " + name + ";");
+        splitStateDefs_ += tl + cv + typeCpp + " " + name;
+        splitStateDefs_ += initText.empty() ? "{};\n" : " = " + initText + ";\n";
+        return;
+    }
+    line(decls, indent, "inline " + tl + cv + typeCpp + " " + name +
+                            (initText.empty() ? "{};"
+                                              : " = " + initText + ";"));
+}
+
 namespace detail {
 
 struct ModuleVarEmitter {
@@ -308,15 +330,14 @@ void ModuleVarEmitter::binding(const VariableDeclarator& d, VarKind kind,
     if (isConst) {
         if (isStaticInitExpr(*d.init)) {
             g.emitLineDirective(d, decls);
-            line(decls, 1, "inline " + tl + cv + ci.cpp + " " + name +
-                              " = " + initText + ";");
+            g.moduleStateLine(decls, 1, tl, cv, ci.cpp, name, initText);
         } else {
             // The initializer reads runtime state: evaluate it inside
             // `main` at its source position, after initArgv and the rest
             // of the runtime bootstrap. The binding keeps namespace scope
             // so functions can read it; language-level const-ness is
             // enforced by sema.
-            line(decls, 1, "inline " + tl + ci.cpp + " " + name + "{};");
+            g.moduleStateLine(decls, 1, tl, "", ci.cpp, name);
             g.emitLineDirective(d, mainBody);
             line(mainBody, 1, g.moduleRef(rawName) + " = " + initText + ";");
             if (g.scaleMode_) {
@@ -326,7 +347,7 @@ void ModuleVarEmitter::binding(const VariableDeclarator& d, VarKind kind,
         g.declare(rawName, declared, /*cell=*/false, /*global=*/true);
         return;
     }
-    line(decls, 1, "inline " + tl + ci.cpp + " " + name + "{};");
+    g.moduleStateLine(decls, 1, tl, "", ci.cpp, name);
     g.emitLineDirective(d, mainBody);
     line(mainBody, 1, g.moduleRef(rawName) + " = " + initText + ";");
     if (g.scaleMode_) {
@@ -356,10 +377,16 @@ void ModuleVarEmitter::noInit(const detail::CppInfo& ci,
                               const std::string& cv, std::string& decls) {
     const std::string tl = g.scaleMode_ ? "thread_local " : "";
     if (ci.representable && ci.shape != Shape::Void) {
-        line(decls, 1, "inline " + tl + cv + ci.cpp + " " + name + "{};");
+        g.moduleStateLine(decls, 1, tl, cv, ci.cpp, name);
     } else {
-        line(decls, 1, "inline " + tl + cv + "auto " + name +
-                          " = cp3::runtime::undefined;");
+        if (g.moduleLibs_) {
+            line(decls, 1, "extern " + tl + cv + "cp3::runtime::Undefined " + name + ";");
+            g.splitStateDefs_ += tl + cv + "cp3::runtime::Undefined " + name +
+                                 " = cp3::runtime::undefined;\n";
+        } else {
+            line(decls, 1, "inline " + tl + cv + "auto " + name +
+                              " = cp3::runtime::undefined;");
+        }
     }
 }
 

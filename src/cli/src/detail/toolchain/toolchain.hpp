@@ -136,4 +136,31 @@ std::vector<std::string> linkArgs(
     const Toolchain& tc, BuildProfile profile, const LinkStep& step,
     const BuildOptimizations& optimizations = {});
 
+// Command line for the dev module-libs pipeline (CP3_DEV_MODULE_LIBS): one
+// shared library per unit, or cp3runtime_dev.dll for the runtime TUs.
+// Mirrors linkArgs (same target/sysroot, same optimizations - LTO applies at
+// DLL link time too, same --gc-sections pairing) without the exe-only
+// startup flags. `exportDef` is the module-definition file that names the
+// cp3 symbols to export (lld has no --exclude-libs; the def file is what
+// keeps libstdc++/libuv/... out of the export table). Emits an import
+// library beside the DLL so later links can name it explicitly; `importLibs`
+// are the import libraries of the DLLs linked earlier (dependencies must
+// precede their consumers).
+std::vector<std::string> devDllLinkArgs(
+    const Toolchain& tc, BuildProfile profile, const fs::path& dll,
+    const fs::path& importLib, const std::vector<fs::path>& objects,
+    const std::vector<fs::path>& importLibs,
+    const std::vector<std::string>& nativeLink,
+    const BuildOptimizations& optimizations = {},
+    const fs::path& exportDef = {});
+
+// Command line for the dev module-libs bootstrap executable (plain C++ TU,
+// no objects: the bootstrap binds everything dynamically). Mirrors linkArgs'
+// Windows static startup and adds the runtime include root the generated
+// bootstrap includes cp3/dev/hotpatch.hpp from.
+std::vector<std::string> bootstrapLinkArgs(
+    const Toolchain& tc, BuildProfile profile, const fs::path& exe,
+    const fs::path& cpp, const fs::path& runtimeInclude,
+    const BuildOptimizations& optimizations = {});
+
 }  // namespace cp3::cli

@@ -154,6 +154,36 @@ void appendUnit(std::string& out, const ProgramUnitText& unit, bool definitions)
     out += "}  // namespace " + unit.namesp + "\n\n";
 }
 
+// The dev module-libs entry export: same body as `main()` minus the module
+// initializer calls (the bootstrap runs those through the module DLLs, in
+// compilation order), with the entry statements wrapped in
+// `cp3_module_entry_v1`. Appended to the entry unit's TU so the entry DLL
+// carries both the module's definitions and the process entry point.
+// Callers must not use this for programs with top-level `await` (the
+// bootstrap cannot co_await module coroutine initializers).
+std::string splitEntryMainSource(const ProgramAssembly& assembly) {
+    const ProgramUnitText* entry = entryOf(assembly);
+    if (entry == nullptr) return "";
+    std::string out;
+    out += "\nusing namespace " + entry->namesp + ";\n\n";
+    out += "extern \"C\" int cp3_module_entry_v1(int cp3_argc, char** cp3_argv) {\n";
+    if (assembly.needs.process) {
+        out += "    ::cp3::runtime::process::initArgv(cp3_argc, cp3_argv);\n";
+    } else {
+        out += "    (void)cp3_argc; (void)cp3_argv;\n";
+    }
+    out += entry->mainBody;
+    if (assembly.needs.eventLoop) {
+        out += "    ::cp3::runtime::runEventLoop();\n";
+    }
+    // Reclaim the remaining suspect islands
+    // (docs/design/cycle-collector.md).
+    out += "    ::cp3::runtime::CycleCollector::current().drain();\n";
+    out += "    return 0;\n";
+    out += "}\n";
+    return out;
+}
+
 // The generated `main()`: the process argument vector init, the module
 // initializers in compilation order, the entry unit's statements, and the
 // event-loop drain.
@@ -457,7 +487,38 @@ std::string unitNameForPath(const std::string& sourceKey) {
 }
 
 GeneratedProgramModules assembleProgramModules(const ProgramAssembly& assembly,
-                                               const std::string& moduleName) {
+                                               const std::string& moduleName,
+                                               bool moduleLibs) {
+    if (moduleLibs) {
+        if (programHasAwait(assembly)) {
+            // Unsupported: the bootstrap cannot co_await coroutine module
+            // initializers. Fall back to the ordinary plural emission.
+            GeneratedProgramModules out =
+                assembleProgramModules(assembly, moduleName,
+                                       /*moduleLibs=*/false);
+            out.moduleLibsUnsupported = true;
+            return out;
+        }
+        const std::string entryExport = splitEntryMainSource(assembly);
+        GeneratedProgramModules out;
+        out.sharedHeader.source = sharedProgramHeader(assembly, moduleName);
+        out.sharedHeader.header = programHeader(assembly, moduleName);
+        for (const ProgramUnitText& unit : assembly.units) {
+            // unlike the monolithic plural pipeline, the entry unit is also
+            // its own TU: its definitions plus the entry export form the
+            // entry module's DLL.
+            if (unit.isPackage) continue;
+            GeneratedProgramUnit u;
+            u.name = unitNameForPath(unit.sourceKey);
+            u.sourceKey = unit.sourceKey;
+            u.source = unitModuleSource(unit);
+            if (unit.isEntry) u.source += entryExport;
+            u.namesp = unit.namesp;
+            out.units.push_back(std::move(u));
+        }
+        out.entry.header = programHeader(assembly, moduleName);
+        return out;  // entry.source stays empty: no monolithic TU
+    }
     GeneratedProgramModules out;
     out.sharedHeader.source = sharedProgramHeader(assembly, moduleName);
     out.sharedHeader.header = programHeader(assembly, moduleName);
@@ -575,9 +636,11 @@ GeneratedModule Generator::runProgram(
 }
 
 GeneratedProgramModules Generator::runProgramModules(
-    const ModuleGraph& graph, const std::vector<CheckedModuleUnit>& units) {
+    const ModuleGraph& graph, const std::vector<CheckedModuleUnit>& units,
+    bool moduleLibs) {
+    moduleLibs_ = moduleLibs;
     ProgramAssembly assembly = buildAssembly(graph, units);
-    return assembleProgramModules(assembly, moduleName_);
+    return assembleProgramModules(assembly, moduleName_, moduleLibs);
 }
 
 void Generator::emitProgramUnit(const ProgramLink& link,
@@ -647,6 +710,9 @@ void Generator::emitProgramUnit(const ProgramLink& link,
     inner.programMode_ = true;
     inner.packageSurfaceOnly_ = unit.isPackage;
     inner.virtualMethodSet_ = virtualSet;
+    // The module-libs split needs every unit's namespace-scope state
+    // definitions, so route DLL shared state to this unit's definition.
+    inner.moduleLibs_ = moduleLibs_;
     const auto importsIt = link.imports.find(unit.id);
     if (importsIt != link.imports.end()) inner.linkedNames_ = importsIt->second;
     ProgramUnitText text;
@@ -660,6 +726,11 @@ void Generator::emitProgramUnit(const ProgramLink& link,
     inner.runUnit(*unit.ast, text.decls, text.defs, text.mainBody,
                   text.globals);
     text.topLevelAwait = inner.topLevelAwait_;
+    // The namespace-scope state definitions go into the owning unit's TU
+    // (inside its namespace block) so the module's DLL defines the state once.
+    if (!inner.splitStateDefs_.empty()) {
+        text.defs += inner.splitStateDefs_;
+    }
     // v0.2.5 Phase 2: capture the needs mask this unit produced, so the
     // recorded fragment can replay these bits when this unit is reused.
     std::uint64_t needsMask = 0;
@@ -804,7 +875,12 @@ GeneratedProgramModules generateProgramModules(const GenerateProgramInput& input
     SemaResult noSema;  // the outer generator only orchestrates the units
     Generator generator(input.sink, entrySema != nullptr ? *entrySema : noSema,
                         input.moduleName, input.lineDirectives, input.options);
-    return generator.runProgramModules(input.graph, input.units);
+    // Dev hot-patch seam: moduleLibs emits the split-ABI units plus the
+    // entry export in the entry unit; the separate entry TU stays empty.
+    // Unsupported programs fall back to the ordinary plural emission with
+    // moduleLibsUnsupported set on the result.
+    return generator.runProgramModules(input.graph, input.units,
+                                       /*moduleLibs=*/input.moduleLibs);
 }
 
 }  // namespace cp3

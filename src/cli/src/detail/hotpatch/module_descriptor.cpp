@@ -43,32 +43,32 @@ std::string emitModuleDescriptor(const std::string& moduleName,
                                  const std::string& namesp,
                                  const std::string& interfaceHashHex,
                                  const std::string& compilerKeyHex,
-                                 const std::string& stateLayoutHashHex) {
+                                 const std::string& stateLayoutHashHex,
+                                 bool exportSymbols,
+                                 bool entryUnit) {
+    const char* local = exportSymbols ? "" : "static ";
     std::ostringstream out;
     out << "\n"
            "// ---- dev descriptor (Incremental only) ----\n"
-           "// v1 symbols are TU-local so the descriptor can appear in any\n"
-           "// number of unit TUs. The module-lib build flips these to extern\n"
-           "// \"C\" with library visibility when the dev split-loads land.\n"
-           "#include \"cp3/dev/hotpatch.hpp\"\n"
-           "namespace {\n";
+           "#include \"cp3/dev/hotpatch.hpp\"\n";
+    out << "namespace {\n";
     out << "const char cp3_hotpatch_module_name[] = \""
         << escapeLiteral(moduleName) << "\";\n";
     out << "const char cp3_hotpatch_namespace[]   = \""
         << escapeLiteral(namesp) << "\";\n";
     out << "}  // namespace\n\n";
-    out << "extern \"C\" {\n"
-           "static const std::uint64_t cp3_module_interface_hash_v1 = "
-        << hex64Hex(interfaceHashHex) << ";\n"
-           "static const std::uint64_t cp3_module_abi_compiler_key_v1 = "
-        << hex64Hex(compilerKeyHex) << ";\n"
-           "static const std::uint32_t cp3_module_abi_runtime_v1 = 1u;\n"
-           "static const std::uint64_t cp3_module_state_layout_hash_v1 = "
-        << hex64Hex(stateLayoutHashHex) << ";\n"
-           "static const std::uint32_t cp3_module_state_size_v1 = 0u;\n"
-           "static const std::uint32_t cp3_module_state_align_v1 = 8u;\n"
-           "static const std::uint32_t cp3_module_state_field_count_v1 = 0u;\n"
-           "static const cp3::runtime::cp3_module_descriptor_v1"
+    out << "extern \"C\" {\n";
+    out << local << "const std::uint64_t cp3_module_interface_hash_v1 = "
+        << hex64Hex(interfaceHashHex) << ";\n";
+    out << local << "const std::uint64_t cp3_module_abi_compiler_key_v1 = "
+        << hex64Hex(compilerKeyHex) << ";\n";
+    out << local << "const std::uint32_t cp3_module_abi_runtime_v1 = 1u;\n";
+    out << local << "const std::uint64_t cp3_module_state_layout_hash_v1 = "
+        << hex64Hex(stateLayoutHashHex) << ";\n";
+    out << local << "const std::uint32_t cp3_module_state_size_v1 = 0u;\n";
+    out << local << "const std::uint32_t cp3_module_state_align_v1 = 8u;\n";
+    out << local << "const std::uint32_t cp3_module_state_field_count_v1 = 0u;\n";
+    out << local << "const cp3::runtime::cp3_module_descriptor_v1"
            " cp3_module_descriptor_v1 = {\n"
            "    sizeof(cp3::runtime::cp3_module_descriptor_v1),\n"
            "    1u,   // struct_version\n"
@@ -85,17 +85,25 @@ std::string emitModuleDescriptor(const std::string& moduleName,
            "    0u,            // table_count\n"
            "    cp3_hotpatch_module_name,\n"
            "    cp3_hotpatch_namespace,\n"
-           "};\n"
-           "static const cp3::runtime::cp3_module_descriptor_v1*\n"
+           "};\n";
+    out << local << "const cp3::runtime::cp3_module_descriptor_v1*\n"
            "cp3_get_module_descriptor(void) {\n"
            "    return &cp3_module_descriptor_v1;\n"
-           "}\n"
-           "static bool cp3_module_fill_table_v1(void**, std::uint32_t) {\n"
+           "}\n";
+    out << local << "bool cp3_module_fill_table_v1(void**, std::uint32_t) {\n"
            "    return false;\n"
-           "}\n"
-           "static void cp3_module_state_init_v1(void*) {}\n"
-           "static void cp3_module_state_destroy_v1(void*) {}\n"
-           "}  // extern \"C\"\n";
+           "}\n";
+    out << local << "void cp3_module_state_init_v1(void*) {}\n";
+    out << local << "void cp3_module_state_destroy_v1(void*) {}\n";
+    if (exportSymbols) {
+        // The module-library entry point the bootstrap calls to run this
+        // module's top-level statements in compilation order. `namesp` is a
+        // compiler-generated identifier, safe to splice unquoted.
+        out << "void cp3_module_run_initializer_v1(void) {\n";
+        if (!entryUnit) out << "    " << namesp << "::cp3_module_init();\n";
+        out << "}\n";
+    }
+    out << "}  // extern \"C\"\n";
     return out.str();
 }
 
