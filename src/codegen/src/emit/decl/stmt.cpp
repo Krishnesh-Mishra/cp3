@@ -199,6 +199,21 @@ void Generator::stmt(const Stmt& s, std::string& out, int indent) {
                 line(out, indent, ";");
                 return;
             }
+            // A `void expr;` statement evaluates the operand and discards
+            // it. Emit just the void cast: the generic lowering's trailing
+            // comma + `undefined` is a value whose result is unused, which
+            // trips -Wunused-value in every translation unit.
+            if (es.expression->kind == NodeKind::UnaryExpr) {
+                const auto& u = static_cast<const UnaryExpr&>(*es.expression);
+                if (u.op == UnaryOp::Void && u.operand) {
+                    const bool wasStmt = intOn() && intMode_->stmtExpr;
+                    if (intOn()) intMode_->stmtExpr = true;
+                    const std::string operandText = expr(*u.operand);
+                    if (intOn()) intMode_->stmtExpr = wasStmt;
+                    line(out, indent, "(void)(" + operandText + ");");
+                    return;
+                }
+            }
             // A statement's expression may defer its bound check (intAssignText).
             const bool wasStmt = intOn() && intMode_->stmtExpr;
             if (intOn()) intMode_->stmtExpr = true;
