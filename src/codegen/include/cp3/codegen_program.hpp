@@ -63,6 +63,9 @@ struct GeneratedProgramUnit {
     std::string name;       // e.g. "cp3_unit_3" - unique per emission index
     std::string sourceKey;  // the unit's module name (manifest identity)
     std::string source;     // the unit's .cpp text
+    // The unit's C++ namespace ("cp3_mod_counter"). Additive; older
+    // callers that never read this member behave exactly as before.
+    std::string namesp;
 };
 
 // The plural result. `sharedHeader` is the .hpp every unit TU and the entry

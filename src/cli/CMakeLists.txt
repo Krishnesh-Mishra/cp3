@@ -32,6 +32,8 @@ set(cp3_cli_sources
     src/toolchain/runtime/diagnostics.cpp
     src/toolchain/runtime/interface_hash.cpp
     src/toolchain/runtime/incremental.cpp
+    src/detail/hotpatch/state_map.cpp
+    src/detail/hotpatch/module_descriptor.cpp
     src/toolchain/runtime/pipeline.cpp
     src/commands/run/common.cpp
     src/commands/run/arguments.cpp
