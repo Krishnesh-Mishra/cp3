@@ -384,7 +384,14 @@ std::string AssignEmitter::identifier(const AssignmentExpr& a,
     const std::string target =
         (binding && binding->global) ? g.moduleRef(id.name) : mapIdent(id.name);
     if (const std::string r2 = int64WriteText(a); !r2.empty()) return r2;
-    const CppInfo T = g.info(*a.target);
+    // The binding's declared type spells the C++ variable; the narrowed
+    // type only describes how the slot reads at this site. An optional
+    // narrowed to `number` still needs the optional's ternary, not a
+    // primitive's keep-the-target no-op.
+    const CppInfo T =
+        (binding && binding->type.kind != TypeKind::Error)
+            ? classify(binding->type)
+            : g.info(*a.target);
     // The assigned value is emitted against the target's type (an object
     // literal assigned to a fresh field, a lambda stored in a function slot).
     const std::optional<Type> savedExpected = g.expected_;
