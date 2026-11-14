@@ -1,0 +1,17 @@
+{
+  "args": [
+    "run",
+    "src/index.cp3"
+  ],
+  "scenario": "incremental",
+  "expectExit": 0,
+  "stdoutContains": [
+    "10"
+  ],
+  "stderrContains": [
+    "incremental:"
+  ],
+  "env": {
+    "CP3_INCREMENTAL_DEBUG": "1"
+  }
+}

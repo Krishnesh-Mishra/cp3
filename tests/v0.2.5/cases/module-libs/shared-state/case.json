@@ -1,0 +1,14 @@
+{
+  "args": [
+    "run",
+    "src/index.cp3"
+  ],
+  "env": {
+    "CP3_DEV_MODULE_LIBS": "1"
+  },
+  "expectExit": 0,
+  "stdoutContains": [
+    "hello from module libs",
+    "41"
+  ]
+}

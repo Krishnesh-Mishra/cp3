@@ -1,0 +1,4 @@
+import console from "std/console";
+import { open } from "./lib/open.cp3";
+
+console.log(open());

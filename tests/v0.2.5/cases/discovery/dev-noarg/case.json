@@ -1,0 +1,10 @@
+{
+  "args": [
+    "dev",
+    "--once"
+  ],
+  "expectExit": 0,
+  "stdoutContains": [
+    "v025-discovery-dev-ok"
+  ]
+}

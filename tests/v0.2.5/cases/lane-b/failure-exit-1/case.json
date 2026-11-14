@@ -1,0 +1,13 @@
+{
+  "args": [
+    "run",
+    "src/index.cp3"
+  ],
+  "expectExit": 1,
+  "stderrContains": [
+    "CP3401"
+  ],
+  "stderrNotContains": [
+    "terminate called"
+  ]
+}

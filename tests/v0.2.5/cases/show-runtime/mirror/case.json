@@ -1,0 +1,14 @@
+{
+  "args": [
+    "run",
+    "src/index.cp3",
+    "--show-runtime"
+  ],
+  "expectExit": 0,
+  "stdoutContains": [
+    "v025-showruntime-ok"
+  ],
+  "filesExist": [
+    ".cp3/build/_runtime/README.md"
+  ]
+}

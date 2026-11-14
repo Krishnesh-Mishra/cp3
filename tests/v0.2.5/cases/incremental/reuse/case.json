@@ -1,0 +1,19 @@
+{
+  "args": [
+    "build",
+    "--incremental",
+    "src/index.cp3"
+  ],
+  "scenario": "rebuild",
+  "expectExit": 0,
+  "env": {
+    "CP3_INCREMENTAL_DEBUG": "1"
+  },
+  "stderrContains": [
+    "incremental: 2 units, 2 kept",
+    "incremental reuse: src/index"
+  ],
+  "filesExist": [
+    ".cp3/cache/incremental-program-cache"
+  ]
+}

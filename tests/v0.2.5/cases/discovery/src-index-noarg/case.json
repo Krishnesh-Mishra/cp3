@@ -1,0 +1,9 @@
+{
+  "args": [
+    "run"
+  ],
+  "expectExit": 0,
+  "stdoutContains": [
+    "v025-discovery-srcindex-ok"
+  ]
+}

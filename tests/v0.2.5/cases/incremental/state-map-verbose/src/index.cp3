@@ -1,0 +1,4 @@
+import console from "std/console";
+import { bump } from "./lib/counter.cp3";
+
+console.log(bump());

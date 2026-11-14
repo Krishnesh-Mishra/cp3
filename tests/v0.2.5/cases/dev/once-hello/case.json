@@ -1,0 +1,12 @@
+{
+  "args": [
+    "dev",
+    "--once",
+    "src/index.cp3"
+  ],
+  "expectExit": 0,
+  "stdoutContains": [
+    "v025-dev-once-ok"
+  ],
+  "exeExists": true
+}

@@ -1,0 +1,13 @@
+{
+  "args": [
+    "warm",
+    "src/index.cp3"
+  ],
+  "expectExit": 0,
+  "stdoutNotContains": [
+    "v025-warm-ok"
+  ],
+  "filesExist": [
+    ".cp3/out/index.exe"
+  ]
+}

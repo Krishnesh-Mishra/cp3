@@ -1,0 +1,10 @@
+{
+  "args": [
+    "run"
+  ],
+  "expectExit": 2,
+  "stderrContains": [
+    "no package.json found",
+    "cp3 init"
+  ]
+}

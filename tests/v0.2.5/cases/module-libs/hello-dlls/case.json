@@ -1,0 +1,16 @@
+{
+  "args": [
+    "run",
+    "src/index.cp3"
+  ],
+  "env": {
+    "CP3_DEV_MODULE_LIBS": "1"
+  },
+  "expectExit": 0,
+  "stdoutContains": [
+    "v025-modulelibs-ok"
+  ],
+  "filesExist": [
+    ".cp3/out/cp3runtime_dev.dll"
+  ]
+}

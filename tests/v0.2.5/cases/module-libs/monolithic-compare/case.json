@@ -1,0 +1,11 @@
+{
+  "args": [
+    "run",
+    "src/index.cp3"
+  ],
+  "scenario": "monolithic-compare",
+  "expectExit": 0,
+  "stdoutContains": [
+    "v025-compare-41"
+  ]
+}

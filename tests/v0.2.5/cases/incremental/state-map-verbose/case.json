@@ -1,0 +1,15 @@
+{
+  "args": [
+    "run",
+    "src/index.cp3",
+    "--verbose"
+  ],
+  "expectExit": 0,
+  "stderrContains": [
+    "state map",
+    "swappable"
+  ],
+  "stdoutContains": [
+    "2"
+  ]
+}

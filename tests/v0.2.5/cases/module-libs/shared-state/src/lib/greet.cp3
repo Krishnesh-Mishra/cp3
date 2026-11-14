@@ -1,0 +1,6 @@
+export let counter: number = 40;
+
+export function greet(): string {
+    counter = counter + 1;
+    return "hello from module libs";
+}
