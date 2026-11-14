@@ -3,16 +3,10 @@
   "defaultOpen": false,
   "pagesIndex": "00-overview",
   "pages": [
-    "01-value-model",
-    "02-escape-analysis",
-    "03-reference-ownership",
-    "04-closures",
-    "05-allocation-and-arrays",
-    "06-typed-arrays",
-    "07-async-and-concurrency",
-    "08-no-tracing-gc",
-    "09-reference-cycles-and-weak-links",
-    "10-thread-safety",
-    "11-inspecting-runtime-costs"
+    "01-compiler-design",
+    "02-no-garbage-collector",
+    "03-escape-analysis",
+    "04-async-non-blocking-io",
+    "05-runtime-libraries"
   ]
 }

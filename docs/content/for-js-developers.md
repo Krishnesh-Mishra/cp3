@@ -538,7 +538,7 @@ Registration order, snapshot iteration, `once` removed before firing, no-listene
 
 ### Weak references and reference cycles
 
-Strong reference cycles are a compile error (CP3401) — there is no tracing garbage collector. Break a parent/child cycle with a `weak` field:
+There is no tracing garbage collector. A strong cycle the compiler can prove is collector-safe — a class island whose members are all walkable class handles — is reclaimed automatically at loop safe points; an unprovable cycle is rejected (CP3401). Break a parent/child cycle with a `weak` field when you want deterministic release, not just eventual reclamation:
 
 ```ts
 class Child {
@@ -546,7 +546,7 @@ class Child {
 }
 ```
 
-A `weak` field is a `WeakRef<T>`: reading it acquires a strong handle only for as long as you hold it; an expired or cleared link reads `undefined`. Assigning `null`/`undefined` clears the link. An unbroken strong cycle is rejected; automatic weak-edge selection is report-only and not active — write the `weak` edge yourself.
+A `weak` field is a `WeakRef<T>`: reading it acquires a strong handle only for as long as you hold it; an expired or cleared link reads `undefined`. Assigning `null`/`undefined` clears the link. An unprovable strong cycle is rejected (CP3401); a collector-eligible one is freed automatically even without a `weak` edge. `weak` is now the deterministic tool — use it where prompt release matters.
 
 Reference counting still does not synchronize field access.
 
@@ -1867,7 +1867,7 @@ Porting advice: classify each external API as a language feature, a `std/...` mo
 # 33. Further reading (the deeper pages)
 
 - [Chapter 1 · The language](./language/00-overview.md) — bindings, types, functions, control flow, values, generics, modules, errors, native types
-- [Chapter 2 · Runtime](./internal-engineering/00-overview.md) — value model, escape analysis, ownership, closures, async/concurrency, threads, costs
+- [Internal Engineering](./internal-engineering/00-overview.md) — compiler design, the no-GC memory model, escape analysis, async non-blocking I/O, runtime libraries
 - [Chapter 3 · Standard library](./standard-library/00-overview.md) — module index and import conventions
 - [Chapter 4 · Compiler and tools](./cli-and-compiler/00-overview.md) — CLI, pipeline, optimization, diagnostics, toolchains, cache, tests, native interop
 - [For JavaScript and TypeScript developers](./for-js-developers.md) — this page

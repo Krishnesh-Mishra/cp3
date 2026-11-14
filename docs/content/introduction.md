@@ -1,81 +1,133 @@
 ---
 title: Introduction
-chapter: Welcome
 icon: Lightbulb
 ---
 # Introduction
 
-CP3 is an experiment in combining a familiar, statically checked programming surface with native deployment. Its syntax borrows conventions that JavaScript and TypeScript developers already know, while its compiler checks source code and produces a native executable through a C++ backend.
+## What is CP3?
 
-The goal is not to reproduce every feature or runtime behavior of another language. CP3 has its own type rules, standard library, module resolver, runtime, and compiler diagnostics. Familiar syntax lowers the learning cost; it does not make CP3 a JavaScript implementation or a TypeScript type checker.
+CP3 is a statically typed language that compiles your `.cp3` program ahead of time to a **native executable**. You write familiar TypeScript-shaped code; the compiler checks it, lowers it to C++, and hands it to Clang. What lands in your hands is a single machine binary — no VM, no bundled JavaScript runtime, no package to install before your program can run.
 
-## The problem CP3 is exploring
+- **Familiar syntax** — `const`, `let`, typed parameters, classes, interfaces, modules, `async`/`await`.
+- **Static checking** — the compiler rejects invalid assignments and calls before any native code is produced.
+- **Managed lifetimes without a tracing GC** — reference counting plus compiler lifetime analysis. You never write `delete`.
+- **All-core serving** — one line (`threads: os.cpus()`) gives you an event loop per logical CPU.
 
-Developers often choose between a convenient language with a large managed runtime and a native language that exposes more of the machine but asks the programmer to learn a different ownership model. CP3 explores whether a compact, familiar language can retain compile-time checking and produce a standalone native program without asking application authors to write C++ for ordinary work.
+## What every other option makes you pay
 
-That is a design direction, not a guarantee that every program will be as fast as hand-written C++ or Rust. Native code is only the final compilation format. Generated code, runtime calls, data layout, optimization proofs, and the selected backend all affect the result.
+You would not be reading this if some language already had everything. Each mainstream choice asks you to accept a different pain:
 
-## Design choices at a glance
-
-| Area | CP3 choice | Practical meaning |
+| Language | You get | You pay |
 | --- | --- | --- |
-| Source style | JavaScript and TypeScript shaped syntax | Familiar declarations, functions, classes, modules, and common expressions are available. |
-| Type checking | Static analysis in the compiler | Invalid assignments and calls can be rejected before native compilation. |
-| Executable | C++ is emitted and compiled by a native toolchain | A built program is a native executable; normal users do not edit generated C++. |
-| Memory | Runtime-managed references and value representations | CP3 code does not manually call `delete`; ownership still affects lifetime and cost. |
-| Standard library | CP3-owned modules | Node APIs and npm packages are not implicitly present. |
-| Interoperability | Explicit native boundary features | Foreign ABI, ownership, and platform assumptions remain the application's responsibility. |
+| **C++** | Absolute control over the machine | Templates, smart pointers, header files, a build system, and decades of footguns — every abstraction is manual |
+| **Rust** | Real memory safety at compile time | Ownership and the borrow checker gate every data structure; a small web service is a systems programming project |
+| **Go** | Fast to write, fast to read | A tracing runtime behind every binary — pauses you do not control, in a language designed to make you forget the machine exists |
+| **JS / TS (Node)** | The fastest path from idea to running server | A single-threaded V8 tax on everything, no ahead-of-time binary, and coercion semantics that bite at the worst times |
+| **Python** | Ubiquitous and convenient | An interpreter tax on every hot path, a GIL, and a deployment story that means "install the right interpreter first" |
 
-## Why the source resembles JS and TS
+## Why CP3 exists
 
-JavaScript and TypeScript syntax is approachable to many application developers. CP3 therefore uses familiar forms such as `const`, `let`, typed parameters, arrow functions, classes, and imports. The similarity is useful when reading code, but rules can differ in ways that matter to correctness:
+CP3 is the refusal to choose between that table.
 
-- CP3 checks types before generating native code; annotations are not editor-only hints.
-- The language does not inherit JavaScript's dynamic coercions or the full TypeScript type system.
-- `number` and native integer types have distinct rules; the project can select the vocabulary used for unprefixed native types.
-- CP3's runtime modules are a documented set, not a hidden Node compatibility layer.
-- Strings are UTF-8 byte strings, and some APIs expose byte-oriented behavior.
-- Errors, asynchronous execution, process APIs, and filesystem operations follow CP3's implementation and tests.
+You keep the code shape you already write — TypeScript-flavored app code, not systems code. The compiler keeps the checks — types are verified, not hinted. The backend keeps the metal — Clang emits machine code that a CPU actually executes. And the runtime keeps working for you — references clean themselves up, and a local escape analysis removes the work it can prove is unnecessary, so the common case never waits on a collector.
 
-The [JavaScript and TypeScript guide](./for-js-developers.md) is a migration map. The language chapter is the authority for CP3 rules.
+In the recorded health-server benchmark (one Windows 11 x64 machine, October 2026; treat it as a snapshot, not a law), CP3 served **15,719 req/s** single-worker and **81,815 req/s** all-core — level with hand-written C++, ahead of Go and Node, and about **9× Python** in the same single-worker run. The same server source ran on one event loop or on every core, by changing one option.
 
-## Why use a C++ backend?
+## What CP3 ships
 
-C++ provides a mature native compilation path across the platforms targeted by the project. CP3 can implement a high-level front end while delegating machine-code generation and much of the platform-specific toolchain work to Clang or another configured compiler.
+Not features you read about and never touch — the ones your code will actually stand on:
 
-This separation has useful consequences:
+- **CPU-heavy multithreading in one call.** Three heavy jobs, every core, no thread management:
 
-1. CP3 source remains the program developers maintain.
-2. The CP3 compiler owns parsing, module resolution, type checking, and lowering.
-3. The C++ backend can optimize the generated translation units according to the selected profile and target.
-4. Generated C++ is available as a debugging artifact when a runtime cost needs investigation.
+  ```ts
+  const [l, h, fib] = parallel.run(
+    () => lcm(a, b),
+    () => hcf(c, d),
+    () => fibonacci(n),
+  );
+  ```
 
-The backend cannot optimize away every cost. A helper call in a loop, unclear aliasing, allocations, or checks that are needed to preserve semantics can prevent transformations such as inlining or vectorization. The [optimization pipeline](./cli-and-compiler/03-optimization-pipeline.md) states what the current compiler proves and what it does not.
+  `parallel.run` takes nullary closures and hands you their results in order. The checker rejects captured mutation and `async` closures, so the fast version is the safe version.
 
-## Why avoid a tracing collector?
+- **Dynamic arrays that stay native-fast.** `const a: string[] = ["hello"]; a.push("world");` — growable, contiguous storage with C++ managing capacity growth, an automatic reserve hint on proven counted loops, and fixed-width typed arrays for hot binary workloads.
 
-CP3's current general reference representation is based on reference counting, not a tracing garbage collector. A reference count lets an acyclic object be destroyed when its last strong owner is released. It does not automatically collect a cycle, and reference updates have runtime cost.
+- **An escape-analysis engine with teeth.** The compiler proves objects that never escape their frame, stores them directly, and skips the heap and reference counting entirely — the allocation simply does not happen. ([How it works →](./internal-engineering/03-escape-analysis.md))
 
-This choice is not a claim that reference counting is universally faster or simpler than tracing collection. It is a runtime design with different tradeoffs. CP3's local escape analysis can remove some allocations in restricted patterns, but it is not a general stack-allocation guarantee. Read [Values and references](./internal-engineering/01-value-model.md), [Escape analysis](./internal-engineering/02-escape-analysis.md), and [Cycles and weak links](./internal-engineering/09-reference-cycles-and-weak-links.md) before relying on a particular lifetime behavior.
+| Capability | What you get | Why it matters |
+| --- | --- | --- |
+| **Escape analysis** | Proven-local objects stored without allocation | The common case costs zero ownership traffic ([details](./internal-engineering/03-escape-analysis.md)) |
+| **`parallel.*`** | Checked reduction-style CPU parallelism | Spread heavy work across every core without data races by construction |
+| **Dynamic arrays** | `push`, `reserve`, contiguous storage, typed arrays | Ergonomics of JS with `std::vector` costs underneath |
+| **No tracing GC** | Reference counting + a non-tracing cycle collector | No stop-the-world pauses; deterministic lifetimes ([details](./internal-engineering/02-no-garbage-collector.md)) |
+| **All-core servers** | `createServer({ threads: os.cpus() })` | One event loop per logical CPU, same source |
+| **Static types** | Checked before anything is emitted | Type errors are compile-time facts, not editor hints |
+| **One binary** | AOT C++ backend, clang toolchain | Nothing to install on the machine that runs your program |
+| **Battle-tested substrate** | libuv, uWebSockets, OpenSSL, libsodium, PCRE2 | Entire classes of bugs live in code CP3 never wrote ([see the libraries](./internal-engineering/05-runtime-libraries.md)) |
 
-## What CP3 is not promising
+The deep reason CP3 can compete with C++ and Rust here is blunt: it does not invent its own slow paths. TLS is OpenSSL, HTTP and WebSocket serving is uWebSockets, the reactor is libuv, crypto is libsodium — the same native libraries the rest of the industry benchmarks on. CP3 spends its own code where it adds value (the language, the checker, the escape analysis) and links the fastest thing available everywhere else. **See the full list and the wiring: [Runtime libraries](./internal-engineering/05-runtime-libraries.md).**
 
-- It is not a drop-in replacement for Node, a browser, or the TypeScript compiler.
-- It does not promise that arbitrary npm packages can be imported.
-- It does not promise that every allocation is placed on the stack or that every reference is non-atomic.
-- It does not promise SIMD merely because a program is compiled to native code.
-- It does not promise identical performance across machines, compilers, optimization profiles, or workloads.
-- It does not make foreign native pointers safe solely because they have a type annotation.
+That is also the bug story: the genuinely hard parts of a networked language — TLS, HTTP parsing, regex, JSON numbers, crypto — are not reimplemented in CP3's runtime and then debugged into submission; they are inherited, pinned, and audited as they are. Fewer novel mechanisms, fewer novel failures.
 
-These limits are part of an honest evaluation. A feature should be described as implemented only when the compiler/runtime behavior and tests support that description.
+## Sixty seconds to your first CP3 server
 
-## How to evaluate CP3
+This is the whole program — a `/add` route that takes two numbers and returns their sum:
 
-For a language feature, begin with its page in Chapter 1 and follow the linked test family when a corner case matters. For a standard library call, check the module's documented signatures and supported behavior. For a performance claim, record the benchmark source, compiler versions, build profiles, output validation, repetition count, and run variation.
+```ts
+import { createServer } from "std/network";
+import console from "std/console";
 
-Useful next pages:
+const app = createServer();
 
-- [Create and run a project](./quick-start.md)
-- [Project type-system selection](./language/07-native-types/01-project-type-system.md)
-- [Runtime value model](./internal-engineering/01-value-model.md)
-- [Compiler pipeline](./cli-and-compiler/02-compilation-pipeline.md)
+app.get("/add", (req, res) => {
+  const a = parseFloat(req.query.get("a") ?? "0");
+  const b = parseFloat(req.query.get("b") ?? "0");
+  res.json({ result: a + b });
+});
+
+app.listen(3000, () => {
+  console.log("listening on http://localhost:3000");
+});
+```
+
+Run it:
+
+```powershell
+cp3c run add.cp3
+```
+
+And from another terminal:
+
+```powershell
+curl "http://localhost:3000/add?a=19&b=23"
+```
+
+```json
+{"result":42}
+```
+
+Or build it once and hand it to someone who has never heard of CP3:
+
+```powershell
+cp3c build add.cp3
+.cp3\out\add.exe
+```
+
+A native executable. No runtime to install, nothing else to ship. When you outgrow one core, change `createServer()` to `createServer({ threads: os.cpus() })` (import `os` from `std/os`) and the same source serves on every logical CPU.
+
+That is the pitch in one example: code you already know how to write, checks you already want, output a CPU actually runs.
+
+## What CP3 is not
+
+Being straight with you about the limits:
+
+- **Not Node, and not TypeScript.** `std/*` modules are CP3's own; npm packages do not import into CP3.
+- **Not a tracing GC language.** Deterministic reference counting, plus a non-tracing cycle collector for islands the compiler proves safe — anything else is either rejected at compile time (CP3401) or broken with a `weak` edge, never silently collected by a background pass ([the details](./internal-engineering/02-no-garbage-collector.md)).
+- **Not "the compiler will make it fast."** CP3 emits native code, but allocation, aliasing, and missed proof conditions still cost. The [optimization pipeline](./cli-and-compiler/03-optimization-pipeline.md) says what the compiler proves and what it does not.
+- **Not every allocation on the stack.** Escape analysis handles proven-local cases ([the proof rules](./internal-engineering/03-escape-analysis.md)); everything else keeps the managed path.
+
+## Where to go next
+
+- [Quick start](./quick-start.md) — create, run, and build your first project.
+- [For JavaScript and TypeScript developers](./for-js-developers.md) — the migration map from TS to CP3.
+- [Internal Engineering](./internal-engineering/00-overview.md) — how CP3 is built, why there is no GC, and what the compiler proves for you.
+- [Compiler design](./internal-engineering/01-compiler-design.md) — what happens between your `.cp3` file and the executable.
