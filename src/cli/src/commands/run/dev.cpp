@@ -358,15 +358,23 @@ bool FileEventWatcher::open(const DevWatchSet& set) {
     if (set.files.empty() || set.directories.empty()) return false;
     if (set.directories.size() > kMaxWatchDirs) return false;  // poll fallback
     adopt(set);
+    // The OVERLAPPED struct the kernel writes IO_STATUS_BLOCK into must live
+    // at its final address from the moment ReadDirectoryChangesW is armed.
+    // Reserve before arming so push_back cannot move earlier watches, and
+    // arm the element already inside the vector (arming a stack local then
+    // moving it leaves the kernel writing into dead stack memory: the event
+    // still signals and waitForActivity proceeds, but GetOverlappedResult
+    // fails with ERROR_IO_INCOMPLETE on every notification).
+    watches_.reserve(set.directories.size());
     bool ok = true;
     for (const fs::path& dir : set.directories) {
         DirWatch watch;
         watch.dir = dir;
-        if (!armDirWatch(watch)) {
+        watches_.push_back(std::move(watch));
+        if (!armDirWatch(watches_.back())) {
             ok = false;
             break;
         }
-        watches_.push_back(std::move(watch));
     }
     if (!ok) {
         close();
@@ -397,6 +405,14 @@ bool FileEventWatcher::waitForActivity(std::chrono::milliseconds timeout) {
     DirWatch& watch = watches_[index];
     DWORD bytes = 0;
     if (!GetOverlappedResult(watch.handle, &watch.overlapped, &bytes, FALSE)) {
+        const DWORD err = GetLastError();
+        if (std::getenv("CP3_DEV_WATCH_DEBUG")) {
+            std::fprintf(stderr,
+                         "cp3c: dev-watch: GetOverlappedResult failed: "
+                         "error %lu (dir: %s)\n",
+                         static_cast<unsigned long>(err),
+                         watch.dir.string().c_str());
+        }
         // Overflow (ERROR_NOTIFY_ENUM_DIR) or a lost watch: degrade to polling.
         healthy_ = false;
         return true;  // something changed that we could not enumerate
