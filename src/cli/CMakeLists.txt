@@ -140,12 +140,47 @@ foreach(CP3_DOC IN LISTS CP3_DOCS_MARKDOWN)
     file(READ "${CP3_DOC}" CP3_DOC_TEXT)
     string(REGEX MATCH "^---[\r\n]+title: *([^\r\n]+)[\r\n]+chapter: *([^\r\n]+)([\r\n]+[A-Za-z0-9_-]+: *[^\r\n]+)*[\r\n]+---[\r\n]+"
         CP3_FRONT_MATTER "${CP3_DOC_TEXT}")
-    if(CP3_FRONT_MATTER STREQUAL "")
-        message(FATAL_ERROR "Documentation page needs title/chapter front matter: ${CP3_DOC}")
+    if(NOT CP3_FRONT_MATTER STREQUAL "")
+        set(CP3_DOC_TITLE "${CMAKE_MATCH_1}")
+        set(CP3_DOC_CHAPTER "${CMAKE_MATCH_2}")
+    else()
+        # The docs restructure leaves the chapter key off section pages and
+        # derives it from the directory layout instead: element pages live
+        # under docs/content/<section>/. Fall back to the same derivation
+        # here so the embedded viewer still groups them.
+        string(REGEX MATCH "^---[\r\n]+title: *([^\r\n]+)([\r\n]+[A-Za-z0-9_-]+: *[^\r\n]+)*[\r\n]+---[\r\n]+"
+            CP3_FRONT_MATTER "${CP3_DOC_TEXT}")
+        if(CP3_FRONT_MATTER STREQUAL "")
+            message(FATAL_ERROR "Documentation page needs title front matter: ${CP3_DOC}")
+        endif()
+        set(CP3_DOC_TITLE "${CMAKE_MATCH_1}")
+        file(RELATIVE_PATH CP3_DOC_REL "${CP3_DOCS_ROOT}/content" "${CP3_DOC}")
+        string(REPLACE "\\" "/" CP3_DOC_REL "${CP3_DOC_REL}")
+        if(CP3_DOC_REL MATCHES "^([^/]+)/")
+            set(CP3_DOC_GROUP "${CMAKE_MATCH_1}")
+        else()
+            set(CP3_DOC_GROUP "${CP3_DOC_REL}")
+            string(REGEX REPLACE "\\.md$" "" CP3_DOC_GROUP "${CP3_DOC_GROUP}")
+        endif()
+        string(REGEX REPLACE "^[0-9]+-" "" CP3_DOC_GROUP "${CP3_DOC_GROUP}")
+        string(REPLACE "-" " " CP3_DOC_CHAPTER "${CP3_DOC_GROUP}")
+        separate_arguments(CP3_WORDS UNIX_COMMAND "${CP3_DOC_CHAPTER}")
+        set(CP3_CHAPTER_TITLE "")
+        foreach(word ${CP3_WORDS})
+            string(SUBSTRING "${word}" 0 1 word_head)
+            string(SUBSTRING "${word}" 1 -1 word_tail)
+            string(TOUPPER "${word_head}" word_head)
+            if(CP3_CHAPTER_TITLE STREQUAL "")
+                set(CP3_CHAPTER_TITLE "${word_head}${word_tail}")
+            else()
+                set(CP3_CHAPTER_TITLE "${CP3_CHAPTER_TITLE} ${word_head}${word_tail}")
+            endif()
+        endforeach()
+        set(CP3_DOC_CHAPTER "${CP3_CHAPTER_TITLE}")
     endif()
-    set(CP3_DOC_TITLE "${CMAKE_MATCH_1}")
-    set(CP3_DOC_CHAPTER "${CMAKE_MATCH_2}")
-    string(REGEX REPLACE "^---[\r\n]+title: *[^\r\n]+[\r\n]+chapter: *[^\r\n]+([\r\n]+[A-Za-z0-9_-]+: *[^\r\n]+)*[\r\n]+---[\r\n]+" ""
+    # Strip only the title line and any following single-line front matter
+    # keys (chapter:, icon:, ...) so pages in either shape lose the fence.
+    string(REGEX REPLACE "^---[\r\n]+title: *[^\r\n]+([\r\n]+[A-Za-z0-9_-]+: *[^\r\n]+)*[\r\n]+---[\r\n]+" ""
         CP3_DOC_MARKDOWN_BODY "${CP3_DOC_TEXT}")
     file(RELATIVE_PATH CP3_DOC_SLUG "${CP3_DOCS_ROOT}/content" "${CP3_DOC}")
     string(REPLACE "\\" "/" CP3_DOC_SLUG "${CP3_DOC_SLUG}")
