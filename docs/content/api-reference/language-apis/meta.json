@@ -1,0 +1,18 @@
+{
+  "defaultOpen": false,
+  "title": "Language APIs",
+  "description": "Built-in value APIs and global functions - no import needed",
+  "pagesIndex": "00-overview",
+  "pages": [
+    "string",
+    "number",
+    "array",
+    "object",
+    "typed-arrays",
+    "promise",
+    "collections",
+    "event-emitter",
+    "parallel",
+    "global-functions"
+  ]
+}

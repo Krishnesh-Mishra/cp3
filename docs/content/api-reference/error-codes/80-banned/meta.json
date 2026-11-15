@@ -1,0 +1,14 @@
+{
+  "defaultOpen": false,
+  "title": "Banned JavaScript patterns (CP3801-CP3808)",
+  "pages": [
+    "cp3801",
+    "cp3802",
+    "cp3803",
+    "cp3804",
+    "cp3805",
+    "cp3806",
+    "cp3807",
+    "cp3808"
+  ]
+}

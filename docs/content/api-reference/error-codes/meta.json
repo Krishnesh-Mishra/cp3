@@ -1,0 +1,18 @@
+{
+  "defaultOpen": false,
+  "title": "Error codes",
+  "description": "Every diagnostic code the compiler can print, with examples",
+  "pagesIndex": "00-overview",
+  "pages": [
+    "01-internal",
+    "10-lexical",
+    "20-syntax",
+    "30-names",
+    "40-types",
+    "50-statements",
+    "60-modules",
+    "70-classes",
+    "80-banned",
+    "90-concurrency"
+  ]
+}

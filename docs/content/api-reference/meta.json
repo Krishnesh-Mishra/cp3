@@ -1,0 +1,11 @@
+{
+  "title": "API reference",
+  "description": "Signature-level reference for the language, the standard library, and the diagnostic codes",
+  "root": true,
+  "pagesIndex": "00-overview",
+  "pages": [
+    "language-apis",
+    "standard-library",
+    "error-codes"
+  ]
+}

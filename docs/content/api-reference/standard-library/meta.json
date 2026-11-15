@@ -1,0 +1,30 @@
+{
+  "defaultOpen": false,
+  "title": "Standard library",
+  "description": "Signatures for every std/... module",
+  "pagesIndex": "00-overview",
+  "pages": [
+    "console",
+    "env",
+    "process",
+    "fs",
+    "path",
+    "os",
+    "math",
+    "date",
+    "json",
+    "crypto",
+    "buffer",
+    "collections",
+    "network",
+    "typed-arrays",
+    "regular-expressions",
+    "io",
+    "url",
+    "text",
+    "time",
+    "readline",
+    "hash",
+    "url-extensions"
+  ]
+}
