@@ -42,6 +42,9 @@ struct RawDiagnostic {
     std::uint32_t endLine = 0;     // 1-based; 0 = unknown (advance one column)
     std::uint32_t endColumn = 0;   // 1-based, in bytes; 0 = unknown
     std::string message;           // compiler message text
+    // The compiler's own advice ("Did you mean 'x'?", "Add `import ...`").
+    // The editor turns them into quick fixes.
+    std::vector<std::string> suggestions;
 };
 
 // Compiles `text` as the file at `path` and returns the diagnostics that

@@ -68,6 +68,18 @@ Json diagnosticJson(const std::string& text, const RawDiagnostic& raw) {
     if (!raw.code.empty()) diagnostic.set("code", jsonString(raw.code));
     diagnostic.set("source", jsonString("cp3c"));
     diagnostic.set("message", jsonString(raw.message));
+    if (!raw.suggestions.empty()) {
+        // The compiler's advice travels in the diagnostic's data: the LSP has
+        // no field for it, and the editor turns the suggestions into quick
+        // fixes.
+        Json data = jsonObject();
+        Json suggestions = jsonArray();
+        for (const std::string& suggestion : raw.suggestions) {
+            suggestions.push(jsonString(suggestion));
+        }
+        data.set("suggestions", std::move(suggestions));
+        diagnostic.set("data", std::move(data));
+    }
     return diagnostic;
 }
 

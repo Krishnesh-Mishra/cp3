@@ -65,6 +65,9 @@ std::vector<lsp::RawDiagnostic> collectDiagnostics(
         raw.code = d.code;
         raw.severity = lspSeverity(d.severity);
         raw.message = d.message;
+        // The compiler's advice ("Did you mean 'x'?", "Add `import ...`")
+        // travels with the diagnostic: the editor turns it into a quick fix.
+        raw.suggestions = d.suggestions;
         if (d.span.valid()) {
             raw.line = d.span.begin.line;
             raw.column = d.span.begin.column;

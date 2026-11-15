@@ -243,6 +243,71 @@ function normalizedFile(uri: vscode.Uri): string {
     return uri.fsPath.replace(/\\/g, "/").toLowerCase();
 }
 
+// The compiler's advice travels with the diagnostic (its `data.suggestions`).
+// Every suggestion becomes a quick fix; the ones that name a replacement
+// ("Did you mean 'x'?") carry the edit that applies it.
+interface DiagnosticSuggestion {
+    readonly text: string;
+    /** The name the compiler expected (the quoted name of the advice). */
+    readonly replacement?: string;
+}
+
+/** The first name in quotes ("cannot find name 'x'"). */
+function firstQuoted(text: string): string | undefined {
+    const match = /'([^']+)'/.exec(text);
+    return match?.[1];
+}
+
+function diagnosticSuggestions(diagnostic: vscode.Diagnostic): DiagnosticSuggestion[] {
+    const data = (diagnostic as { data?: { suggestions?: unknown } }).data;
+    const raw = Array.isArray(data?.suggestions) ? data.suggestions : [];
+    const out: DiagnosticSuggestion[] = [];
+    for (const entry of raw) {
+        if (typeof entry !== "string" || entry.length === 0) continue;
+        const replacement = firstQuoted(entry);
+        out.push(replacement ? { text: entry, replacement } : { text: entry });
+    }
+    return out;
+}
+
+/** The range of the identifier the compiler is about, inside the
+ * diagnostic's range (the diagnostic may cover the whole statement). */
+function identifierRange(document: vscode.TextDocument, diagnostic: vscode.Diagnostic, name: string): vscode.Range | undefined {
+    const text = document.getText(diagnostic.range);
+    const at = text.indexOf(name);
+    if (at < 0) return undefined;
+    const base = document.offsetAt(diagnostic.range.start);
+    const start = document.positionAt(base + at);
+    const end = document.positionAt(base + at + name.length);
+    return new vscode.Range(start, end);
+}
+
+class Cp3QuickFixProvider implements vscode.CodeActionProvider {
+    provideCodeActions(document: vscode.TextDocument, range: vscode.Range | vscode.Selection): vscode.CodeAction[] {
+        if (document.languageId !== "cp3") return [];
+        const actions: vscode.CodeAction[] = [];
+        for (const diagnostic of vscode.languages.getDiagnostics(document.uri)) {
+            // The name the compiler is about ("cannot find name 'x'").
+            const current = firstQuoted(diagnostic.message);
+            for (const suggestion of diagnosticSuggestions(diagnostic)) {
+                const action = new vscode.CodeAction(
+                    suggestion.text,
+                    vscode.CodeActionKind.QuickFix,
+                );
+                if (suggestion.replacement && current) {
+                    const target = identifierRange(document, diagnostic, current);
+                    if (target) {
+                        action.edit = new vscode.WorkspaceEdit();
+                        action.edit.replace(document.uri, target, suggestion.replacement);
+                    }
+                }
+                actions.push(action);
+            }
+        }
+        return actions;
+    }
+}
+
 // Auto-import is useful while a symbol is being typed, but it must never
 // suggest an import into a comment or string. The compiler LSP remains the
 // authority for parsing and diagnostics; this scan only protects this editor
@@ -467,6 +532,10 @@ export function registerEditorFeatures(context: vscode.ExtensionContext): void {
             return exportCompletionItems(document, position, token);
         } },
         ...identifierTriggers,
+    ));
+    context.subscriptions.push(vscode.languages.registerCodeActionsProvider(
+        { language: "cp3" }, new Cp3QuickFixProvider(),
+        { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] },
     ));
     context.subscriptions.push(vscode.languages.registerCodeActionsProvider(
         { language: "cp3" }, new Cp3OrganizeImportsProvider(),
