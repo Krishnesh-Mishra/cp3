@@ -499,9 +499,11 @@ void classifyNullishUnion(const Type& t, CppInfo& info) {
     const CppInfo inner = classify(nonNullish.front());
     if (!inner.representable) return;
     const bool primitive =
-        isPrimitiveShape(inner.shape) || inner.shape == Shape::Enum;
+        isPrimitiveShape(inner.shape) || inner.shape == Shape::Enum ||
+        inner.shape == Shape::TypeParam;
     const bool object =
-        inner.shape == Shape::Object || inner.shape == Shape::ClassRef;
+        inner.shape == Shape::Object || inner.shape == Shape::ClassRef ||
+        inner.shape == Shape::Collections;
     if (!primitive && !object) return;
     const NullishKind kind = nullishKindOf(t);
     if (kind == NullishKind::Mixed) {

@@ -101,7 +101,8 @@ static void classifyNullable(const Type& t, CppInfo& info) {
     const CppInfo inner = classify(t.parts.front());
     if (!inner.representable) return;
     if (!isPrimitiveShape(inner.shape) && inner.shape != Shape::ClassRef &&
-        inner.shape != Shape::Object) {
+        inner.shape != Shape::Object && inner.shape != Shape::Enum &&
+        inner.shape != Shape::TypeParam && inner.shape != Shape::Collections) {
         return;
     }
     info.shape = Shape::Optional;
