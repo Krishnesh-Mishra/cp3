@@ -52,12 +52,6 @@ struct BuildContext {
     const RenderOptions* render = nullptr;
     const std::string* moduleName = nullptr;  // e.g. "src/index"
     bool execute = false;                     // `cp3c run` was requested
-    // Dev module-libs (CP3_DEV_MODULE_LIBS): eligible only for Incremental,
-    // local-module programs without workers and without packages, whose
-    // import graph is acyclic (the dev build links module DLLs
-    // dependency-first). Anything else falls back to the whole-program dev
-    // build.
-    bool moduleLibsEligible = false;
 };
 
 // The load+sema half of the pipeline. exitCode is kExitSuccess when `graph`
@@ -83,63 +77,6 @@ void setProcessEnv(const char* name, const char* value) {
     else unsetenv(name);
 }
 #endif
-
-// True when the local-module import graph is acyclic. The dev module-libs
-// build links module DLLs in dependency-first order; a cycle has no such
-// order and the GNU import-libs cannot close one, so the caller falls back
-// to the whole-program dev build.
-bool moduleLibsGraphIsAcyclic(const ModuleGraph& graph) {
-    std::unordered_map<std::uint32_t, std::vector<std::uint32_t>> forward;
-    for (const ModuleDependency& dep : graph.dependencies()) {
-        if (dep.imported == std::numeric_limits<std::uint32_t>::max()) continue;
-        forward[dep.importer].push_back(dep.imported);
-    }
-    std::unordered_map<std::uint32_t, std::uint8_t> color;
-    std::function<bool(std::uint32_t)> dfs = [&](std::uint32_t u) {
-        color[u] = 1;  // in-stack
-        for (const std::uint32_t v : forward[u]) {
-            const auto it = color.find(v);
-            const std::uint8_t c = it == color.end() ? 0 : it->second;
-            if (c == 1) return false;  // back-edge: a cycle
-            if (c == 0 && !dfs(v)) return false;
-        }
-        color[u] = 2;  // done
-        return true;
-    };
-    for (const CompilationUnit* unit : graph.units()) {
-        if (unit == nullptr) continue;
-        if (color[unit->id] == 0 && !dfs(unit->id)) return false;
-    }
-    return true;
-}
-
-// True (with the offending feature in `reason`) when the program cannot be
-// linked as module libraries: module-scope destructured state or a class
-// with a static initialization block would be instantiated once per image
-// otherwise (every DLL its own copy), which silently changes semantics.
-// Detected on the checked units before anything is emitted.
-std::string moduleLibsUnsupportedReason(const FrontendResult& frontend) {
-    static const std::regex kStaticBlock(R"(^\s*static\s*\{)");
-    for (const CompilationUnit* unit : frontend.graph->units()) {
-        if (unit == nullptr || unit->ast == nullptr) continue;
-        const SemaResult* sema =
-            unit->isEntry
-                ? &frontend.sema
-                : (frontend.unitSemas.count(unit->id) != 0
-                       ? &frontend.unitSemas.at(unit->id)
-                       : nullptr);
-        if (sema != nullptr &&
-            cp3::cli::hotpatch::computeModuleStateLayout(*unit, *sema)
-                .hasDestructuredModuleBindings) {
-            return "module-scope destructured state";
-        }
-        if (unit->file != nullptr &&
-            std::regex_search(unit->file->text, kStaticBlock)) {
-            return "a class with a static initialization block";
-        }
-    }
-    return {};
-}
 
 // v0.2.5 Phase 2: before the plural codegen of an Incremental build, prune
 // the per-unit fragment cache to the records whose key still matches and
@@ -280,15 +217,9 @@ struct ProgramArtifacts {
         std::string name;       // output stem, e.g. "cp3_unit_0"
         std::string sourceKey;  // manifest identity (the unit's module name)
         GeneratedModule module;
-        std::string namesp;     // the unit's C++ namespace
     };
     std::vector<Unit> units;
     std::string sharedProgramHeader;
-    // True when the codegen pass emitted the dev module-libs ABI (the
-    // extras carry extern "C" module initializers + the entry export and
-    // `entry` is empty). False when the requested module-libs build fell
-    // back to the ordinary plural emission (top-level await).
-    bool moduleLibs = false;
 };
 
 // The codegen half for a local-module graph. The dev (incremental) profile
@@ -302,35 +233,14 @@ int codegenProgram(const FrontendResult& frontend, const BuildContext& ctx,
     const bool lineDirectives =
         ctx.opt->compile.profile == BuildProfile::Debug;
     if (ctx.opt->compile.profile == BuildProfile::Incremental) {
-        std::string moduleLibsReason;
-        bool moduleLibsWanted = ctx.moduleLibsEligible;
-        if (moduleLibsWanted) {
-            // Dev module libs fall back to the monolithic dev build when a
-            // unit carries module-scope destructured state or a class with
-            // a static initialization block (each image would instantiate
-            // its own copy).
-            moduleLibsReason = moduleLibsUnsupportedReason(frontend);
-            if (!moduleLibsReason.empty()) {
-                std::fprintf(stderr,
-                             "cp3c: dev module libs not supported for this "
-                             "program (%s); using the whole-program dev build\n",
-                             moduleLibsReason.c_str());
-                moduleLibsWanted = false;
-            }
-        }
         GeneratedProgramModules plural = cp3::cli::generateProgramModules(
             {*frontend.graph, checkedUnits(frontend), *ctx.moduleName, cgSink,
-             /*lineDirectives=*/false, options,
-             /*moduleLibs=*/moduleLibsWanted});
+             /*lineDirectives=*/false, options});
         renderDiagnostics(cgSink.diagnostics(), *ctx.render, stderr);
         if (cgSink.hasErrors()) {
             return kExitCompileError;
         }
-        // In module-libs mode plural.entry.source is intentionally empty
-        // (the entry DLL is one of the unit TUs); only the ordinary plural
-        // pipeline treats an empty entry as a codegen failure.
-        if (!(moduleLibsWanted && !plural.moduleLibsUnsupported) &&
-            plural.entry.source.empty()) {
+        if (plural.entry.source.empty()) {
             std::fprintf(stderr,
                          "cp3c: internal error: code generation produced no "
                          "output\n");
@@ -342,11 +252,9 @@ int codegenProgram(const FrontendResult& frontend, const BuildContext& ctx,
                 u.name = std::move(unit.name);
                 u.sourceKey = std::move(unit.sourceKey);
                 u.module.source = std::move(unit.source);
-                u.namesp = std::move(unit.namesp);
                 out->units.push_back(std::move(u));
             }
             out->sharedProgramHeader = std::move(plural.sharedHeader.source);
-            out->moduleLibs = devModuleLibs;
         }
         mod = std::move(plural.entry);
         return kExitSuccess;
@@ -571,7 +479,7 @@ int cmdBuildOrRun(const CliOptions& opt, bool execute) {
     }
 
     const RenderOptions ro = makeRenderOptions(effective, file->path);
-    BuildContext ctx{&effective, &ro, &moduleName, execute, false};
+    BuildContext ctx{&effective, &ro, &moduleName, execute};
 
     reportRunProgress(execute, effective.verbose,
                       "checking source and imports...");
@@ -596,31 +504,6 @@ options.importedInterfaces = importedInterfacesFor(*frontend.graph, *entry);
         options, extras, workerModules, workerStdModules);
     if (workerExit != kExitSuccess) return workerExit;
 
-    // Dev module libs (CP3_DEV_MODULE_LIBS): eligible only for Incremental,
-    // local-module programs without workers and without packages, whose
-    // import graph is acyclic (module DLLs link dependency-first). Anything
-    // else falls back to the whole-program dev build.
-    std::string moduleLibsIneligible;
-    if (cp3::cli::hotpatch::devModuleLibsEnabled() &&
-        effective.compile.profile == BuildProfile::Incremental) {
-        const auto packageImpls = collectPackageImplementations(*frontend.graph);
-        if (!workerModules.empty()) {
-            moduleLibsIneligible = "the program uses workers";
-        } else if (!packageImpls.empty()) {
-            moduleLibsIneligible = "the program imports installed packages";
-        } else if (!moduleLibsGraphIsAcyclic(*frontend.graph)) {
-            moduleLibsIneligible = "the local-module import graph has a cycle";
-        } else {
-            ctx.moduleLibsEligible = true;
-        }
-        if (!moduleLibsIneligible.empty()) {
-            std::fprintf(stderr,
-                         "cp3c: dev module libs not supported for this program "
-                         "(%s); using the whole-program dev build\n",
-                         moduleLibsIneligible.c_str());
-        }
-    }
-
     // v0.2.5 Phase 2: pin the fragment cache for the plural codegen (the
     // Incremental profile only; every other profile/config never sees the
     // variable and always emits fresh).
@@ -643,13 +526,8 @@ options.importedInterfaces = importedInterfacesFor(*frontend.graph, *entry);
     // build driver beside them.
     if (!programArtifacts.units.empty()) {
         for (ProgramArtifacts::Unit& unit : programArtifacts.units) {
-            detail::BuildRequest::ExtraModule extra;
-            extra.moduleName = unit.name;
-            extra.module = &unit.module;
-            extra.sourceKey = unit.sourceKey;
-            extra.namesp = unit.namesp;
-            extra.isEntryUnit = unit.sourceKey == moduleName;
-            extras.push_back(std::move(extra));
+            extras.push_back(detail::BuildRequest::ExtraModule{
+                unit.name, &unit.module, unit.sourceKey});
         }
     }
 

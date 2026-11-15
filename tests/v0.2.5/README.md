@@ -14,7 +14,6 @@ loop toolchain** - that no test asserts today:
 - incremental frontend (fragment reuse) and its fingerprints
 - dev watcher (debounce, classification diagnostics, exe swap)
 - `cp3 warm` (prebuild), `cp3 install`, `--show-runtime`
-- module-libs dev build (`cp3runtime_dev.dll` + per-unit DLLs + bootstrap)
 - the Lane B background toolchain/PCH build
 - the link response file for >32 KB command lines
 - no-arg discovery for run/build/check/dev/warm
@@ -36,7 +35,7 @@ tests/v0.2.5/
 ```
 
 Category directories mirror the features: `incremental/`, `dev/`, `warm/`,
-`module-libs/`, `install/`, `discovery/`, `link-rsp/`, `show-runtime/`,
+`install/`, `discovery/`, `link-rsp/`, `show-runtime/`,
 `lane-b/` (regression cases).
 
 ## Fixture directory (`cases/<category>/<name>/`)
@@ -67,7 +66,7 @@ build tree binary (configurable).
   "scenario": "fresh-or-rebuild",
   "rebuildArgs": ["build", "src/index.cp3", "--incremental"],
   "timeoutSeconds": 60,
-  "env": {"CP3_DEV_MODULE_LIBS": "1"},
+  "env": {},
   "optional": false
 }
 ```
@@ -84,12 +83,6 @@ Scenarios (the runner implements them; each is one case.json):
 - `dev-once` - `cp3 dev --once`; assert the child's one-shot output
 - `warm-then-run` - `cp3 warm` succeeds without producing/running a program;
   a following `cp3 run` reuses the cached objects (`stderrContains`)
-- `module-libs` - builds with `CP3_DEV_MODULE_LIBS=1`; assert the module DLLs
-  exist next to the exe and the program prints identically to the
-  monolithic build (same fixture run twice, two roots)
-- `module-libs-badabi` - a deliberately corrupt descriptor (fixture-compiled
-  `cp3_module_state_*` with a wrong `compiler_key` baked through the env seam)
-  must exit 2 with the "descriptor failed verification" message, never crash
 - `watch` - real watch flow: spawn `cp3 dev`, edit a watched file, wait for
   the `build ok` line, kill; **e2e and sequential-only**, marked
   `"requiresE2E": true`, skipped unless `--e2e` is passed
@@ -158,6 +151,4 @@ the existing corpus would slow and complicate it for cases that both are about
 2. The `archive-rsp` case needs the giant-repo fixture as a submodule or a
    generated 40 KB-object program; generated is preferred but it's ~300 files
    of codegen; OK to skip on CI via `"requiresLargeGraph": true`?
-3. Module-libs negative ABI test: is the env seam (`CP3_DEV_MODULE_LIBS=1` with
-   a poisoned fixture) the right injection, or should the test patch the
-   descriptor bytes of a built module directly?
+

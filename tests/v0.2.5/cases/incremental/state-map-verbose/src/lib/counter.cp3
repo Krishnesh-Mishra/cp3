@@ -1,6 +1,0 @@
-export let counter: number = 1;
-
-export function bump(): number {
-  counter = counter + 1;
-  return counter;
-}

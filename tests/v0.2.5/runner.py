@@ -148,11 +148,6 @@ def assert_spec(case: dict, proc, tmp: Path, prefix: str) -> list[str]:
         out_dir = tmp / ".cp3" / "out"
         if not out_dir.is_dir() or not list(out_dir.glob("*.exe")):
             fail("no executable was produced under .cp3/out")
-    if case.get("moduleLibsAbsent"):
-        out_dir = tmp / ".cp3" / "out"
-        dlls = list(out_dir.glob("*.dll")) if out_dir.is_dir() else []
-        if dlls:
-            fail(f"module-libs DLLs present but not wanted: {[d.name for d in dlls]}")
     return failures
 
 
@@ -273,33 +268,12 @@ def run_case(case: dict, cp3c: str) -> tuple[str, list[str], subprocess.Complete
         elif scenario in ("fresh", "dev-once"):
             proc = run_cp3c(cp3c, args, tmp, env, timeout)
             pass_n = 1
-        elif scenario in ("rebuild", "incremental", "module-libs"):
+        elif scenario in ("rebuild", "incremental"):
             first = run_cp3c(cp3c, args, tmp, env, timeout)
             if scenario == "incremental":
                 apply_edits(case_dir, tmp)
             rebuild_args = case.get("rebuildArgs", args)
             proc = run_cp3c(cp3c, rebuild_args, tmp, env, timeout)
-            pass_n = 2
-        elif scenario == "monolithic-compare":
-            # Build twice: monolithic env unset vs CP3_DEV_MODULE_LIBS=1,
-            # assert the program's stdout is identical both times.
-            tmp_a = prepare_tmp(case_dir, name + "__monolithic")
-            proc_a = run_cp3c(cp3c, args, tmp_a, {}, timeout)
-            tmp_b = prepare_tmp(case_dir, name + "__modulelibs")
-            proc_b = run_cp3c(cp3c, args, tmp_b,
-                              {"CP3_DEV_MODULE_LIBS": "1"}, timeout)
-            if proc_a.stdout != proc_b.stdout:
-                shutil.rmtree(tmp_a, ignore_errors=True)
-                shutil.rmtree(tmp_b, ignore_errors=True)
-                return (
-                    "FAIL",
-                    [f"{prefix}monolithic stdout ({proc_a.stdout!r}) != "
-                     f"module-libs stdout ({proc_b.stdout!r})"],
-                    proc_b,
-                )
-            shutil.rmtree(tmp_a, ignore_errors=True)
-            proc = proc_b
-            tmp = tmp_b
             pass_n = 2
         else:
             return ("FAIL", [f"unknown scenario {scenario!r} (infra)"], None)
