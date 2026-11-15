@@ -295,8 +295,68 @@ Callable callableOf(const Node& declaration) {
     return callable;
 }
 
+// The declared type of a name, read from the source: a parameter or a
+// variable annotation names the class or interface the name holds. The
+// resolved type of an interface-typed value is a structural shape, so the
+// declaration site is what names the owner.
+std::string declaredTypeNameOf(const Program& program,
+                               const std::string& name) {
+    if (name.empty()) return std::string();
+    std::string found;
+    forEachNode(program, [&](const Node& node) {
+        if (!found.empty()) return;
+        if (node.kind == NodeKind::Parameter) {
+            const auto& parameter = static_cast<const Parameter&>(node);
+            if (parameter.name == nullptr ||
+                parameter.name->kind != NodeKind::Identifier) {
+                return;
+            }
+            if (static_cast<const Identifier&>(*parameter.name).name != name) {
+                return;
+            }
+            if (parameter.type != nullptr &&
+                parameter.type->kind == NodeKind::NamedType) {
+                found = static_cast<const NamedType&>(*parameter.type).name;
+            }
+            return;
+        }
+        if (node.kind != NodeKind::VariableDeclarator) return;
+        const auto& declarator = static_cast<const VariableDeclarator&>(node);
+        if (declarator.id == nullptr ||
+            declarator.id->kind != NodeKind::Identifier) {
+            return;
+        }
+        if (static_cast<const Identifier&>(*declarator.id).name != name) return;
+        if (declarator.type != nullptr &&
+            declarator.type->kind == NodeKind::NamedType) {
+            found = static_cast<const NamedType&>(*declarator.type).name;
+        }
+    });
+    return found;
+}
+
+// The member `name` of a class or of one of its bases.
+const Node* classMemberInChain(const AnalyzedDocument& document,
+                               const std::string& className,
+                               const std::string& member) {
+    std::string current = className;
+    for (int depth = 0; depth < 8; ++depth) {
+        const ClassDeclaration* owner = classByName(document, current);
+        if (owner == nullptr) return nullptr;
+        const Node* found = classMemberOf(*owner, member);
+        if (found != nullptr) return found;
+        if (owner->extendsType == nullptr ||
+            owner->extendsType->kind != NodeKind::NamedType) {
+            return nullptr;
+        }
+        current = static_cast<const NamedType&>(*owner->extendsType).name;
+    }
+    return nullptr;
+}
+
 // The class of the receiver of a member access: the class of the receiver's
-// type, or the class the receiver names (a static access).
+// type, the class the receiver names (a static access), or the class its
+// declaration names (a parameter annotated with a class type).
 std::string receiverClassName(const AnalyzedDocument& document,
                               const Expr* receiver) {
     if (receiver == nullptr) return std::string();
@@ -305,11 +365,12 @@ std::string receiverClassName(const AnalyzedDocument& document,
         !type->name.empty()) {
         return type->name;
     }
-    if (receiver->kind == NodeKind::Identifier) {
-        const std::string& name = static_cast<const Identifier&>(*receiver).name;
-        if (classByName(document, name) != nullptr) return name;
-    }
-    return std::string();
+    if (receiver->kind != NodeKind::Identifier) return std::string();
+    const std::string& name = static_cast<const Identifier&>(*receiver).name;
+    if (classByName(document, name) != nullptr) return name;
+    // The declared type of the receiver: a parameter or a variable annotated
+    // with the interface or class it holds.
+    return declaredTypeNameOf(*document.entry->ast, name);
 }
 
 // The std surface member a receiver names (a namespace like `console`), when
@@ -347,14 +408,12 @@ std::optional<Callable> resolveCallee(const AnalyzedDocument& document,
     }
     const std::string ownerName = receiverClassName(document, member.object.get());
     if (!ownerName.empty()) {
-        if (const ClassDeclaration* owner = classByName(document, ownerName)) {
-            const Node* found = classMemberOf(*owner, name);
-            if (found != nullptr) return callableOf(*found);
-        }
+        const Node* found = classMemberInChain(document, ownerName, name);
+        if (found != nullptr) return callableOf(*found);
         if (const InterfaceDeclaration* owner =
                 interfaceByName(document, ownerName)) {
-            const Node* found = interfaceMemberOf(*owner, name);
-            if (found != nullptr) return callableOf(*found);
+            const Node* member_ = interfaceMemberOf(*owner, name);
+            if (member_ != nullptr) return callableOf(*member_);
         }
     }
     // A std surface member (`console.log`): the surface owns no file, so the
@@ -466,8 +525,9 @@ std::optional<Callable> callableAt(const AnalyzedDocument& document,
         document.file == nullptr) {
         return std::nullopt;
     }
-    // A call at the cursor: the hierarchy points at what the call names -
-    // the callee, wherever in the call the cursor sits.
+    // A call at the cursor: the hierarchy points at what the call names - the
+    // callee, wherever in the callee the cursor sits. A cursor on an argument
+    // names that argument instead (a function passed as a value).
     const Node* call =
         innermostCallAt(*document.entry->ast, *document.file, line, column);
     if (call != nullptr) {
@@ -475,15 +535,19 @@ std::optional<Callable> callableAt(const AnalyzedDocument& document,
             call->kind == NodeKind::CallExpr
                 ? static_cast<const CallExpr&>(*call).callee.get()
                 : static_cast<const NewExpr&>(*call).callee.get();
-        const std::optional<Callable> callable = resolveCallee(document, callee);
-        if (callable.has_value()) return callable;
-        // `new Widget()`: the class is the item.
-        if (callee != nullptr && callee->kind == NodeKind::Identifier) {
-            const std::string& name =
-                static_cast<const Identifier&>(*callee).name;
-            return classCallable(document, name);
+        if (callee != nullptr &&
+            spanContains(callee->span, *document.file, line, column)) {
+            const std::optional<Callable> callable =
+                resolveCallee(document, callee);
+            if (callable.has_value()) return callable;
+            // `new Widget()`: the class is the item.
+            if (callee->kind == NodeKind::Identifier) {
+                const std::string& name =
+                    static_cast<const Identifier&>(*callee).name;
+                return classCallable(document, name);
+            }
+            return std::nullopt;
         }
-        return std::nullopt;
     }
     // No call at the cursor: the name itself (a function passed as a value).
     const Node* node =

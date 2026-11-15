@@ -490,22 +490,18 @@ std::vector<lsp::CompletionCandidate> memberCandidates(
     for (std::size_t i = 0; i < names.size(); ++i) {
         const ExprPtr& element = array->elements[i];
         if (element == nullptr) continue;
-        // A member the compiler does not know is never offered (CP3305). The
-        // type alone cannot decide it: a generic method (`map`, `reduce`) has
-        // an error type until it is called, so it would be dropped with it.
+        // A member the compiler does not know is never offered: the probe
+        // analysis reports it (CP3305) and the access has no type.
         if (reportsUnknownMember(probed->diagnostics, names[i])) continue;
         const Type* type = probed->sema.typeOf(element->nodeId);
-        const bool usable = type != nullptr && !type->isError() &&
-                            !type->isUnknown();
+        if (type == nullptr || type->isError() || type->isUnknown()) continue;
         lsp::CompletionCandidate candidate;
         candidate.label = names[i];
-        candidate.kind = usable && type->kind == TypeKind::Function ? 3 : 5;
+        candidate.kind = type->kind == TypeKind::Function ? 3 : 5;
         // An ambient surface has no printable type of its own: the
         // documented signature (in the documentation) is what the editor
         // shows instead of the internal placeholder label.
-        candidate.detail = (usable && !isPlaceholderType(*type))
-                               ? describe(*type)
-                               : "";
+        candidate.detail = isPlaceholderType(*type) ? "" : describe(*type);
         candidate.documentation =
             completionMemberDoc(document, namespaceName, receiverType,
                                 names[i]);
