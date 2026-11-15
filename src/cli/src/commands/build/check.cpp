@@ -4,10 +4,11 @@
 // OWNERSHIP: cli module (src/cli/**). Implements cp3::cli::cmdCheck.
 //
 // Loads the entry file plus its module graph (prelude injection, import
-// resolution), type-checks the entry unit and renders diagnostics. Codegen is
-// not run for output, but the worker surface is resolved here so the D80
-// diagnostics (CP3905-CP3911, CP3601) are available in check mode exactly as
-// in build/run mode; non-worker codegen diagnostics stay part of build/run.
+// resolution), type-checks the program (entry and dependencies) and renders
+// diagnostics. Codegen is not run for output, but the whole program is lowered
+// so the compile diagnostics (codegen reps of declarations and members) are
+// available in check mode exactly as in build/run mode; a broken dependency
+// must not pass `cp3 check` either.
 // =============================================================================
 #include <algorithm>
 #include <cstdio>
@@ -223,12 +224,27 @@ options.importedInterfaces = importedInterfacesFor(*graph, *entry);
         }
     }
 
-    // Inline worker form and the main-side send surface. Run the entry's
-    // codegen without writing output and surface its diagnostics the same
-    // way the build does — a broken program must not pass `cp3 check`.
+    // Inline worker form and the main-side send surface. Run the program's
+    // codegen without writing output and surface its diagnostics the same way
+    // the build does - a broken program must not pass `cp3 check`, and a
+    // broken DEPENDENCY must not pass either (a program-level lowering also
+    // sees the dependency's field/member reps, which the entry-only call
+    // missed).
     CollectingDiagnosticSink cgSink;
-    (void)generateModule(
-        {*entry->ast, sema, moduleName, cgSink, false, options});
+    std::vector<CheckedModuleUnit> checkedUnits;
+    checkedUnits.reserve(graph->units().size());
+    for (CompilationUnit* unit : graph->units()) {
+        if (unit == nullptr || !unit->ast || unit->isPrelude) continue;
+        if (unit->isEntry) {
+            checkedUnits.push_back(CheckedModuleUnit{unit, &sema});
+            continue;
+        }
+        const auto it = unitSemas.find(unit->id);
+        if (it == unitSemas.end()) continue;
+        checkedUnits.push_back(CheckedModuleUnit{unit, &it->second});
+    }
+    (void)generateProgramModule(
+        {*graph, checkedUnits, moduleName, cgSink, false, options});
     const std::vector<Diagnostic> cgDiagnostics = cgSink.diagnostics();
     renderDiagnostics(cgDiagnostics, ro, stderr);
     for (const Diagnostic& d : cgDiagnostics) {
