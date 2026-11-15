@@ -1,0 +1,16 @@
+import console from "std/console";
+
+// `typeof` narrows a mixed scalar union that also carries a nullish
+// member - the guard must have a static answer.
+function describe(v: number | string | undefined): number {
+    if (typeof v === "string") {
+        return v.length;
+    }
+    if (v === undefined) {
+        return -1;
+    }
+    return v + 1;
+}
+console.log(describe("abc"));
+console.log(describe(41));
+console.log(describe(undefined));

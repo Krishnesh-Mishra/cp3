@@ -1,0 +1,12 @@
+// Two classes in one module: the second names the first in a parameter
+// annotation. The name must resolve in the module that imports this one
+// (CP3302 today).
+export class Opts {
+    url: string | undefined;
+}
+export class Client {
+    connect(o: Opts): string {
+        if (o.url === undefined) { return "missing"; }
+        return o.url;
+    }
+}

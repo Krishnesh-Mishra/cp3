@@ -1,0 +1,3 @@
+// A re-export barrel: the name must reach the importing module with its
+// members intact.
+export { Widget } from "./widget.cp3";

@@ -839,6 +839,43 @@ def run_benchmarks(extra_args: str) -> int:
     return exit_code
 
 
+def run_package_tests(extra_args: str) -> int:
+    """Run tests/v0.2.5/package-test/runner.py, stream its output.
+
+    The packaging corpus drives a *scenario* per case (build a package, pack
+    it, install it, consume it from another project), which the language
+    corpus cannot express - one case there is one command. It lives in its
+    own suite and runs after the corpus pass; --no-package-tests skips it.
+    Returns the suite's exit code (0 for a clean run, 1 for a failure).
+    """
+    script = REPO_ROOT / "tests" / "v0.2.5" / "package-test" / "runner.py"
+    argv = [sys.executable, str(script)] + shlex.split(extra_args)
+    print()
+    print("== packaging ==")
+    print(f"  command: {' '.join(argv)}")
+    print()
+    if not script.is_file():
+        print(f"  error: {script} not found", file=sys.stderr)
+        return 1
+    try:
+        process = subprocess.Popen(
+            argv,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+    except OSError as exc:
+        print(f"  error: could not start the packaging suite ({exc})", file=sys.stderr)
+        return 1
+    assert process.stdout is not None
+    for line in process.stdout:
+        print(line, end="")
+    exit_code = process.wait()
+    if exit_code != 0:
+        print(f"  packaging suite exited with code {exit_code}")
+    return exit_code
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         description="cp3c test harness (discovers tests/cases/**/*.expect.json)."
@@ -890,6 +927,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--bench-args", dest="bench_args", default="", metavar="ARGS",
                         help="extra arguments forwarded to benchmarks/runner/run_benchmark.py "
                              "when the bench pass runs (e.g. --only hello-world)")
+    parser.add_argument("--no-package-tests", dest="no_package_tests", action="store_true",
+                        help="skip the packaging suite pass (tests/v0.2.5/package-test); "
+                             "it runs by default after the corpus pass")
+    parser.add_argument("--package-test-args", dest="package_test_args", default="",
+                        metavar="ARGS",
+                        help="extra arguments forwarded to tests/v0.2.5/package-test/runner.py "
+                             "when the packaging pass runs (e.g. --filter pak)")
     args = parser.parse_args(argv)
 
     if args.jobs < 1:
@@ -1252,6 +1296,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     if not args.no_bench:
         bench_exit = run_benchmarks(args.bench_args)
         exit_code = max(exit_code, bench_exit)
+    if not args.no_package_tests:
+        package_exit = run_package_tests(args.package_test_args)
+        exit_code = max(exit_code, package_exit)
     return exit_code
 
 

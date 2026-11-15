@@ -1,0 +1,7 @@
+// An `object`-typed field has no C++ representation. The diagnostic must
+// be reported by `cp3 check` (which now runs the entry's codegen), not only
+// by `cp3 build` - and it must be reported for a DEPENDENCY module too.
+export class Holder {
+    sock: object | undefined;
+    constructor() { this.sock = undefined; }
+}

@@ -1,0 +1,7 @@
+import { connectTcp } from "std/network";
+
+export function openClient(host: string, port: number): undefined {
+    const sock = connectTcp(host, port);
+    sock.close();
+    return undefined;
+}

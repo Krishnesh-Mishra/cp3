@@ -1,0 +1,5 @@
+import console from "std/console";
+import { openClient } from "pak_tcp";
+
+openClient("127.0.0.1", 9);
+console.log("client-ready");

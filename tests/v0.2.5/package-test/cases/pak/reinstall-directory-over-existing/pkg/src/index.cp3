@@ -1,0 +1,4 @@
+export class Widget {
+    id: number = 7;
+    greet(): string { return "hello"; }
+}

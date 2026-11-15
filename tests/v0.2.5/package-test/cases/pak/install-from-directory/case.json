@@ -1,0 +1,31 @@
+{
+  "steps": [
+    {
+      "cwd": "app",
+      "args": [
+        "install",
+        "../pkg"
+      ],
+      "expectExit": 0,
+      "stderrContains": [
+        "installed"
+      ]
+    },
+    {
+      "cwd": "app",
+      "args": [
+        "run",
+        "src/index.cp3"
+      ],
+      "expectExit": 0,
+      "stderrNotContains": [
+        "CP3304",
+        "CP3601"
+      ],
+      "stdoutContains": [
+        "hello",
+        "7"
+      ]
+    }
+  ]
+}

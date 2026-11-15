@@ -1,0 +1,10 @@
+import console from "std/console";
+
+// The build half of the pair: the same program must fail the build with
+// the same diagnostic the check reports.
+class Holder {
+    sock: object | undefined;
+    constructor() { this.sock = undefined; }
+}
+const h = new Holder();
+console.log("ok");

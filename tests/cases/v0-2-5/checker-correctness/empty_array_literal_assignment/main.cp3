@@ -1,0 +1,12 @@
+import console from "std/console";
+
+// An empty array literal assigned to a declared field is contextually
+// typed by the field type.
+class Holder {
+    items: number[];
+    constructor() {
+        this.items = [];
+    }
+}
+const h = new Holder();
+console.log(h.items.length);

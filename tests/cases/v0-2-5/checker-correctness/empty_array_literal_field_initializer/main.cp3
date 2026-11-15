@@ -1,0 +1,9 @@
+import console from "std/console";
+
+// An empty array literal in a field initializer is contextually typed by
+// the declared field type - the annotation must be consulted.
+class Holder {
+    items: number[] = [];
+}
+const h = new Holder();
+console.log(h.items.length);

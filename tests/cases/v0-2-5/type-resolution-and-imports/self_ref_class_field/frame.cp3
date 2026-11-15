@@ -1,0 +1,10 @@
+// A class that names itself in a field annotation must resolve in the
+// module that imports it (the CP3302 self-reference family).
+export class Frame {
+    id: number = 7;
+    kids!: Frame[];
+    constructor() {
+        const kids: Frame[] = [];
+        this.kids = kids;
+    }
+}

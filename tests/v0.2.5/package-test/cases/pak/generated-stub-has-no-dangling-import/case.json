@@ -1,0 +1,43 @@
+{
+  "steps": [
+    {
+      "cwd": "pkg",
+      "args": [
+        "build",
+        "src/index.cp3"
+      ],
+      "expectExit": 0,
+      "stderrContains": [
+        "packed"
+      ]
+    },
+    {
+      "cwd": "app",
+      "args": [
+        "install",
+        "../pkg/.cp3/out/pak_stub.cp3pak"
+      ],
+      "expectExit": 0,
+      "stderrContains": [
+        "installed"
+      ]
+    },
+    {
+      "cwd": "app",
+      "args": [
+        "build",
+        "src/index.cp3"
+      ],
+      "expectExit": 0,
+      "stderrNotContains": [
+        "CP3601"
+      ],
+      "fileNotContains": [
+        {
+          "path": ".cp3/packages/pak_stub/index.cp3",
+          "contains": "from \"./"
+        }
+      ]
+    }
+  ]
+}

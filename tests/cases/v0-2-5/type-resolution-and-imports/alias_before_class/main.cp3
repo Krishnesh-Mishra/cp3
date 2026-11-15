@@ -1,0 +1,5 @@
+import console from "std/console";
+import { PlainNode } from "./fwd.cp3";
+
+const n = new PlainNode();
+console.log(n.id);

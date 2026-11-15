@@ -1,0 +1,8 @@
+import console from "std/console";
+import { Frame } from "./frame.cp3";
+
+// An imported class is usable in an annotation position.
+function show(f: Frame): number {
+    return f.id;
+}
+console.log(show(new Frame()));

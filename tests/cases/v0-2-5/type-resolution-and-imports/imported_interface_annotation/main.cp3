@@ -1,0 +1,8 @@
+import console from "std/console";
+import { Tab } from "./iface.cp3";
+
+function label(t: Tab): string {
+    return t.label;
+}
+const t: Tab = { id: 1, label: "dash" };
+console.log(label(t));

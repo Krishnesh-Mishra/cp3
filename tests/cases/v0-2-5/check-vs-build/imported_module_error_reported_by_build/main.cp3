@@ -1,0 +1,5 @@
+import console from "std/console";
+import { Broken } from "./broken.cp3";
+
+const b = new Broken();
+console.log("ok");

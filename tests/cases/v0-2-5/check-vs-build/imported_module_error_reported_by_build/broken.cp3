@@ -1,0 +1,5 @@
+// A dependency with an unresolvable type name: the build must report the
+// error in the dependency module, not only in the importing one.
+export class Broken {
+    value: MissingType;
+}

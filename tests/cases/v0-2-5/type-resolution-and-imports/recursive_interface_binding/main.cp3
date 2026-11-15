@@ -1,0 +1,7 @@
+import console from "std/console";
+import { RecursiveIFace } from "./iface.cp3";
+
+const kids: RecursiveIFace[] = [];
+const leaf: RecursiveIFace = { label: "leaf", members: kids };
+console.log(leaf.label);
+console.log(leaf.members.length);

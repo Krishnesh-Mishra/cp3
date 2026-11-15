@@ -1,0 +1,6 @@
+import console from "std/console";
+import { Widget } from "./barrel.cp3";
+
+const w = new Widget();
+console.log(w.id);
+console.log(w.greet());

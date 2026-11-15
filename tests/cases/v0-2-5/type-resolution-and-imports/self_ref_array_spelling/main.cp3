@@ -1,0 +1,6 @@
+import console from "std/console";
+import { Node } from "./node.cp3";
+
+const n = new Node();
+n.kids = [new Node()];
+console.log(n.kids.length);

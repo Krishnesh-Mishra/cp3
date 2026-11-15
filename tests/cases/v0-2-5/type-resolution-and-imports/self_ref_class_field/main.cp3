@@ -1,0 +1,9 @@
+import console from "std/console";
+import { Frame } from "./frame.cp3";
+
+const f = new Frame();
+const child = new Frame();
+f.kids = [child];
+console.log(f.id);
+console.log(f.kids.length);
+console.log(f.kids[0].id);

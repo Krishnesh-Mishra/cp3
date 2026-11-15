@@ -1,0 +1,23 @@
+import console from "std/console";
+
+// A trailing `export { Holder };` must expose the class exactly like
+// `export class Holder` does: its members must be usable from the
+// importing module (property read/write, method call, function-typed
+// field call, iteration over an array member).
+class Holder {
+    label: string = "a";
+    items: number[];
+    onHit: (s: string) => undefined;
+    constructor() {
+        const items: number[] = [1, 2, 3];
+        this.items = items;
+        this.onHit = (s: string): undefined => {
+            console.log("hit:" + s);
+            return undefined;
+        };
+    }
+    count(): number {
+        return this.items.length;
+    }
+}
+export { Holder };

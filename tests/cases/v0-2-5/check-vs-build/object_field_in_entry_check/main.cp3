@@ -1,0 +1,10 @@
+import console from "std/console";
+
+// An `object`-typed field in the entry module: `cp3 check` runs the
+// entry's codegen, so the unrepresentable field must be reported here.
+class Holder {
+    sock: object | undefined;
+    constructor() { this.sock = undefined; }
+}
+const h = new Holder();
+console.log("ok");

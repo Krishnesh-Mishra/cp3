@@ -1,0 +1,15 @@
+{
+  "steps": [
+    {
+      "cwd": "pkg",
+      "args": [
+        "check",
+        "src/index.cp3"
+      ],
+      "expectExit": 0,
+      "stderrContains": [
+        "CP3511"
+      ]
+    }
+  ]
+}

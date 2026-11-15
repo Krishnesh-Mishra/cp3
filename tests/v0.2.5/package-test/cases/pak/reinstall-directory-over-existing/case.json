@@ -1,0 +1,26 @@
+{
+  "steps": [
+    {
+      "cwd": "app",
+      "args": [
+        "install",
+        "../pkg"
+      ],
+      "expectExit": 0,
+      "stderrContains": [
+        "installed"
+      ]
+    },
+    {
+      "cwd": "app",
+      "args": [
+        "install",
+        "../pkg"
+      ],
+      "expectExit": 0,
+      "stderrContains": [
+        "installed"
+      ]
+    }
+  ]
+}

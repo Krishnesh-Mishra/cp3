@@ -1,0 +1,5 @@
+import console from "std/console";
+import { Holder } from "./holder.cp3";
+
+const h = new Holder();
+console.log("ok");

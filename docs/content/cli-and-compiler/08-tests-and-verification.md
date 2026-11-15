@@ -36,6 +36,19 @@ python tests/runner/run_tests.py --filter typed-arrays --no-bench
 python tests/runner/run_tests.py --filter native_strict --no-bench
 ```
 
+## The module-boundary and packaging suites
+
+Two suites cover the surfaces the language corpus cannot express with a single command:
+
+- `tests/cases/v0-2-5/` - module-boundary and checker cases in the ordinary corpus layout (one command per case): a name used in one module must resolve in the module that imports it, `cp3 check` must report what `cp3 build` reports, and the checker must type a program the way TypeScript does. `tests/cases/v0-2-5/README.md` lists every case with the defect it pins.
+- `tests/v0.2.5/package-test/` - the packaging corpus: a case is a scenario (build a package, pack it, install it, consume it from another project), driven by its own runner. It runs after the language corpus; `--no-package-tests` skips it and `--package-test-args` forwards options to it.
+
+```powershell
+python tests/runner/run_tests.py --filter v0-2-5 --no-bench
+python tests/v0.2.5/package-test/runner.py --verbose
+```
+
+
 Use `--jobs 1` when isolating ordering, resource, or intermittent issues. Use `--verbose` to see each case. Check `python tests/runner/run_tests.py --help` for the exact options in the current checkout; do not copy a stale command from an old report.
 
 ## Add tests beside the feature family

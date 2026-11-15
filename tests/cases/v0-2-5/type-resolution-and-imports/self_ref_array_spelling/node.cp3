@@ -1,0 +1,5 @@
+// The Array<T> spelling of a self-reference must resolve as well.
+export class Node {
+    id: number = 3;
+    kids!: Array<Node>;
+}

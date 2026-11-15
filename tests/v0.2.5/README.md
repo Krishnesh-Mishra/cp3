@@ -32,11 +32,19 @@ tests/v0.2.5/
                        parallel-safe subset)
   cases/
     <category>/<name>/case.json   fixture project + spec
+  package-test/        the packaging corpus (its own runner and case
+                       format - see package-test/README.md)
 ```
 
 Category directories mirror the features: `incremental/`, `dev/`, `warm/`,
 `install/`, `discovery/`, `link-rsp/`, `show-runtime/`,
 `lane-b/` (regression cases).
+
+The packaging corpus lives in its own directory because a package needs
+several commands (build, pack, install, consume) and the scenario format
+above does not express a step list. It runs after this suite's cases, from
+the main harness (`tests/runner/run_tests.py`, `--no-package-tests` skips
+it).
 
 ## Fixture directory (`cases/<category>/<name>/`)
 

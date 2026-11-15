@@ -1,0 +1,5 @@
+{
+  "mode": "run",
+  "stdout": "redis://localhost\n",
+  "exitCode": 0
+}

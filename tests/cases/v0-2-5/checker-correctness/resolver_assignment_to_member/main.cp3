@@ -1,0 +1,17 @@
+import console from "std/console";
+
+// The resolver of `Promise.withResolvers<T>()` is typed `(value: T) =>
+// undefined`; assigning it to a member of the same signature must type
+// check and lower (the std record and the member type must agree).
+class Sink {
+    resolve: (value: number) => undefined;
+    constructor() {
+        this.resolve = (v: number): undefined => undefined;
+    }
+}
+const { promise, resolve } = Promise.withResolvers<number>();
+const sink = new Sink();
+sink.resolve = resolve;
+resolve(41);
+const v = await promise;
+console.log(v);

@@ -1,0 +1,7 @@
+import console from "std/console";
+import { Widget } from "./widget.cp3";
+
+// A member that the imported class does not declare must be reported
+// (CP3305) - the imported class is not an opaque value.
+const w = new Widget();
+console.log(w.missing);

@@ -1,0 +1,5 @@
+// A recursive interface: the member type names the interface itself.
+export interface RecursiveIFace {
+    label: string;
+    members: RecursiveIFace[];
+}

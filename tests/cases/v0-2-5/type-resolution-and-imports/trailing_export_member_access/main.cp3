@@ -1,0 +1,11 @@
+import console from "std/console";
+import { Holder } from "./holder.cp3";
+
+const h = new Holder();
+h.label = "b";
+console.log(h.label);
+h.onHit("x");
+console.log(h.count());
+for (const item of h.items) {
+    console.log(item);
+}

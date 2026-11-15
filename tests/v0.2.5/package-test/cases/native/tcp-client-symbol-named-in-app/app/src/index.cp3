@@ -1,0 +1,8 @@
+import console from "std/console";
+import { connectTcp } from "std/network";
+import { openClient } from "pak_tcp2";
+
+openClient("127.0.0.1", 9);
+const sock = connectTcp("127.0.0.1", 9);
+sock.close();
+console.log("client-ready");

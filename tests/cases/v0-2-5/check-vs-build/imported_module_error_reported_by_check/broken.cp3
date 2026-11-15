@@ -1,0 +1,5 @@
+// A dependency with an unresolvable type name: `cp3 check` walks the
+// import graph, so the error must be reported here (not only at build).
+export class Broken {
+    value: MissingType;
+}

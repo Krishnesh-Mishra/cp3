@@ -1,0 +1,12 @@
+import console from "std/console";
+
+// A cast with no C++ conversion must be diagnosed by the checker (CP3401),
+// not accepted by `check` and left to fail in the C++ step with a raw
+// backend error.
+type RespRow = { label: string };
+function load(value: object): RespRow[] {
+    return value as RespRow[];
+}
+const seed: string[] = [];
+const rows = load(seed as object);
+console.log(rows.length);

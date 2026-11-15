@@ -1,0 +1,6 @@
+import console from "std/console";
+import { Widget } from "pak_multi";
+
+const w = new Widget();
+console.log(w.greet());
+console.log(w.id);

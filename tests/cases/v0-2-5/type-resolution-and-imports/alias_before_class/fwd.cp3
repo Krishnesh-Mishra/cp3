@@ -1,0 +1,5 @@
+// A type alias that names a class declared later in the same module.
+export type AliasBefore = PlainNode;
+export class PlainNode {
+    id: number = 1;
+}

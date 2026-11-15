@@ -1,0 +1,5 @@
+import console from "std/console";
+import { LaterAlias } from "./later.cp3";
+
+const v: LaterAlias = { id: 2 };
+console.log(v.id);

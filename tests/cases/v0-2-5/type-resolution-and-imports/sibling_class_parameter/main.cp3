@@ -1,0 +1,7 @@
+import console from "std/console";
+import { Opts, Client } from "./opts.cp3";
+
+const c = new Client();
+const o = new Opts();
+o.url = "redis://localhost";
+console.log(c.connect(o));

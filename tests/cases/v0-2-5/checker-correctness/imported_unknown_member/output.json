@@ -1,0 +1,9 @@
+{
+  "mode": "check",
+  "stdout": "",
+  "exitCode": 1,
+  "error": {
+    "code": "CP3305",
+    "contains": "has no member"
+  }
+}

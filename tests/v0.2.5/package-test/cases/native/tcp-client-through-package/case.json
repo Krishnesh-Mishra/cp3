@@ -1,0 +1,37 @@
+{
+  "steps": [
+    {
+      "cwd": "pkg",
+      "args": [
+        "build",
+        "src/index.cp3"
+      ],
+      "expectExit": 0,
+      "stderrContains": [
+        "packed"
+      ]
+    },
+    {
+      "cwd": "app",
+      "args": [
+        "install",
+        "../pkg/.cp3/out/pak_tcp.cp3pak"
+      ],
+      "expectExit": 0,
+      "stderrContains": [
+        "installed"
+      ]
+    },
+    {
+      "cwd": "app",
+      "args": [
+        "build",
+        "src/index.cp3"
+      ],
+      "expectExit": 0,
+      "stderrNotContains": [
+        "undefined symbol"
+      ]
+    }
+  ]
+}
