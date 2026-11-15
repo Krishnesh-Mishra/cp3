@@ -12,7 +12,6 @@
 // =============================================================================
 #pragma once
 
-#include <memory>
 #include <string>
 #include <vector>
 
@@ -20,8 +19,6 @@
 #include "cp3/core/ast.hpp"
 #include "cp3/codegen.hpp"
 #include "cp3/diag/diagnostic.hpp"
-
-#include "detail/core/frontend_result.hpp"
 #include "cp3/host/native_bindings.hpp"
 #include "cp3/host/options.hpp"
 #include "cp3/core/source.hpp"
@@ -119,10 +116,7 @@ bool loadEntrySource(const std::string& path, SourceManager& sm, SourceFile*& ou
 // Command implementations (one per concern).
 // -----------------------------------------------------------------------------
 int cmdCheck(const CliOptions& opt);
-// `frontendOut` (optional) receives the moved-out frontend result for the
-// dev watcher's post-build diagnostics; nullptr keeps the build opaque.
-int cmdBuildOrRun(const CliOptions& opt, bool execute,
-                  std::unique_ptr<FrontendResult>* frontendOut = nullptr);
+int cmdBuildOrRun(const CliOptions& opt, bool execute);
 int cmdDev(const CliOptions& opt);
 int cmdFmt(const CliOptions& opt);
 int cmdClean(const CliOptions& opt);

@@ -192,7 +192,7 @@ int cmdExec(const CliOptions& opt) {
         build.positionals.clear();
         build.programArgs.clear();
         build.execTool = true;
-        const int rc = cmdBuildOrRun(build, false, nullptr);
+        const int rc = cmdBuildOrRun(build, false);
         if (rc != kExitSuccess) return rc;
 
         const fs::path built = makeBuildLayout(target.source).exePath;

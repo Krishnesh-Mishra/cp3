@@ -312,7 +312,7 @@ int dispatchBuiltin(const std::string& command, cp3::cli::CliOptions& opt) {
         if (command == "warm") {
             opt.compile.profile = cp3::BuildProfile::Incremental;
         }
-        const int rc = cp3::cli::cmdBuildOrRun(opt, command == "run", nullptr);
+        const int rc = cp3::cli::cmdBuildOrRun(opt, command == "run");
         if (command == "warm" && rc == cp3::kExitSuccess) {
             std::fprintf(stderr,
                          "cp3c: warm: artifacts built and cached under "
