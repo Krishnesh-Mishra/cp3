@@ -250,8 +250,21 @@ std::string Generator::emitExtendedExpr(const Expr& e) {
             // the value is converted.
             const auto& asExpr = static_cast<const AsExpr&>(e);
             if (!asExpr.expression) return "0.0";
-            const std::string value = expr(*asExpr.expression);
             const Type targetType = effectiveType(e);
+            // `[] as string[]`: the assertion's element type flows into the
+            // empty literal - the `arrayLiteralText` lowering needs it and
+            // the cast is the only place it can come from.
+            std::optional<std::string> castArray;
+            if (asExpr.expression->kind == NodeKind::ArrayLiteral) {
+                const auto& inner =
+                    static_cast<const ArrayLiteral&>(*asExpr.expression);
+                const Type elem = arrayElemOf(targetType);
+                if (inner.elements.empty() && !elem.isUnknown()) {
+                    castArray = arrayLiteralText(inner, elem);
+                }
+            }
+            const std::string value =
+                castArray ? *castArray : expr(*asExpr.expression);
             const CppInfo targetInfo = classify(targetType);
             if (targetInfo.shape == Shape::ClassRef) {
                 const std::string element = targetInfo.cpp.substr(

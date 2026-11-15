@@ -978,7 +978,17 @@ void Analyzer::checkClassMemberBody(ClassMember& m) {
             declareBinding("this", thisType(), p.span,
                            BindingSpec{.publish = false});
             Type ft = resolveType(*p.type);
-            Type it = inferExpr(*p.initializer);
+            Type it;
+            // `field: number[] = []` - the annotation flows into the empty
+            // literal (the declarator route does the same).
+            if (p.initializer->kind == NodeKind::ArrayLiteral &&
+                static_cast<const ArrayLiteral&>(*p.initializer).elements.empty() &&
+                (ft.kind == TypeKind::Array || isTupleType(ft))) {
+                checkArrayLiteral(static_cast<ArrayLiteral&>(*p.initializer), ft);
+                it = ft;
+            } else {
+                it = inferExpr(*p.initializer);
+            }
             checkAssign(it, ft, p.initializer->span,
                         p.initializer->kind == NodeKind::ObjectLiteral);
             popScope();

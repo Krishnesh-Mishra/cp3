@@ -403,6 +403,19 @@ Type Analyzer::inferAssignment(AssignmentExpr& ae) {
         return Type::unknown();
     }
     Type valType;
+    // `x = []`: an empty array literal takes the declared array type of the
+    // target (TypeScript's contextual typing rule) - the declarator and the
+    // class field initializer do the same. Without this, the empty literal
+    // widens to `unknown[]`, which is not assignable to `number[]`.
+    const Type targetArrayType = targetTypeOf(*ae.target);
+    if (ae.value && ae.value->kind == NodeKind::ArrayLiteral &&
+        static_cast<const ArrayLiteral&>(*ae.value).elements.empty() &&
+        (targetArrayType.kind == TypeKind::Array ||
+         isTupleType(targetArrayType))) {
+        checkArrayLiteral(static_cast<ArrayLiteral&>(*ae.value),
+                          targetArrayType);
+        valType = targetArrayType;
+    } else
     if (ae.value && ae.value->kind == NodeKind::ArrowFunction) {
         // A member-typed arrow RHS gets the declared signature as the
         // contextual type, mirroring call arguments: `obj.f = (s) => ...`
