@@ -555,6 +555,33 @@ std::string Generator::emitIdentifier(const Identifier& id) {
     if (binding->cell) {
         return text + ".get()";
     }
+    // Storage is `std::optional<std::variant<...>>` (a mixed scalar to union
+    // that carries a nullish member): sema's narrowed view either keeps a
+    // variant alternative set (`number | string` -> the held variant) or one
+    // single alternative (`string` -> std::get over the held value).
+    if (binding->type.kind == TypeKind::Union) {
+        std::vector<Type> nonNullish;
+        for (const Type& part : binding->type.parts) {
+            if (!part.isNullish()) nonNullish.push_back(part);
+        }
+        const CppInfo di = classify(binding->type);
+        if (nonNullish.size() >= 2 &&
+            (di.shape == Shape::Optional || di.shape == Shape::Maybe)) {
+            const CppInfo diInner =
+                classify(Type::unionOf(std::move(nonNullish)));
+            if (diInner.shape == Shape::Union) {
+                const Type* narrowed = sema_.typeOf(id.nodeId);
+                const CppInfo ni =
+                    narrowed ? classify(*narrowed) : CppInfo{};
+                if (ni.shape == Shape::Union) {
+                    return "(*(" + text + "))";
+                }
+                if (isPrimitiveShape(ni.shape)) {
+                    return "std::get<" + ni.cpp + ">(*(" + text + "))";
+                }
+            }
+        }
+    }
     // The branch narrowed this binding to a non-nullish view (`if (v ===
     // undefined) ... else`); the declared storage may be `optional<T>` /
     // `Maybe<T>` - read through the held value. Only primitives unwrap this

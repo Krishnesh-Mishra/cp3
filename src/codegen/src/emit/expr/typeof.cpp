@@ -63,23 +63,29 @@ std::string typeofShape(const CppInfo& ci) {
 // asked at runtime (a union inside the option may hold different
 // alternatives); a reference-like value answers by its static type.
 std::string Generator::emitTypeofOption(const UnaryExpr& u, const CppInfo& ci) {
-    Type inner;
-    bool found = false;
+    // The held C++ value for a nullish outer that wraps a mixed scalar union
+    // is the variant the classifier produced - not the first alternative.
+    std::vector<Type> nonNullish;
     for (const Type& part : ci.type.parts) {
-        if (part.isNullish()) continue;
-        inner = part;
-        found = true;
-        break;
+        if (!part.isNullish()) nonNullish.push_back(part);
     }
+    const bool found = !nonNullish.empty();
+    const Type inner =
+        found ? Type::unionOf(std::move(nonNullish)) : Type::undefined();
     const CppInfo innerInfo = found ? classify(inner) : CppInfo{};
     std::string held;
     if (found && (isPrimitiveShape(innerInfo.shape) ||
                   innerInfo.shape == Shape::Union)) {
+        // The variant overload lives in cp3::runtime::unions; the root
+        // namespace has no variant typeOf.
+        const char* typeOf = innerInfo.shape == Shape::Union
+                                 ? "::cp3::runtime::unions::typeOf"
+                                 : "::cp3::runtime::typeOf";
         held = innerInfo.shape == Shape::Native
                    ? "std::string(\"number\")"
                    : (ci.shape == Shape::Maybe
-                          ? "::cp3::runtime::typeOf(cp3_v.value())"
-                          : "::cp3::runtime::typeOf(*cp3_v)");
+                          ? std::string(typeOf) + "(cp3_v.value())"
+                          : std::string(typeOf) + "(*cp3_v)");
     } else {
         const std::string answer = found ? typeofShape(innerInfo) : std::string();
         if (answer.empty()) {

@@ -217,6 +217,30 @@ CallBuilder::ArgTexts CallBuilder::callArgTexts(
             texts.drop[i] = true;
             continue;
         }
+        // An explicit `undefined` against a nullish annotation that is NOT a
+        // `?` parameter (`f(v: T | undefined)`) passes the empty slot, like
+        // any other nullish value - not an error, not a drop.
+        const auto acceptsNullish = [](const Type& t) {
+            if (t.isNullish() || t.isNullable()) return true;
+            if (t.isUnion()) {
+                for (const Type& member : t.parts) {
+                    if (member.isNullish()) return true;
+                }
+            }
+            return false;
+        };
+        if (arg->kind == NodeKind::UndefinedLiteral && !inRest &&
+            i < ptypes.size() && ptypes[i] && acceptsNullish(*ptypes[i])) {
+            const CppInfo whole = classify(*ptypes[i]);
+            if (whole.shape == Shape::Optional) {
+                texts.value[i] = "std::nullopt";
+                continue;
+            }
+            if (whole.shape == Shape::Maybe) {
+                texts.value[i] = whole.cpp + "(cp3::runtime::undefined)";
+                continue;
+            }
+        }
         if (arg->kind == NodeKind::UndefinedLiteral && inRest) {
             // `undefined` is a value of the rest array when the element type
             // admits it (`(number | undefined)[]` lowers to an optional

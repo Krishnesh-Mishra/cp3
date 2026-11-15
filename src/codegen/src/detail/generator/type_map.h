@@ -126,6 +126,7 @@ CppInfo classifyEnum(const Type& t);
 // keeps `Maybe<T>`). The two Union arms of `classify` (value_shapes.cpp).
 void classifyValueUnion(const Type& t, CppInfo& info);
 void classifyNullishUnion(const Type& t, CppInfo& info);
+void classifyNullishScalarUnion(const Type& t, CppInfo& info);
 
 // The C++ spelling of an all-primitive `$o{...}` object shape: fills the
 // generated struct name and its fields and registers the struct text for

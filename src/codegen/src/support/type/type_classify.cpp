@@ -220,6 +220,7 @@ CppInfo classify(const Type& raw) {
         case TypeKind::Union:
             classifyValueUnion(t, info);
             if (!info.representable) classifyNullishUnion(t, info);
+            if (!info.representable) classifyNullishScalarUnion(t, info);
             return info;
         case TypeKind::Object: {
             // `Promise.allSettled`'s settlement record: the sema marker

@@ -9,7 +9,10 @@ function describe(v: number | string | undefined): number {
     if (v === undefined) {
         return -1;
     }
-    return v + 1;
+    if (typeof v === "number") {
+        return v + 1;
+    }
+    return 0;
 }
 console.log(describe("abc"));
 console.log(describe(41));

@@ -431,6 +431,33 @@ CppInfo classifyObjectValue(const Type& t) {
     return info;
 }
 
+// A nullish member (`A | B | undefined`, or `| null`): the non-nullish
+// alternatives spell exactly like the value union does; the nullish member
+// contributes the optional's flavor instead of taking a member slot. This is
+// the only lowering of a 3-or-more member scalar/nullish union - the
+// single-inner nullish arm stays for single alternatives. A null/undefined
+// pair has no single-flavor optional spelling and stays unsupported.
+void classifyNullishScalarUnion(const Type& t, CppInfo& info) {
+    std::vector<Type> nonNullish;
+    bool hasNull = false, hasUndefined = false;
+    for (const Type& part : t.parts) {
+        if (part.isNullish()) {
+            if (part.isNull()) hasNull = true;
+            else hasUndefined = true;
+            continue;
+        }
+        nonNullish.push_back(part);
+    }
+    if ((hasNull && hasUndefined) || nonNullish.size() < 2) return;
+    const CppInfo ic = classify(Type::unionOf(std::move(nonNullish)));
+    if (!ic.representable) return;
+    info.type = t;
+    info.shape = Shape::Optional;
+    info.representable = true;
+    info.cpp = "std::optional<" + ic.cpp + ">";
+    info.emptyKind = hasNull ? NullishKind::Null : NullishKind::Undefined;
+}
+
 // `A | B` over primitives -> the canonical `std::variant` (Number, String,
 // Bool). A nullish member, a non-primitive member or a single distinct member
 // leaves the union to `classifyNullishUnion`.
