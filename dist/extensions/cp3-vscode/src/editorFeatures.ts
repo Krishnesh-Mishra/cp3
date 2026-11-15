@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import * as vscode from "vscode";
 
 interface ExportedSymbol {
@@ -6,14 +7,28 @@ interface ExportedSymbol {
     readonly file: vscode.Uri;
     readonly detail: string;
     readonly documentation: string;
+    // True when the name reaches this file through an `export *` barrel: the
+    // barrel is the module's public surface, so importing through it wins a
+    // tie against the base file.
+    readonly reExport?: boolean;
 }
 
 let exportIndex: ExportedSymbol[] = [];
 let indexBuild: Promise<void> | undefined;
+// Set when a rebuild is requested while another one is running; the running
+// build chains one more pass instead of dropping the request.
+let rebuildRequested = false;
 let rebuildTimer: ReturnType<typeof setTimeout> | undefined;
+// When the index was last built. The completion provider refreshes a stale
+// index, so a module written a moment ago is offered right away.
+let indexBuiltAt = 0;
 
 const exportPattern = /^\s*export\s+(?:(?:declare|default)\s+)*(?:(?:async|abstract)\s+)*(function|class|interface|enum|type|const|let|var)\s+([A-Za-z_$][\w$]*)/gm;
 const exportListPattern = /^\s*export\s*\{([^}]+)\}(?:\s*from\s*["'][^"']+["'])?\s*;?/gm;
+// `export default handler;` - the default export of a local declaration.
+const defaultIdentifierPattern = /^\s*export\s+default\s+([A-Za-z_$][\w$]*)\s*;?\s*$/gm;
+// `export * from "./base.cp3";` - the barrel re-exports another module.
+const starExportPattern = /^\s*export\s+\*\s+from\s+["']([^"']+)["']\s*;?\s*$/gm;
 const importLinePattern = /^\s*import\s+.*;?\s*$/;
 
 function kindFor(kind: string): vscode.CompletionItemKind {
@@ -64,18 +79,56 @@ function parseExports(uri: vscode.Uri, text: string): ExportedSymbol[] {
             });
         }
     }
+    // `export default handler;` exports the local declaration under its own
+    // name, so the name is importable.
+    defaultIdentifierPattern.lastIndex = 0;
+    for (let match = defaultIdentifierPattern.exec(text); match; match = defaultIdentifierPattern.exec(text)) {
+        const name = match[1];
+        if (entries.some((entry) => entry.name === name)) continue;
+        entries.push({
+            name,
+            kind: vscode.CompletionItemKind.Variable,
+            file: uri,
+            detail: `default export - ${vscode.workspace.asRelativePath(uri, false)}`,
+            documentation: "",
+        });
+    }
     return entries;
 }
 
 async function rebuildExportIndex(): Promise<void> {
-    if (indexBuild) return indexBuild;
-    indexBuild = (async () => {
+    if (indexBuild) {
+        // A build is already running. Ask for another one after it instead of
+        // dropping the request: a file created while the running build was
+        // scanning would otherwise stay unindexed until the next file event,
+        // and the auto-import would keep offering a stale module.
+        rebuildRequested = true;
+        return indexBuild;
+    }
+    for (;;) {
+        rebuildRequested = false;
+        indexBuild = buildExportIndex();
+        try {
+            await indexBuild;
+        } finally {
+            indexBuild = undefined;
+        }
+        if (!rebuildRequested) return;
+    }
+}
+
+async function buildExportIndex(): Promise<void> {
+    {
         const files = await vscode.workspace.findFiles(
             "**/*.cp3",
             "**/{build,dist,node_modules,.git,third_party,generated}/**",
             2500,
         );
         const entries: ExportedSymbol[] = [];
+        // The exports of every file, keyed by its normalized path, so a
+        // barrel's `export * from` can be resolved after the first pass.
+        const perFile = new Map<string, { uri: vscode.Uri; parsed: ExportedSymbol[] }>();
+        const texts = new Map<string, string>();
         // Bound concurrency so a large workspace index does not issue thousands
         // of simultaneous filesystem requests or block the editor event loop.
         for (let start = 0; start < files.length; start += 32) {
@@ -83,18 +136,90 @@ async function rebuildExportIndex(): Promise<void> {
             const results = await Promise.all(batch.map(async (file) => {
                 try {
                     const bytes = await vscode.workspace.fs.readFile(file);
-                    return parseExports(file, Buffer.from(bytes).toString("utf8"));
+                    const text = Buffer.from(bytes).toString("utf8");
+                    return { file, text, parsed: parseExports(file, text) };
                 } catch {
                     // A file can disappear between findFiles and readFile. Keep
                     // the rest indexed and let the next watcher event retry.
-                    return [];
+                    return undefined;
                 }
             }));
-            for (const result of results) entries.push(...result);
+            for (const result of results) {
+                if (!result) continue;
+                const key = normalizedFile(result.file);
+                perFile.set(key, { uri: result.file, parsed: result.parsed });
+                texts.set(key, result.text);
+                entries.push(...result.parsed);
+            }
+        }
+        // A barrel re-exports another module: the names it exports are
+        // importable through the barrel itself.
+        for (const [key, text] of texts) {
+            starExportPattern.lastIndex = 0;
+            for (let match = starExportPattern.exec(text); match; match = starExportPattern.exec(text)) {
+                try {
+                    const target = resolveRelativeModule(perFile.get(key)!.uri, match[1], perFile);
+                    if (!target) continue;
+                    const reexported = perFile.get(normalizedFile(target));
+                    if (!reexported) continue;
+                    const barrel = perFile.get(key)!.uri;
+                    for (const entry of reexported.parsed) {
+                        entries.push({ ...entry, file: barrel, reExport: true });
+                    }
+                } catch (error) {
+                    console.error("cp3: export-star resolution failed", error);
+                }
+            }
         }
         exportIndex = entries;
-    })().finally(() => { indexBuild = undefined; });
-    return indexBuild;
+        indexBuiltAt = Date.now();
+    }
+}
+
+// The file a relative module specifier names, or undefined when it does not
+// resolve to a file of the workspace.
+function resolveRelativeModule(
+    from: vscode.Uri,
+    specifier: string,
+    known: Map<string, { uri: vscode.Uri; parsed: ExportedSymbol[] }>,
+): vscode.Uri | undefined {
+    if (!specifier.startsWith(".")) return undefined;
+    const base = path.dirname(from.fsPath);
+    const target = path.resolve(base, specifier);
+    for (const candidate of [target, `${target}.cp3`]) {
+        const uri = vscode.Uri.file(candidate);
+        if (known.has(normalizedFile(uri))) return uri;
+    }
+    return undefined;
+}
+
+// The project the edited file belongs to: the nearest ancestor directory with
+// a package.json (a project root), or the workspace folder when the project
+// has no manifest. The auto-import offers the modules of that project only -
+// a module of an unrelated project in the same workspace is not importable
+// from here.
+async function projectRootOf(document: vscode.Uri): Promise<string | undefined> {
+    const folder = vscode.workspace.getWorkspaceFolder(document);
+    const root = folder?.uri.fsPath;
+    let dir = path.dirname(document.fsPath);
+    for (;;) {
+        try {
+            await vscode.workspace.fs.stat(vscode.Uri.file(path.join(dir, "package.json")));
+            return dir;
+        } catch {
+            // Not a project root: keep walking up.
+        }
+        if (root && path.resolve(dir) === path.resolve(root)) return root;
+        const parent = path.dirname(dir);
+        if (parent === dir) return root;
+        dir = parent;
+    }
+}
+
+function isInsideProject(root: string | undefined, file: vscode.Uri): boolean {
+    if (!root) return true;
+    const relative = path.relative(root, file.fsPath);
+    return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
 }
 
 function relativeModule(from: vscode.Uri, to: vscode.Uri): string {
@@ -107,6 +232,9 @@ function relativeModule(from: vscode.Uri, to: vscode.Uri): string {
     while (common < fromParts.length && common < targetParts.length &&
            fromParts[common].toLowerCase() === targetParts[common].toLowerCase()) common++;
     path = [...Array(fromParts.length - common).fill(".."), ...targetParts.slice(common)].join("/");
+    // A directory index is imported through its folder (`./mathx`), not
+    // through the index file itself (`./mathx/index.cp3`).
+    if (path.endsWith("/index.cp3")) path = path.slice(0, -"/index.cp3".length);
     if (!path.startsWith(".")) path = `./${path}`;
     return path;
 }
@@ -182,11 +310,42 @@ export function localBindings(text: string): Set<string> {
     return names;
 }
 
-function exportCompletionItems(
+// The exported names the document already imports, per module (resolved
+// against the document's folder). A name the document already imports from a
+// module is not offered again - not even under another alias.
+function importedNamesByModule(document: vscode.TextDocument): Map<string, Set<string>> {
+    const out = new Map<string, Set<string>>();
+    const pattern = /^\s*import\s+([^;]*?)\s+from\s+["']([^"']+)["']/gm;
+    const text = document.getText();
+    pattern.lastIndex = 0;
+    for (let match = pattern.exec(text); match; match = pattern.exec(text)) {
+        const clause = match[1].trim();
+        const specifier = match[2];
+        if (!specifier.startsWith(".")) continue;
+        const resolved = path.resolve(path.dirname(document.uri.fsPath), specifier);
+        const names = out.get(normalizedFile(vscode.Uri.file(resolved))) ?? new Set<string>();
+        const named = clause.match(/\{([^}]*)\}/);
+        if (named) {
+            for (const part of named[1].split(",")) {
+                const names_ = part.trim().split(/\s+as\s+/);
+                const exported = (names_[0] ?? "").trim();
+                if (exported) names.add(exported);
+            }
+        } else {
+            // A default or namespace import binds the module's default
+            // export; the name it covers is not known here.
+            names.add("default");
+        }
+        out.set(normalizedFile(vscode.Uri.file(resolved)), names);
+    }
+    return out;
+}
+
+async function exportCompletionItems(
     document: vscode.TextDocument,
     position: vscode.Position,
     token: vscode.CancellationToken,
-): vscode.CompletionItem[] {
+): Promise<vscode.CompletionItem[]> {
     if (token.isCancellationRequested || document.languageId !== "cp3") return [];
     const linePrefix = document.lineAt(position.line).text.slice(0, position.character);
     const prefix = linePrefix.match(/[A-Za-z_$][\w$]*$/)?.[0] ?? "";
@@ -210,17 +369,26 @@ function exportCompletionItems(
     for (const open of openDocuments) {
         availableEntries.push(...parseExports(open.uri, open.getText()));
     }
-    const byName = new Map<string, { entry: ExportedSymbol; score: number }>();
+    // Only the modules of the edited file's project are importable from here.
+    const projectRoot = await projectRootOf(document.uri);
+    const alreadyImported = importedNamesByModule(document);
+    const byName = new Map<string, { entry: ExportedSymbol; score: number; reExport: number }>();
     for (const entry of availableEntries) {
         if (!entry.name.toLowerCase().startsWith(prefix.toLowerCase()) || entry.name === prefix) continue;
         if (normalizedFile(entry.file) === normalizedFile(document.uri)) continue;
+        if (!isInsideProject(projectRoot, entry.file)) continue;
+        if (alreadyImported.get(normalizedFile(entry.file))?.has(entry.name)) continue;
         if (visibleBindings.has(entry.name)) continue;
         const effective = entry;
         const modulePath = relativeModule(document.uri, effective.file);
         const score = modulePath.split("/").filter(Boolean).length +
             modulePath.split("/").filter((part) => part === "..").length * 4;
+        const reExport = effective.reExport ? 1 : 0;
         const previous = byName.get(effective.name);
-        if (!previous || score < previous.score) byName.set(effective.name, { entry: effective, score });
+        if (!previous || score < previous.score ||
+            (score === previous.score && reExport > previous.reExport)) {
+            byName.set(effective.name, { entry: effective, score, reExport });
+        }
     }
 
     const candidates = [...byName.values()].sort((a, b) => a.score - b.score || a.entry.name.localeCompare(b.entry.name));
@@ -290,7 +458,12 @@ export function registerEditorFeatures(context: vscode.ExtensionContext): void {
         { language: "cp3" },
         { provideCompletionItems: async (document, position, token) => {
             if (!vscode.workspace.getConfiguration("cp3").get<boolean>("suggestWorkspaceExports", true)) return [];
-            if (!exportIndex.length) await rebuildExportIndex();
+            // Refresh a stale index: a module written a moment ago (a file the
+            // watcher has not reported yet, or a file created while a build
+            // was running) must be offered right away.
+            if (!exportIndex.length || Date.now() - indexBuiltAt > 1_500) {
+                void rebuildExportIndex();
+            }
             return exportCompletionItems(document, position, token);
         } },
         ...identifierTriggers,

@@ -81,6 +81,23 @@ export async function workspaceLooksLikeCp3(): Promise<boolean> {
     return false;
 }
 
+/**
+ * Whether a workspace folder's root package.json is a cp3 manifest. This is
+ * the narrower question the schema association asks: the schema describes the
+ * cp3 manifest itself, so a workspace without a cp3 package.json has nothing
+ * to associate it with (a loose .cp3 file elsewhere in the tree is not a
+ * manifest).
+ */
+function workspaceHasCp3Manifest(): boolean {
+    for (const folder of vscode.workspace.workspaceFolders ?? []) {
+        const manifest = readJsonFile(path.join(folder.uri.fsPath, "package.json"));
+        if (manifest !== undefined && isCp3Manifest(manifest)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /** True when the value is one of our own earlier associations. */
 function isOurs(assoc: JsonSchemaAssoc): boolean {
     const url = assoc.url ?? assoc.schema;
@@ -96,7 +113,9 @@ export async function applyPackageJsonSchema(
     context: vscode.ExtensionContext,
     announce: boolean
 ): Promise<boolean> {
-    const isCp3 = await workspaceLooksLikeCp3();
+    // The association is about the manifest itself: only a workspace whose
+    // root package.json is a cp3 manifest gets our schema recorded.
+    const isCp3 = workspaceHasCp3Manifest();
     const schemaUri = vscode.Uri.joinPath(
         context.extensionUri,
         "schemas",
