@@ -224,6 +224,21 @@ std::vector<lsp::HierarchyEntry> typeHierarchyRelativesAt(const std::string& pat
                                                           const lsp::HierarchyEntry& entry,
                                                           bool supertypes);
 
+// Call hierarchy (lsp_intel_calls.cpp): the callable the cursor names, the
+// callers of that callable, and the callees inside its body. The entries use
+// the hierarchy item shape: the name, the kind, the detail and the spans of
+// the declaration the item points at.
+std::vector<lsp::HierarchyEntry> callHierarchyPrepareAt(const std::string& path,
+                                                         const std::string& text,
+                                                         std::uint32_t line,
+                                                         std::uint32_t column);
+std::vector<lsp::HierarchyEntry> callHierarchyIncomingAt(
+    const std::string& path, const std::string& text,
+    const lsp::HierarchyEntry& entry);
+std::vector<lsp::HierarchyEntry> callHierarchyOutgoingAt(
+    const std::string& path, const std::string& text,
+    const lsp::HierarchyEntry& entry);
+
 // Document symbols (lsp_intel_query.cpp): the outline of one document.
 std::vector<lsp::SymbolEntry> symbolsAt(const std::string& path,
                                         const std::string& text);

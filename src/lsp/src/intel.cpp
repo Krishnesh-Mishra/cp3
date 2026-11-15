@@ -521,6 +521,112 @@ Json typeHierarchyRelativesResult(const DocumentView& document, std::uint32_t it
     return typeHierarchyItemsJson(document, intel, entries);
 }
 
+// The call hierarchy: the item the cursor names, the callers of an item and
+// the callees inside it. The items use the hierarchy item shape (the LSP's
+// call item is the same shape as the type item).
+Json prepareCallHierarchyResult(const DocumentView& document, std::uint32_t line,
+                                std::uint32_t character,
+                                const IntelHooks& intel) {
+    Json items = jsonArray();
+    if (!hasTarget(document) || !intel.callHierarchyPrepare) return items;
+    std::vector<HierarchyEntry> entries;
+    try {
+        const std::uint32_t column = toByteColumn(*document.text, line, character);
+        entries = intel.callHierarchyPrepare(*document.path, *document.text,
+                                             line + 1, column);
+    } catch (...) {
+        entries.clear();
+    }
+    return typeHierarchyItemsJson(document, intel, entries);
+}
+
+// The item the client rounded back, as the compiler's entry.
+HierarchyEntry entryOfItem(const DocumentView& document,
+                            std::uint32_t itemLine, std::uint32_t itemColumn,
+                            const std::string& itemName,
+                            const std::string& itemUri,
+                            std::uint32_t itemKind) {
+    HierarchyEntry entry;
+    entry.name = itemName;
+    entry.kind = static_cast<int>(itemKind);
+    std::string itemPath;
+    if (!uriToPath(itemUri, itemPath) || itemPath.empty()) {
+        itemPath = document.path != nullptr ? *document.path : std::string();
+    }
+    entry.path = itemPath;
+    entry.line = itemLine + 1;
+    entry.column = toByteColumn(*document.text, itemLine, itemColumn);
+    entry.endLine = entry.line;
+    entry.endColumn = entry.column;
+    entry.nameLine = entry.line;
+    entry.nameColumn = entry.column;
+    entry.nameEndLine = entry.line;
+    entry.nameEndColumn = entry.column;
+    return entry;
+}
+
+Json callHierarchyIncomingResult(const DocumentView& document,
+                                 std::uint32_t itemLine,
+                                 std::uint32_t itemColumn,
+                                 const std::string& itemName,
+                                 const std::string& itemUri,
+                                 std::uint32_t itemKind,
+                                 const IntelHooks& intel) {
+    Json calls = jsonArray();
+    if (!hasTarget(document) || itemName.empty() || !intel.callHierarchyIncoming) {
+        return calls;
+    }
+    const HierarchyEntry entry = entryOfItem(document, itemLine, itemColumn,
+                                             itemName, itemUri, itemKind);
+    std::vector<HierarchyEntry> entries;
+    try {
+        entries = intel.callHierarchyIncoming(entry.path, *document.text, entry);
+    } catch (...) {
+        entries.clear();
+    }
+    for (const HierarchyEntry& caller : entries) {
+        std::optional<Json> item = typeHierarchyItemJson(document, intel, caller);
+        if (!item.has_value()) continue;
+        Json call = jsonObject();
+        call.set("from", std::move(*item));
+        Json ranges = jsonArray();
+        call.set("fromRanges", std::move(ranges));
+        calls.push(std::move(call));
+    }
+    return calls;
+}
+
+Json callHierarchyOutgoingResult(const DocumentView& document,
+                                 std::uint32_t itemLine,
+                                 std::uint32_t itemColumn,
+                                 const std::string& itemName,
+                                 const std::string& itemUri,
+                                 std::uint32_t itemKind,
+                                 const IntelHooks& intel) {
+    Json calls = jsonArray();
+    if (!hasTarget(document) || itemName.empty() || !intel.callHierarchyOutgoing) {
+        return calls;
+    }
+    const HierarchyEntry entry = entryOfItem(document, itemLine, itemColumn,
+                                             itemName, itemUri, itemKind);
+    std::vector<HierarchyEntry> entries;
+    try {
+        entries = intel.callHierarchyOutgoing(entry.path, *document.text, entry);
+    } catch (...) {
+        entries.clear();
+    }
+    for (const HierarchyEntry& callee : entries) {
+        std::optional<Json> item = typeHierarchyItemJson(document, intel, callee);
+        if (!item.has_value()) continue;
+        Json call = jsonObject();
+        call.set("to", std::move(*item));
+        Json ranges = jsonArray();
+        call.set("fromRanges", std::move(ranges));
+        calls.push(std::move(call));
+    }
+    return calls;
+}
+
 Json documentSymbolResult(const DocumentView& document, const IntelHooks& intel) {
     Json symbols = jsonArray();
     if (!hasTarget(document) || !intel.documentSymbols) return symbols;

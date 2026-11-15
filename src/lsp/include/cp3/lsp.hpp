@@ -172,6 +172,19 @@ struct IntelHooks {
         const std::string& path, const std::string& text, const HierarchyEntry& entry,
         bool supertypes)>
         typeHierarchyRelatives;
+    // Call hierarchy: the callable at the position (prepare), the callers of
+    // an item (incoming) and the callees inside it (outgoing). The entries use
+    // the hierarchy item shape.
+    std::function<std::vector<HierarchyEntry>(
+        const std::string& path, const std::string& text, std::uint32_t line,
+        std::uint32_t column)>
+        callHierarchyPrepare;
+    std::function<std::vector<HierarchyEntry>(
+        const std::string& path, const std::string& text, const HierarchyEntry& entry)>
+        callHierarchyIncoming;
+    std::function<std::vector<HierarchyEntry>(
+        const std::string& path, const std::string& text, const HierarchyEntry& entry)>
+        callHierarchyOutgoing;
     std::function<std::vector<SymbolEntry>(const std::string& path,
                                            const std::string& text)>
         documentSymbols;

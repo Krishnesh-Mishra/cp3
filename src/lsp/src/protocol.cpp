@@ -92,6 +92,7 @@ Json initializeResult() {
     capabilities.set("workspaceSymbolProvider", jsonBool(true));
     capabilities.set("signatureHelpProvider", signatureHelpProviderJson());
     capabilities.set("typeHierarchyProvider", jsonBool(true));
+    capabilities.set("callHierarchyProvider", jsonBool(true));
     capabilities.set("documentFormattingProvider", jsonBool(true));
     capabilities.set("foldingRangeProvider", jsonBool(true));
     Json serverInfo = jsonObject();

@@ -80,6 +80,26 @@ Json typeHierarchyRelativesResult(const DocumentView& document, std::uint32_t it
 // DocumentSymbol result: DocumentSymbol[].
 Json documentSymbolResult(const DocumentView& document, const IntelHooks& intel);
 
+// Call hierarchy: the item at the position, the callers of an item and the
+// callees inside it.
+Json prepareCallHierarchyResult(const DocumentView& document, std::uint32_t line,
+                                std::uint32_t character,
+                                const IntelHooks& intel);
+Json callHierarchyIncomingResult(const DocumentView& document,
+                                 std::uint32_t itemLine,
+                                 std::uint32_t itemColumn,
+                                 const std::string& itemName,
+                                 const std::string& itemUri,
+                                 std::uint32_t itemKind,
+                                 const IntelHooks& intel);
+Json callHierarchyOutgoingResult(const DocumentView& document,
+                                 std::uint32_t itemLine,
+                                 std::uint32_t itemColumn,
+                                 const std::string& itemName,
+                                 const std::string& itemUri,
+                                 std::uint32_t itemKind,
+                                 const IntelHooks& intel);
+
 // SignatureHelp result: { signatures, activeSignature, activeParameter } or
 // null when the cursor is not inside an argument list.
 Json signatureHelpResult(const DocumentView& document, std::uint32_t line,

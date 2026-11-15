@@ -312,6 +312,9 @@ constexpr const char* kSupertypes = "typeHierarchy/supertypes";
 constexpr const char* kSubtypes = "typeHierarchy/subtypes";
 constexpr const char* kLegacySupertypes = "textDocument/supertypes";
 constexpr const char* kLegacySubtypes = "textDocument/subtypes";
+constexpr const char* kPrepareCallHierarchy = "textDocument/prepareCallHierarchy";
+constexpr const char* kIncomingCalls = "callHierarchy/incomingCalls";
+constexpr const char* kOutgoingCalls = "callHierarchy/outgoingCalls";
 
 // completion/hover/definition/signatureHelp/references/prepareRename/rename:
 // textDocument + position; prepareTypeHierarchy is also position-shaped, while
@@ -320,18 +323,23 @@ bool Server::handleIntelPositionRequest(const std::string& method,
                                         const Json& id, const Json* params) {
     const bool isSupertypes = method == kSupertypes || method == kLegacySupertypes;
     const bool isSubtypes = method == kSubtypes || method == kLegacySubtypes;
+    const bool isIncomingCalls = method == kIncomingCalls;
+    const bool isOutgoingCalls = method == kOutgoingCalls;
     const bool listAnswer = method == "textDocument/completion" ||
                             method == "textDocument/definition" ||
                             method == "textDocument/references" ||
                             method == kPrepareTypeHierarchy || isSupertypes ||
-                            isSubtypes;
+                            isSubtypes || method == kPrepareCallHierarchy ||
+                            isIncomingCalls || isOutgoingCalls;
     if (method != "textDocument/completion" && method != "textDocument/hover" &&
         method != "textDocument/definition" &&
         method != "textDocument/signatureHelp" &&
         method != "textDocument/references" &&
         method != "textDocument/prepareRename" &&
         method != "textDocument/rename" &&
-        method != kPrepareTypeHierarchy && !isSupertypes && !isSubtypes) {
+        method != kPrepareTypeHierarchy && !isSupertypes && !isSubtypes &&
+        method != kPrepareCallHierarchy && !isIncomingCalls &&
+        !isOutgoingCalls) {
         return false;
     }
     // supertypes/subtypes carry the TypeHierarchyItem the client rounded
@@ -413,6 +421,89 @@ bool Server::handleIntelPositionRequest(const std::string& method,
                                                  *intel_, /*supertypes=*/isSupertypes));
         return true;
     }
+    // The call hierarchy carries the item the client rounded back
+    // (params.item): name (string, non-empty), uri (string), kind (number,
+    // default 5) and range.start (the 0-based LSP coordinates).
+    if (method == "callHierarchy/incomingCalls" ||
+        method == "callHierarchy/outgoingCalls") {
+        const Json* item = params != nullptr ? params->find("item") : nullptr;
+        if (item == nullptr || !item->isObject()) {
+            respond(id, jsonArray());
+            return true;
+        }
+        const std::string* itemName = stringField(*item, "name");
+        const std::string* itemUri = stringField(*item, "uri");
+        if (itemName == nullptr || itemName->empty() || itemUri == nullptr ||
+            itemUri->empty()) {
+            respond(id, jsonArray());
+            return true;
+        }
+        const std::uint32_t itemKind = numberField(*item, "kind", 5);
+        std::uint32_t itemLine = 0;
+        std::uint32_t itemCharacter = 0;
+        if (const Json* range = item->find("range"); range != nullptr &&
+                                                     range->isObject()) {
+            if (const Json* start = range->find("start"); start != nullptr &&
+                                                           start->isObject()) {
+                itemLine = numberField(*start, "line", 0);
+                itemCharacter = numberField(*start, "character", 0);
+            }
+        }
+        // The item's file: our own `data` block wins (it agrees with the
+        // uri), else the uri maps the path.
+        std::string itemPath;
+        if (const Json* data = item->find("data"); data != nullptr &&
+                                                    data->isObject()) {
+            if (const std::string* dataPath = stringField(*data, "path");
+                dataPath != nullptr && !dataPath->empty()) {
+                itemPath = *dataPath;
+            }
+        }
+        if (itemPath.empty() && !uriToPath(*itemUri, itemPath)) {
+            respond(id, jsonArray());
+            return true;
+        }
+        std::string text;
+        std::string viewPath = itemPath;
+        std::string itemUriForView = *itemUri;
+        if (!itemPath.empty()) {
+            const Document* openDoc = findDocument(itemUriForView);
+            if (openDoc != nullptr) {
+                text = openDoc->text;
+            } else {
+                std::optional<std::string> fetched;
+                if (intel_ != nullptr && intel_->readFile) {
+                    try {
+                        fetched = intel_->readFile(itemPath);
+                    } catch (...) {
+                        fetched.reset();
+                    }
+                }
+                if (!fetched) {
+                    respond(id, jsonArray());
+                    return true;
+                }
+                text = *std::move(fetched);
+            }
+        } else {
+            respond(id, jsonArray());
+            return true;
+        }
+        DocumentView view;
+        view.uri = &itemUriForView;
+        view.path = &viewPath;
+        view.text = &text;
+        respond(id, method == "callHierarchy/incomingCalls"
+                          ? callHierarchyIncomingResult(view, itemLine,
+                                                        itemCharacter, *itemName,
+                                                        itemUriForView, itemKind,
+                                                        *intel_)
+                          : callHierarchyOutgoingResult(view, itemLine,
+                                                        itemCharacter, *itemName,
+                                                        itemUriForView, itemKind,
+                                                        *intel_));
+        return true;
+    }
     // textDocument/references carries the includeDeclaration flag in
     // params.context; absent means true (the LSP default).
     bool includeDeclaration = true;
@@ -492,6 +583,9 @@ bool Server::handleIntelPositionRequest(const std::string& method,
                                  renameNewName, *intel_));
     } else if (method == kPrepareTypeHierarchy) {
         respond(id, prepareTypeHierarchyResult(view, target.line,
+                                               target.character, *intel_));
+    } else if (method == kPrepareCallHierarchy) {
+        respond(id, prepareCallHierarchyResult(view, target.line,
                                                target.character, *intel_));
     } else {
         respond(id, signatureHelpResult(view, target.line, target.character, *intel_));

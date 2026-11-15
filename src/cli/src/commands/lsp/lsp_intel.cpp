@@ -247,6 +247,33 @@ lsp::IntelHooks makeIntelHooks() {
             return std::vector<lsp::HierarchyEntry>();
         }
     };
+    hooks.callHierarchyPrepare = [](const std::string& path,
+                                    const std::string& text, std::uint32_t line,
+                                    std::uint32_t column) {
+        try {
+            return callHierarchyPrepareAt(path, text, line, column);
+        } catch (...) {
+            return std::vector<lsp::HierarchyEntry>();
+        }
+    };
+    hooks.callHierarchyIncoming = [](const std::string& path,
+                                     const std::string& text,
+                                     const lsp::HierarchyEntry& entry) {
+        try {
+            return callHierarchyIncomingAt(path, text, entry);
+        } catch (...) {
+            return std::vector<lsp::HierarchyEntry>();
+        }
+    };
+    hooks.callHierarchyOutgoing = [](const std::string& path,
+                                     const std::string& text,
+                                     const lsp::HierarchyEntry& entry) {
+        try {
+            return callHierarchyOutgoingAt(path, text, entry);
+        } catch (...) {
+            return std::vector<lsp::HierarchyEntry>();
+        }
+    };
     hooks.documentSymbols = [](const std::string& path,
                                const std::string& text) {
         try {
