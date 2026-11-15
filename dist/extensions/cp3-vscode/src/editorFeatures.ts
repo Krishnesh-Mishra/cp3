@@ -243,43 +243,109 @@ function normalizedFile(uri: vscode.Uri): string {
     return uri.fsPath.replace(/\\/g, "/").toLowerCase();
 }
 
-// The compiler's advice travels with the diagnostic (its `data.suggestions`).
-// Every suggestion becomes a quick fix; the ones that name a replacement
-// ("Did you mean 'x'?") carry the edit that applies it.
-interface DiagnosticSuggestion {
-    readonly text: string;
-    /** The name the compiler expected (the quoted name of the advice). */
+// The compiler already writes the fix for its own diagnostics, and its
+// messages carry it: "'console' has no member 'lgoh'; did you mean 'log'?",
+// "cannot find name 'x'; add `import x ...`". The editor reads the same
+// message and offers them as quick fixes. A suggestion the compiler does
+// not emit cannot be offered; a program with no diagnostics gets no
+// quick fixes.
+interface FixSuggestion {
+    /** What the editor shows; always mentions the names involved. */
+    readonly title: string;
     readonly replacement?: string;
+    readonly importLine?: string;
+    /** An identifier to remove its import line for, when the compiler
+     * reports "X is a language builtin, no import is needed". */
+    readonly dropImportLineIdentifier?: string;
 }
 
-/** The first name in quotes ("cannot find name 'x'"). */
-function firstQuoted(text: string): string | undefined {
-    const match = /'([^']+)'/.exec(text);
-    return match?.[1];
-}
-
-function diagnosticSuggestions(diagnostic: vscode.Diagnostic): DiagnosticSuggestion[] {
-    const data = (diagnostic as { data?: { suggestions?: unknown } }).data;
-    const raw = Array.isArray(data?.suggestions) ? data.suggestions : [];
-    const out: DiagnosticSuggestion[] = [];
-    for (const entry of raw) {
-        if (typeof entry !== "string" || entry.length === 0) continue;
-        const replacement = firstQuoted(entry);
-        out.push(replacement ? { text: entry, replacement } : { text: entry });
+/** The names after "did you mean" up to the end of the sentence. */
+function didYouMeanNames(text: string): string[] {
+    const at = text.indexOf("did you mean ");
+    if (at < 0) return [];
+    const tail = text.slice(at + "did you mean ".length);
+    const out: string[] = [];
+    for (const match of tail.matchAll(/'([A-Za-z_$][A-Za-z0-9_$]*)'/g)) {
+        out.push(match[1]);
     }
     return out;
 }
 
-/** The range of the identifier the compiler is about, inside the
- * diagnostic's range (the diagnostic may cover the whole statement). */
-function identifierRange(document: vscode.TextDocument, diagnostic: vscode.Diagnostic, name: string): vscode.Range | undefined {
-    const text = document.getText(diagnostic.range);
-    const at = text.indexOf(name);
-    if (at < 0) return undefined;
-    const base = document.offsetAt(diagnostic.range.start);
-    const start = document.positionAt(base + at);
-    const end = document.positionAt(base + at + name.length);
+/** The import the compiler suggests adding ("add `import ...`"). */
+function suggestedImportLine(text: string): string | undefined {
+    const match = /add `(import [^`]+)`/.exec(text);
+    return match?.[1];
+}
+
+function identifierRangeAt(
+    document: vscode.TextDocument,
+    fromOffset: number,
+    name: string,
+): vscode.Range | undefined {
+    const text = document.getText();
+    const pattern = new RegExp(`(?<![A-Za-z0-9_$])${name.replace(/[$]/g, "\\$")}(?![A-Za-z0-9_$])`, "g");
+    pattern.lastIndex = fromOffset;
+    const match = pattern.exec(text);
+    if (!match) return undefined;
+    const start = document.positionAt(match.index);
+    const end = document.positionAt(match.index + name.length);
     return new vscode.Range(start, end);
+}
+
+function fixesForDiagnostic(
+    document: vscode.TextDocument,
+    diagnostic: vscode.Diagnostic,
+): FixSuggestion[] {
+    const suggestions: FixSuggestion[] = [];
+    const message = diagnostic.message;
+    // "Add `import ...`" is a full-sentence suggestion: offer it as its own
+    // action (the editor inserts the line at the top).
+    const importLine = suggestedImportLine(message);
+    if (importLine) {
+        suggestions.push({ title: importLine, importLine });
+    }
+    // "has no member 'x'" / "cannot find name 'x'" with "did you mean 'y'?":
+    // one action per alternative, applying the replacement.
+    const wrong = /(?:has no member|has no name|cannot find name) '([A-Za-z_$][A-Za-z0-9_$]*)'/.exec(message);
+    const alternatives = didYouMeanNames(message);
+    if (wrong && alternatives.length > 0) {
+        const current = wrong[1];
+        for (const replacement of alternatives) {
+            suggestions.push({
+                title: `Replace '${current}' with '${replacement}'`,
+                replacement,
+            });
+        }
+    }
+    // "EventEmitter is a language builtin, no import is needed": offer to
+    // drop the import line. The message names the builtin ("... EventEmitter is
+    // a language builtin ...").
+    if (diagnostic.code === "CP3601" && message.includes("is a language builtin")) {
+        const builtin = /([A-Za-z_$][A-Za-z0-9_$]*) is a language builtin/.exec(message);
+        if (builtin) {
+            suggestions.push({
+                title: `Use the built-in ${builtin[1]} instead`,
+                dropImportLineIdentifier: builtin[1],
+            });
+        }
+    }
+    // "unused import 'x'" diagnostics carry no suggestions yet: the compiler
+    // does not emit an unused-import suggestion, so nothing is offered.
+    return suggestions;
+}
+
+function importLineAtTop(document: vscode.TextDocument): vscode.Position {
+    return importInsertion(document);
+}
+
+function dropImportLineFor(document: vscode.TextDocument, identifier: string): vscode.Range | undefined {
+    const pattern = new RegExp(`^\\s*import[^\\n]*\\b${identifier}\\b`);
+    for (let line = 0; line < document.lineCount; line++) {
+        if (pattern.test(document.lineAt(line).text)) {
+            return new vscode.Range(line, 0, line + 1, 0);
+        }
+    }
+    return undefined;
 }
 
 class Cp3QuickFixProvider implements vscode.CodeActionProvider {
@@ -287,25 +353,31 @@ class Cp3QuickFixProvider implements vscode.CodeActionProvider {
         if (document.languageId !== "cp3") return [];
         const actions: vscode.CodeAction[] = [];
         for (const diagnostic of vscode.languages.getDiagnostics(document.uri)) {
-            // The name the compiler is about ("cannot find name 'x'").
-            const current = firstQuoted(diagnostic.message);
-            for (const suggestion of diagnosticSuggestions(diagnostic)) {
-                const action = new vscode.CodeAction(
-                    suggestion.text,
-                    vscode.CodeActionKind.QuickFix,
-                );
-                if (suggestion.replacement && current) {
-                    const target = identifierRange(document, diagnostic, current);
-                    if (target) {
-                        action.edit = new vscode.WorkspaceEdit();
-                        action.edit.replace(document.uri, target, suggestion.replacement);
-                    }
+            const offset = document.offsetAt(diagnostic.range.start);
+            for (const fix of fixesForDiagnostic(document, diagnostic)) {
+                const action = new vscode.CodeAction(fix.title, vscode.CodeActionKind.QuickFix);
+                action.diagnostics = [diagnostic];
+                action.edit = new vscode.WorkspaceEdit();
+                if (fix.replacement) {
+                    const target = identifierRangeAt(document, offset, findWrongName(document, diagnostic));
+                    if (target) action.edit.replace(document.uri, target, fix.replacement);
+                } else if (fix.importLine) {
+                    action.edit.insert(document.uri, importLineAtTop(document), `${fix.importLine}\n`);
+                } else if (fix.dropImportLineIdentifier) {
+                    const drop = dropImportLineFor(document, fix.dropImportLineIdentifier);
+                    if (drop) action.edit.delete(document.uri, drop);
                 }
                 actions.push(action);
             }
         }
         return actions;
     }
+}
+
+/** The name the compiler is about ("has no member 'x'"). */
+function findWrongName(document: vscode.TextDocument, diagnostic: vscode.Diagnostic): string {
+    const wrong = /(?:has no member|has no name|cannot find name) '([A-Za-z_$][A-Za-z0-9_$]*)'/.exec(diagnostic.message);
+    return wrong?.[1] ?? "";
 }
 
 // Auto-import is useful while a symbol is being typed, but it must never

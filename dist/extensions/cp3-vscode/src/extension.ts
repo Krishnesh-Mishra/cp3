@@ -45,6 +45,7 @@ import {
 import { resolveCompilerPath } from "./compilerPath";
 import { registerEditorFeatures } from "./editorFeatures";
 import { registerSuggestionEngine } from "./intelligence/suggestionProvider";
+import { registerSelectionRanges } from "./selectionRanges";
 import {
     applyPackageJsonSchema,
     registerPackageJsonSchemaCommand,
@@ -522,6 +523,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     context.subscriptions.push(runOutputChannel());
     registerEditorFeatures(context);
     registerSuggestionEngine(context);
+    registerSelectionRanges(context);
     context.subscriptions.push(
         vscode.commands.registerCommand(RESTART_COMMAND, () => startClient(true))
     );

@@ -82,6 +82,11 @@ let serverWarmed = false;
  * workspace, because activation happens during the fixture's first open, at
  * which point the workspace may still see no `.cp3` file. Every LSP case
  * calls this before touching the server; repeated calls are no-ops.
+ *
+ * The server needs a moment to load and check its first document, so a
+ * warm-up fixture is opened and polled until the server reports a diagnostic
+ * for it: that is the only deterministic way to know the server is ready to
+ * answer queries for the fixtures that follow.
  */
 export async function ensureServerStarted(): Promise<void> {
     await ensureCompilerConfigured();
@@ -90,6 +95,31 @@ export async function ensureServerStarted(): Promise<void> {
     }
     serverWarmed = true;
     await vscode.commands.executeCommand("cp3.restartServer");
+    const root = workspaceRoot();
+    if (!root) {
+        return;
+    }
+    const warmupFile = path.join(root, ".cp3-warmup.cp3");
+    const warmupSource = "function warmupBroken( {\n  return 1;\n}\n";
+    fs.writeFileSync(warmupFile, warmupSource, "utf8");
+    try {
+        const document = await vscode.workspace.openTextDocument(vscode.Uri.file(warmupFile));
+        await vscode.window.showTextDocument(document, { preview: true });
+        const deadline = Date.now() + 20_000;
+        for (;;) {
+            const found = vscode.languages.getDiagnostics(document.uri);
+            if (found.length > 0) {
+                break;
+            }
+            if (Date.now() > deadline) {
+                break;  // The server may be slow; do not stall the whole run.
+            }
+            await new Promise((resolve) => setTimeout(resolve, 200));
+        }
+        await vscode.commands.executeCommand("workbench.action.closeActiveEditor");
+    } finally {
+        fs.rmSync(warmupFile, { force: true });
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -881,6 +911,8 @@ export interface CodeActionCase extends CaseModules {
     readonly expectTitle?: readonly string[];
     /** Kind of actions to request (optional filter). */
     readonly kind?: vscode.CodeActionKind;
+    /** How long to wait for a positive expectation; diagnostics may take a moment. */
+    readonly timeoutMs?: number;
     readonly expectNone?: boolean;
 }
 
@@ -898,22 +930,56 @@ export function codeActionCases(suiteName: string, cases: readonly CodeActionCas
                 if (spec.kind) {
                     filter.kind = spec.kind;
                 }
+                const fetchActions = () =>
+                    vscode.commands.executeCommand(
+                        "_executeCodeActionProvider",
+                        document.uri,
+                        range,
+                        filter,
+                    ) as Promise<Array<vscode.CodeAction | vscode.Command> | undefined>;
+                const titleOf = (action: vscode.CodeAction | vscode.Command) =>
+                    "title" in action ? String(action.title) : String((action as vscode.Command).title);
+                // The test host ships the built-in Copilot Chat extension,
+                // which injects AI actions ("Fix", "Explain", "Generate") into
+                // every diagnostic. They are not ours, are not reproducible,
+                // and drown every "no action expected" case, so they are
+                // filtered out everywhere the suite reads code actions.
+                const isCopilotNoise = (action: vscode.CodeAction | vscode.Command) => {
+                    const kind = typeof (action as unknown as { kind?: unknown }).kind === "string"
+                        ? (action as unknown as { kind: string }).kind
+                        : "";
+                    return (action as unknown as { isAI?: unknown }).isAI === true || kind.startsWith("quickfix.copilot") ||
+                           kind.startsWith("quickfix.explain.copilot") || kind.startsWith("quickfix.generate.copilot");
+                };
+                const dropNoise = (list: Array<vscode.CodeAction | vscode.Command> | undefined) =>
+                    (list ?? []).filter((action) => !isCopilotNoise(action));
+                // The server publishes diagnostics on its own loop; a provider
+                // asked before they arrive answers an empty list, which would
+                // fail the case for a timing reason instead of the behaviour
+                // it checks. Wait for the expected title to show up.
+                // The server may need several seconds to check the first
+                // document of a fresh workspace, and diagnostics are what the
+                // provider reads; give the poll enough room (the diagnostics
+                // driver waits 12s for the same reason).
+                const timeoutMs = spec.timeoutMs ?? 15_000;
+                const expected = spec.expectTitle ?? [];
                 const actions = await waitFor(
-                    () =>
-                        vscode.commands.executeCommand(
-                            "_executeCodeActionProvider",
-                            document.uri,
-                            range,
-                            filter,
-                        ) as Promise<Array<vscode.CodeAction | vscode.Command> | undefined>,
-                    (value) => value !== undefined,
-                    6_000,
+                    fetchActions,
+                    (value) =>
+                        expected.length === 0 ||
+                        (Array.isArray(value) &&
+                            expected.every((chunk) =>
+                                dropNoise(value).some((action) => titleOf(action).includes(chunk)),
+                            )),
+                    timeoutMs,
                 ).catch(() => undefined);
-                const titles = (actions ?? []).map((action) =>
-                    "title" in action ? String(action.title) : String((action as vscode.Command).title),
-                );
+                const titles = dropNoise(actions).map(titleOf);
                 if (spec.expectNone) {
-                    assert.equal(titles.length, 0, `expected no actions; got: ${titles.join(", ")}`);
+                    // Let the diagnostics settle before accepting an empty answer.
+                    await new Promise((resolve) => setTimeout(resolve, 1_500));
+                    const late = await fetchActions().catch(() => undefined);
+                    const lateTitles = dropNoise(late).map(titleOf);
+                    assert.equal(lateTitles.length, 0, `expected no actions; got: ${lateTitles.join(", ")}`);
                     return;
                 }
                 for (const chunk of spec.expectTitle ?? []) {
@@ -1214,8 +1280,50 @@ export function selectionRangeCases(suiteName: string, cases: readonly Selection
                         [position],
                     )
                     .then((value) => value, () => undefined);
-                const depth = (range?: vscode.SelectionRange): number => (range ? 1 + depth(range.parent) : 0);
-                const count = results?.reduce((sum, range) => sum + depth(range), 0) ?? 0;
+                // The nesting the tests care about is the sequence of
+                // semantic expansion steps, so the pieces VS Code always
+                // merges in are discounted: the full line (column 1 to the
+                // line's max column, no newline), the whole-model range,
+                // and exact duplicates of a level (an expansion that lands
+                // on the trimmed line shows up both as the level and as
+                // the synthetic the command inserts between layers).
+                const key = (r: { startLineNumber: number; startColumn: number; endLineNumber: number; endColumn: number }): string =>
+                    `${r.startLineNumber}:${r.startColumn}-${r.endLineNumber}:${r.endColumn}`;
+                const isFullLine = (entry: { startLineNumber: number; startColumn: number; endLineNumber: number; endColumn: number }): boolean =>
+                    entry.startLineNumber === entry.endLineNumber &&
+                    entry.startColumn === 1 &&
+                    entry.endColumn === document.lineAt(entry.startLineNumber - 1).text.length + 1;
+                const isTrimmedLine = (entry: { startLineNumber: number; startColumn: number; endLineNumber: number; endColumn: number }): boolean => {
+                    if (entry.startLineNumber !== entry.endLineNumber) return false;
+                    const raw = document.lineAt(entry.startLineNumber - 1).text;
+                    if (raw.trim().length === 0) return false;
+                    const first = raw.search(/\S/) + 1;
+                    const last = raw.replace(/\s+$/, "").length + 1;
+                    return entry.startColumn === first && entry.endColumn === last;
+                };
+                const isWholeModel = (entry: { startLineNumber: number; startColumn: number; endLineNumber: number; endColumn: number }): boolean =>
+                    entry.startLineNumber === 1 &&
+                    entry.startColumn === 1 &&
+                    entry.endLineNumber === document.lineCount &&
+                    entry.endColumn === 1;
+                try {
+                    const flat = (Array.isArray(results) ? results : []).flat() as unknown as Array<{ startLineNumber: number; startColumn: number; endLineNumber: number; endColumn: number }>;
+                    const seen = new Set<string>();
+                    const levels = flat.filter(
+                        (entry) =>
+                            entry &&
+                            typeof entry.startLineNumber === "number" &&
+                            !isFullLine(entry) &&
+                            !isTrimmedLine(entry) &&
+                            !isWholeModel(entry) &&
+                            !seen.has(key(entry)) &&
+                            (seen.add(key(entry)), true),
+                    );
+                    var count = levels.length;
+                } catch {
+                    // A malformed answer counts as no levels rather than a crash.
+                    var count = 0;
+                }
                 if (spec.expectRanges !== undefined) {
                     assert.equal(count, spec.expectRanges, `expected ${spec.expectRanges} nested selection range(s)`);
                 } else {
