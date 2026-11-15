@@ -34,7 +34,6 @@ set(cp3_cli_sources
     src/toolchain/runtime/incremental.cpp
     src/detail/hotpatch/state_map.cpp
     src/detail/hotpatch/module_descriptor.cpp
-    src/detail/hotpatch/bootstrap.cpp
     src/toolchain/runtime/pipeline.cpp
     src/commands/run/common.cpp
     src/commands/run/arguments.cpp
@@ -138,7 +137,7 @@ file(WRITE "${CP3_DOCS_HEADER_TMP}"
     "inline const Entry kEntries[] = {\n")
 foreach(CP3_DOC IN LISTS CP3_DOCS_MARKDOWN)
     file(READ "${CP3_DOC}" CP3_DOC_TEXT)
-    string(REGEX MATCH "^---[\r\n]+title: *([^\r\n]+)[\r\n]+chapter: *([^\r\n]+)([\r\n]+[A-Za-z0-9_-]+: *[^\r\n]+)*[\r\n]+---[\r\n]+"
+    string(REGEX MATCH "^---[\r\n]+title: *([^\r\n]+)[\r\n]+chapter: *([^\r\n]+)[\r\n]+---[\r\n]+"
         CP3_FRONT_MATTER "${CP3_DOC_TEXT}")
     if(NOT CP3_FRONT_MATTER STREQUAL "")
         set(CP3_DOC_TITLE "${CMAKE_MATCH_1}")
