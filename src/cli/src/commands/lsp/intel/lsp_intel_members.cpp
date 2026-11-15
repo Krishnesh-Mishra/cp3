@@ -406,15 +406,23 @@ const ArrayLiteral* arrayStartingAt(const Program& program,
 
 // One probe analysis keeps the candidates the compiler can actually resolve.
 // (Outside the anonymous namespace: lsp_intel_complete.cpp calls it.)
-// The probe analysis reports an unknown member (CP3305) at the access: a
-// candidate the compiler does not know is never offered.
-bool reportsMemberNotFound(const std::vector<Diagnostic>& diagnostics,
-                            const SourceSpan& span) {
+// The probe analysis reports an unknown member (CP3305): a candidate the
+// compiler does not know is never offered. The diagnostic names the member it
+// is about ("<type> has no member 'x'"), which is what tells the candidates
+// apart - the report itself is anchored at the enclosing statement.
+bool reportsUnknownMember(const std::vector<Diagnostic>& diagnostics,
+                           const std::string& name) {
     for (const Diagnostic& diagnostic : diagnostics) {
         if (diagnostic.code != diagcode::kMemberNotFound) continue;
-        if (!diagnostic.span.valid() || !span.valid()) continue;
-        if (diagnostic.span.begin.offset != span.begin.offset) continue;
-        return true;
+        const std::size_t head = diagnostic.message.find("has no member ");
+        if (head == std::string::npos) continue;
+        const std::size_t open = diagnostic.message.find('\'', head);
+        if (open == std::string::npos) continue;
+        const std::size_t close = diagnostic.message.find('\'', open + 1);
+        if (close == std::string::npos) continue;
+        if (diagnostic.message.compare(open + 1, close - open - 1, name) == 0) {
+            return true;
+        }
     }
     return false;
 }
@@ -431,8 +439,15 @@ std::vector<lsp::CompletionCandidate> memberCandidates(
     if (names.empty()) return candidates;
     const Type* sourceReceiverType =
         receiverTypeForCompletion(document, receiver, context.dot);
-    std::string probe = text;
-    probe.replace(context.receiverBegin, offset - context.receiverBegin,
+    // An array or a string has an exact member table in the compiler, and
+    // that table IS the candidate list: a probe cannot decide a generic
+    // method (`map`, `reduce`), whose type only exists once it is called.
+    if (sourceReceiverType != nullptr &&
+        (sourceReceiverType->kind == TypeKind::Array ||
+         sourceReceiverType->kind == TypeKind::String)) {
+        return knownReceiverCandidates(document, receiver, sourceReceiverType);
+    }
+    std::string probe = text;    probe.replace(context.receiverBegin, offset - context.receiverBegin,
                   probeArrayText(receiver, names));
     auto probed = analyzeDocument(document.file->path, probe);
     const std::string root = lastIdentifier(receiver);
@@ -475,22 +490,22 @@ std::vector<lsp::CompletionCandidate> memberCandidates(
     for (std::size_t i = 0; i < names.size(); ++i) {
         const ExprPtr& element = array->elements[i];
         if (element == nullptr) continue;
-        // The probe analysis reports a member the compiler does not know
-        // (CP3305) at the access: such a candidate is never offered. The
-        // type alone cannot decide it - a generic method (`map`, `reduce`)
-        // has no type until it is called, so its access stays untyped.
-        if (reportsMemberNotFound(probed->diagnostics, element->span)) continue;
+        // A member the compiler does not know is never offered (CP3305). The
+        // type alone cannot decide it: a generic method (`map`, `reduce`) has
+        // an error type until it is called, so it would be dropped with it.
+        if (reportsUnknownMember(probed->diagnostics, names[i])) continue;
         const Type* type = probed->sema.typeOf(element->nodeId);
-        if (type != nullptr && type->isError()) continue;
+        const bool usable = type != nullptr && !type->isError() &&
+                            !type->isUnknown();
         lsp::CompletionCandidate candidate;
         candidate.label = names[i];
-        candidate.kind = type != nullptr && type->kind == TypeKind::Function ? 3 : 5;
+        candidate.kind = usable && type->kind == TypeKind::Function ? 3 : 5;
         // An ambient surface has no printable type of its own: the
         // documented signature (in the documentation) is what the editor
         // shows instead of the internal placeholder label.
-        candidate.detail = (type == nullptr || isPlaceholderType(*type))
-                               ? ""
-                               : describe(*type);
+        candidate.detail = (usable && !isPlaceholderType(*type))
+                               ? describe(*type)
+                               : "";
         candidate.documentation =
             completionMemberDoc(document, namespaceName, receiverType,
                                 names[i]);
