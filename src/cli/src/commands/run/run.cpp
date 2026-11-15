@@ -33,6 +33,7 @@
 #include "detail/cache/package_cache.hpp"
 #include "detail/core/commands.hpp"
 #include "detail/core/diagnostics.hpp"
+#include "detail/core/lane_b.hpp"
 #include "detail/pkg/package_json.hpp"
 #include "detail/toolchain/incremental.hpp"
 #include "detail/toolchain/pipeline.hpp"
