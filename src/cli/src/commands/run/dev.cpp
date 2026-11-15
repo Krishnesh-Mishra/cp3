@@ -704,6 +704,7 @@ struct DevSession {
     bool forceRebuild = false;
     bool usedFallback = false;
     bool fallbackLogged = false;
+    unsigned fallbackTick = 0;
 };
 
 void initializeBaseline(DevSession& session) {
@@ -774,8 +775,8 @@ std::optional<fs::file_time_type> exeMtimeIfExists(const fs::path& exe) {
 void rebuild(DevSession& session, bool isInitial) {
     const fs::path exe = makeBuildLayout(session.file).exePath;
     const DevWatchSet previousSet = session.watched;  // empty on the initial pass
-    const std::vector<StatFingerprint> preBuildStat =
-        statFingerprint(previousSet);
+    const std::vector<ContentEntry> preBuildContent =
+        contentFingerprint(previousSet);
     const std::optional<fs::file_time_type> exeBefore = exeMtimeIfExists(exe);
 
     if (!isInitial) {
@@ -784,6 +785,11 @@ void rebuild(DevSession& session, bool isInitial) {
     CliOptions effective = session.opt;
     effective.internalDeferExeReplace = true;
     const int rc = cmdBuildOrRun(effective, false);
+    // Re-resolve the watched set and arm the OS watch BEFORE announcing the
+    // build. A client reacting to "build ok - " (the dev runner applies its
+    // fixture edit at that instant) writes the file immediately; the watch
+    // must already be armed or the edit lands in the gap and is never seen.
+    refreshWatchedSet(session);
     const auto buildElapsed = std::chrono::duration_cast<
         std::chrono::milliseconds>(std::chrono::steady_clock::now() -
                                    session.changeStartedAt)
@@ -792,15 +798,13 @@ void rebuild(DevSession& session, bool isInitial) {
                  rc == kExitSuccess ? "ok" : "reported problems",
                  static_cast<long long>(buildElapsed), rc);
 
-    // Re-resolve the watched set: the graph just rebuilt from fresh sources,
-    // so the file list (and its parent directories) may have changed.
-    refreshWatchedSet(session);
-
     // Files that drifted while the build was running, or newly watched files
     // the build may not have seen, force one defensive rebuild next window.
-    // Bounded: at most one forced pass per build window.
+    // Content-compared, not stat-compared: an edit that preserves mtime and
+    // size is still a source change. Bounded: at most one forced pass per
+    // build window.
     const bool drifted = !isInitial &&
-        (!statMatches(preBuildStat, statFingerprint(previousSet)) ||
+        (!contentMatches(contentFingerprint(previousSet), preBuildContent) ||
          previousSet.keySet != session.watched.keySet);
 
     // Baseline the current state so the watch loop does not drift forever.
@@ -917,11 +921,23 @@ int cmdDev(const CliOptions& opt) {
         bool activity = false;
         if (session.usedFallback) {
             std::this_thread::sleep_for(kPollInterval);
-            const std::vector<StatFingerprint> stat =
-                statFingerprint(session.watched);
-            if (!statMatches(stat, session.lastStat)) {
-                session.lastStat = stat;
-                activity = true;
+            // Stat is a cheap fast path, but an edit that preserves mtime
+            // and size is invisible to it; hash the content every ~500 ms so
+            // the degraded path still notices it.
+            session.fallbackTick = (session.fallbackTick + 1) % 10;
+            if (session.fallbackTick == 0) {
+                const std::vector<ContentEntry> content =
+                    contentFingerprint(session.watched);
+                if (!contentMatches(content, session.baselineContent)) {
+                    activity = true;
+                }
+            } else {
+                const std::vector<StatFingerprint> stat =
+                    statFingerprint(session.watched);
+                if (!statMatches(stat, session.lastStat)) {
+                    session.lastStat = stat;
+                    activity = true;
+                }
             }
         } else {
             activity = session.watcher.waitForActivity(kEventTimeout);

@@ -42,6 +42,7 @@
 #include "detail/generator/mangle.h"
 #include "detail/generator/program_assembly.h"
 #include "detail/generator/program_link.h"
+#include "detail/class/class_model.h"
 
 namespace cp3 {
 
@@ -496,6 +497,13 @@ GeneratedModule assembleProgram(const ProgramAssembly& assembly,
 // order.
 ProgramAssembly Generator::buildAssembly(
     const ModuleGraph& graph, const std::vector<CheckedModuleUnit>& units) {
+    // The class/object model registry is a process-global cache shared by
+    // every unit in one build; the dev watcher rebuilds in the same process,
+    // and without a per-build wipe the registry would keep the previous
+    // build's models. Those models' decl pointers reference dead ASTs and
+    // classOwnedByThisUnit() (an AST file pointer identity test) would drop
+    // the class from every rebuilt unit, emitting an empty namespace block.
+    ModelRegistry::get().reset();
     const ProgramLink link = buildProgramLink(graph, units);
     // One pass over every unit's AST, BEFORE any class is emitted: the
     // program-wide set of members that must lower as `virtual`. An override
