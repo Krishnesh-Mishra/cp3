@@ -15,7 +15,7 @@ What landed in the v0.2 line that changes everyday code:
 - **Parallel call diagnostics** — `parallel.for` / `parallel.reduce` / `parallel.run` report unknown members, misplaced or wrong-shaped closures, and a missing range first argument at check time — see §5 Runtime essentials.
 - **Typed promise handlers** — `.then` / `.catch` / `.finally` handlers take typed parameters, and `Promise` combinators accept plain values as already-resolved promises (wrapped per element) — see §5.1 `async` / `await` and promises.
 
-Full notes: [`docs/release/v0.2.md`](https://github.com/Krishnesh-Mishra/cp3/blob/master/docs/release/v0.2.md). Build from source and run the suite: [`docs/BUILD.md`](https://github.com/Krishnesh-Mishra/cp3/blob/master/docs/BUILD.md).
+Full notes: [`docs/content/releases/v0.2.md`](https://github.com/Krishnesh-Mishra/cp3/blob/master/docs/content/releases/v0.2.md). Build from source and run the suite: [`docs/BUILD.md`](https://github.com/Krishnesh-Mishra/cp3/blob/master/docs/BUILD.md).
 
 # 1. One-file summary: what transfers and what does not
 

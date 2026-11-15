@@ -10,7 +10,7 @@ CP3 is a statically typed language with TypeScript-shaped syntax. It compiles yo
 
 ## v0.2
 
-CP3 v0.2 ("TypeScript compatibility") is the current release. Highlights: the `std/json` file API (`JSON.parseFileSync<T>` / `parseFile<T>` / `stringifyToFile(Sync)` / `verify<T>`) with inline `<T>` record parsing, fresh-literal `Object.assign` merge semantics, program-wide virtual dispatch for overriding methods, TS-parity enum arithmetic, typed Promise handlers, and parallel-call diagnostics. Full notes: [docs/release/v0.2.md](docs/release/v0.2.md). Build from source and run the suite: [docs/BUILD.md](docs/BUILD.md).
+CP3 v0.2 ("TypeScript compatibility") is the current release. Highlights: the `std/json` file API (`JSON.parseFileSync<T>` / `parseFile<T>` / `stringifyToFile(Sync)` / `verify<T>`) with inline `<T>` record parsing, fresh-literal `Object.assign` merge semantics, program-wide virtual dispatch for overriding methods, TS-parity enum arithmetic, typed Promise handlers, and parallel-call diagnostics. Full notes: [docs/content/releases/v0.2.md](docs/content/releases/v0.2.md). Build from source and run the suite: [docs/BUILD.md](docs/BUILD.md).
 
 ---
 

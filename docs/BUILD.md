@@ -207,7 +207,7 @@ across machines or across compiler rebuilds without the same build.
    compiler `--version`, CMake project version, runtime, VS Code extension
    metadata and docs (the build scripts run it automatically).
 2. The full corpus passes on the reference platform (Windows) and the Linux
-   corpus rerun is clean — see `docs/release/v0.2.md` for the v0.2 state.
+   corpus rerun is clean — see `docs/content/releases/v0.2.md` for the v0.2 state.
 3. Windows: `.\vendor\tools\build.ps1`; Linux: `./vendor/tools/build.sh`.
 4. The MSI/tarball and `SHA256SUMS.txt` are attached/posted with the tag.
 5. arm64 packages carry `-untested` until they are verified on hardware.
