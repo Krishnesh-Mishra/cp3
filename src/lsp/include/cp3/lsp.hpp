@@ -14,8 +14,10 @@
 //   textDocument/{didOpen,didChange,didSave,didClose},
 //   textDocument/publishDiagnostics.
 // The intel round adds the query requests behind IntelHooks: completion, hover,
-// definition, documentSymbol, workspaceSymbol, signatureHelp, formatting and
-// foldingRange (computed from text, no hook required).
+// definition, documentSymbol, workspaceSymbol, signatureHelp, formatting,
+// foldingRange (computed from text, no hook required), references,
+// prepareRename, rename, and the type hierarchy (prepareTypeHierarchy,
+// supertypes, subtypes).
 // =============================================================================
 #pragma once
 
@@ -95,6 +97,17 @@ struct SourceTarget {
     std::uint32_t endColumn = 1;
 };
 
+// One type/call hierarchy item, in compiler coordinates (1-based line, 1-based BYTE column).
+// `kind` is an LSP SymbolKind (class 5, interface 11, enum 10, variable 13, function 12).
+struct HierarchyEntry {
+    std::string name;
+    int kind = 5;
+    std::string detail;
+    std::string path;
+    std::uint32_t line = 1, column = 1, endLine = 1, endColumn = 1;   // the declaration span
+    std::uint32_t nameLine = 1, nameColumn = 1, nameEndLine = 1, nameEndColumn = 1;  // the name span
+};
+
 // One document-symbol (outline) entry in compiler coordinates.
 struct SymbolEntry {
     std::string name;
@@ -132,6 +145,33 @@ struct IntelHooks {
     std::function<std::vector<SourceTarget>(
         const std::string& path, const std::string& text, std::uint32_t line,
         std::uint32_t column)> definition;
+    // References/rename reuse SourceTarget: every occurrence (including the
+    // declaration itself) is a plain location; rename replaces the name text
+    // in each, prepareRename answers a single location for the name being
+    // renamed (placeholder = the current name, derived from the span).
+    std::function<std::vector<SourceTarget>(
+        const std::string& path, const std::string& text, std::uint32_t line,
+        std::uint32_t column, bool includeDeclaration)>
+        references;
+    std::function<std::optional<SourceTarget>(
+        const std::string& path, const std::string& text, std::uint32_t line,
+        std::uint32_t column)>
+        prepareRename;
+    std::function<std::vector<SourceTarget>(
+        const std::string& path, const std::string& text, std::uint32_t line,
+        std::uint32_t column, const std::string& newName)>
+        rename;
+    // Prepare / relate a type hierarchy. `supertypes` (textDocument/supertypes) asks for ancestors,
+    // otherwise descendants. Returns empty when the position is not on a class/interface/enum/type-alias
+    // declaration or a use bound to one.
+    std::function<std::vector<HierarchyEntry>(
+        const std::string& path, const std::string& text, std::uint32_t line,
+        std::uint32_t column)>
+        typeHierarchyPrepare;
+    std::function<std::vector<HierarchyEntry>(
+        const std::string& path, const std::string& text, const HierarchyEntry& entry,
+        bool supertypes)>
+        typeHierarchyRelatives;
     std::function<std::vector<SymbolEntry>(const std::string& path,
                                            const std::string& text)>
         documentSymbols;

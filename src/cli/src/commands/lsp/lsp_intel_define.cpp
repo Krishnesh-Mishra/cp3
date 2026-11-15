@@ -31,11 +31,6 @@
 namespace cp3::cli {
 namespace {
 
-struct ExportHit {
-    const Node* node = nullptr;
-    std::string name;
-};
-
 std::string declarationName(const Stmt& statement) {
     switch (statement.kind) {
         case NodeKind::FunctionDeclaration:
@@ -122,9 +117,56 @@ ExportHit findDefault(const Program& program) {
     return {};
 }
 
+// The declaration node with the given id, or nullptr.
+const Node* findNodeById(const Program& program, std::uint32_t nodeId) {
+    if (nodeId == 0) return nullptr;
+    const Node* found = nullptr;
+    forEachNode(program, [&](const Node& node) {
+        if (found != nullptr || node.nodeId != nodeId) return;
+        found = &node;
+    });
+    return found;
+}
+
+// The name a declaration node declares (a function, a class, a variable).
+std::string declaredNameOf(const Node& node) {
+    switch (node.kind) {
+        case NodeKind::FunctionDeclaration:
+            return static_cast<const FunctionDeclaration&>(node).name;
+        case NodeKind::ClassDeclaration:
+            return static_cast<const ClassDeclaration&>(node).name;
+        case NodeKind::InterfaceDeclaration:
+            return static_cast<const InterfaceDeclaration&>(node).name;
+        case NodeKind::EnumDeclaration:
+            return static_cast<const EnumDeclaration&>(node).name;
+        case NodeKind::TypeAliasDeclaration:
+            return static_cast<const TypeAliasDeclaration&>(node).name;
+        case NodeKind::VariableDeclarator: {
+            const auto& declarator = static_cast<const VariableDeclarator&>(node);
+            if (declarator.id != nullptr &&
+                declarator.id->kind == NodeKind::Identifier) {
+                return static_cast<const Identifier&>(*declarator.id).name;
+            }
+            return std::string();
+        }
+        default:
+            return std::string();
+    }
+}
+
+std::optional<lsp::SourceTarget> targetOf(const SourceSpan& span) {
+    lsp::SourceTarget target;
+    target.path = span.file->path;
+    target.line = span.begin.line;
+    target.column = span.begin.column;
+    target.endLine = span.end.line;
+    target.endColumn = span.end.column;
+    return target;
+}
+
 // The exported declaration a local import should jump to.
-ExportHit findExported(const Program& program, const std::string& name,
-                       bool wantDefault) {
+ExportHit findExportedImpl(const Program& program, const std::string& name,
+                            bool wantDefault) {
     if (wantDefault) return findDefault(program);
     const ExportHit direct = findDirect(program, name);
     if (direct.node != nullptr) return direct;
@@ -143,21 +185,10 @@ ExportHit findExported(const Program& program, const std::string& name,
     return {};
 }
 
-std::optional<lsp::SourceTarget> targetOf(const SourceSpan& span) {
-    if (!span.valid() || span.file == nullptr) return std::nullopt;
-    lsp::SourceTarget target;
-    target.path = span.file->path;
-    target.line = span.begin.line;
-    target.column = span.begin.column;
-    target.endLine = span.end.line;
-    target.endColumn = span.end.column;
-    return target;
-}
-
 // The import declaration that binds `name` in this unit's file, or nullptr.
-const ImportDeclaration* importForName(const Program& program,
-                                       const std::string& name,
-                                       const SourceFile& file) {
+const ImportDeclaration* importForNameImpl(const Program& program,
+                                           const std::string& name,
+                                           const SourceFile& file) {
     for (const StmtPtr& statement : program.body) {
         if (statement == nullptr || statement->kind != NodeKind::ImportDeclaration) {
             continue;
@@ -189,9 +220,9 @@ bool isImportBinding(const SymbolInfo& symbol, const ImportDeclaration& import) 
            symbol.span.begin.offset < import.span.end.offset;
 }
 
-const ModuleDependency* dependencyFor(const ModuleGraph& graph,
-                                      std::uint32_t importer,
-                                      const std::string& specifier) {
+const ModuleDependency* dependencyForImpl(const ModuleGraph& graph,
+                                          std::uint32_t importer,
+                                          const std::string& specifier) {
     for (const ModuleDependency& dependency : graph.dependencies()) {
         if (dependency.importer == importer && dependency.specifier == specifier) {
             return &dependency;
@@ -208,7 +239,7 @@ std::vector<lsp::SourceTarget> importedTargets(
     std::vector<lsp::SourceTarget> targets;
     if (document.graph == nullptr || document.entry == nullptr) return targets;
     const ModuleDependency* dependency =
-        dependencyFor(*document.graph, document.entry->id, import.source);
+        dependencyForImpl(*document.graph, document.entry->id, import.source);
     if (dependency == nullptr || !dependency->resolved ||
         dependency->resolution != ModuleResolution::Local) {
         return targets;
@@ -228,7 +259,7 @@ std::vector<lsp::SourceTarget> importedTargets(
         break;
     }
     if (!matched) return targets;  // namespace/alias binding: no single declaration
-    const ExportHit hit = findExported(*target->ast, importedName, wantDefault);
+    const ExportHit hit = findExportedImpl(*target->ast, importedName, wantDefault);
     if (hit.node == nullptr) return targets;
     const std::optional<lsp::SourceTarget> found =
         targetOf(nameSpanIn(hit.node->span, hit.name));
@@ -262,6 +293,26 @@ std::vector<lsp::SourceTarget> selfTarget(const Node& node) {
 
 }  // namespace
 
+// The exported declaration a local import binds.
+ExportHit findExported(const Program& program, const std::string& name,
+                       bool wantDefault) {
+    return findExportedImpl(program, name, wantDefault);
+}
+
+// The import declaration that binds `name` in this unit's file, or nullptr.
+const ImportDeclaration* importForName(const Program& program,
+                                       const std::string& name,
+                                       const SourceFile& file) {
+    return importForNameImpl(program, name, file);
+}
+
+// The dependency edge of `specifier` imported by `importer`, or nullptr.
+const ModuleDependency* dependencyFor(const ModuleGraph& graph,
+                                      std::uint32_t importer,
+                                      const std::string& specifier) {
+    return dependencyForImpl(graph, importer, specifier);
+}
+
 std::vector<lsp::SourceTarget> definitionAt(const std::string& path,
                                             const std::string& text,
                                             std::uint32_t line,
@@ -272,13 +323,30 @@ std::vector<lsp::SourceTarget> definitionAt(const std::string& path,
     const Node* node =
         innermostNodeAt(*document->entry->ast, *document->file, line, column);
     if (node == nullptr) return targets;
-    if (node->kind != NodeKind::Identifier) return selfTarget(*node);
-    const std::string& name = static_cast<const Identifier&>(*node).name;
+    // A name in a type position (`c: Sized`, `const r: Radians = 1`) is a
+    // NamedType, not an Identifier: the import it binds is the same one.
+    std::string name;
+    if (node->kind == NodeKind::Identifier) {
+        name = static_cast<const Identifier&>(*node).name;
+    } else if (node->kind == NodeKind::NamedType) {
+        name = static_cast<const NamedType&>(*node).name;
+    } else {
+        return selfTarget(*node);
+    }
     const std::uint32_t offset = offsetOf(*document->file, line, column);
     const SymbolInfo* symbol =
         nearestSymbolAt(document->sema, name, *document->file, offset);
+    // The compiler's own binding answer is authoritative: a function has no
+    // symbol entry (its binding lives in the function table), but every use
+    // resolves to the declaration.
+    std::uint32_t declNodeId = 0;
+    if (node->kind == NodeKind::Identifier) {
+        const auto it = document->sema.resolvedBindings.find(node->nodeId);
+        if (it != document->sema.resolvedBindings.end()) declNodeId = it->second;
+    }
+    if (symbol != nullptr) declNodeId = symbol->declNodeId;
     const ImportDeclaration* import =
-        importForName(*document->entry->ast, name, *document->file);
+        importForNameImpl(*document->entry->ast, name, *document->file);
     if (import != nullptr &&
         (symbol == nullptr || isImportBinding(*symbol, *import))) {
         return importedTargets(*document, *import, name);
@@ -287,6 +355,19 @@ std::vector<lsp::SourceTarget> definitionAt(const std::string& path,
         const std::optional<lsp::SourceTarget> found =
             targetOf(nameSpanIn(symbol->span, name));
         if (found.has_value()) targets.push_back(*found);
+        return targets;
+    }
+    if (declNodeId != 0) {
+        // The declaration the cursor's name resolved to.
+        const Node* declaration = findNodeById(*document->entry->ast, declNodeId);
+        if (declaration != nullptr) {
+            const std::string declared = declaredNameOf(*declaration);
+            if (!declared.empty()) {
+                const std::optional<lsp::SourceTarget> found =
+                    targetOf(nameSpanIn(declaration->span, declared));
+                if (found.has_value()) targets.push_back(*found);
+            }
+        }
     }
     return targets;
 }

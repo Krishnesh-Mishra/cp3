@@ -82,9 +82,16 @@ Json initializeResult() {
     capabilities.set("completionProvider", completionProviderJson());
     capabilities.set("hoverProvider", jsonBool(true));
     capabilities.set("definitionProvider", jsonBool(true));
+    capabilities.set("referencesProvider", jsonBool(true));
+    // Strictly, LSP 3.17 advertises prepareRename support via
+    // { prepareProvider: true }; a bare `true` only enables plain rename.
+    Json renameProvider = jsonObject();
+    renameProvider.set("prepareProvider", jsonBool(true));
+    capabilities.set("renameProvider", std::move(renameProvider));
     capabilities.set("documentSymbolProvider", jsonBool(true));
     capabilities.set("workspaceSymbolProvider", jsonBool(true));
     capabilities.set("signatureHelpProvider", signatureHelpProviderJson());
+    capabilities.set("typeHierarchyProvider", jsonBool(true));
     capabilities.set("documentFormattingProvider", jsonBool(true));
     capabilities.set("foldingRangeProvider", jsonBool(true));
     Json serverInfo = jsonObject();

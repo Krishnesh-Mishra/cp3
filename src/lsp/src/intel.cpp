@@ -13,8 +13,10 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "detail/lsp_text.hpp"
 
@@ -171,6 +173,104 @@ std::optional<std::string> fetchTarget(const std::string& path,
     }
 }
 
+// The text a target's positions are relative to: the queried document's own
+// text when the target lives there (an empty path also means the current
+// document), else the file read from disk. Returns nullptr when the other
+// file cannot be read.
+const std::string* targetTextFor(const std::string& path,
+                                 const DocumentView& document,
+                                 std::optional<std::string>& fetched,
+                                 const IntelHooks& intel) {
+    if (path.empty() || (document.path != nullptr && path == *document.path)) {
+        return document.text;
+    }
+    fetched = fetchTarget(path, intel);
+    return fetched ? &*fetched : nullptr;
+}
+
+// The byte offset of a 1-based (line, column) position in `text`, clamped
+// into the document (a column past the line end clamps to the line end).
+std::size_t byteOffsetOf(const std::string& text, std::uint32_t line,
+                         std::uint32_t column) {
+    std::size_t offset = 0;
+    std::uint32_t current = 1;
+    while (current < line) {
+        const std::size_t newline = text.find('\n', offset);
+        if (newline == std::string::npos) return text.size();
+        offset = newline + 1;
+        ++current;
+    }
+    std::size_t end = text.find('\n', offset);
+    if (end == std::string::npos) end = text.size();
+    std::size_t width = end - offset;
+    while (width > 0 && text[offset + width - 1] == '\r') --width;
+    const std::size_t byteColumn =
+        column > 0 ? static_cast<std::size_t>(column - 1) : 0;
+    return offset + (byteColumn > width ? width : byteColumn);
+}
+
+// Slices the text between two 1-based byte positions (line, column) ->
+// (endLine, endColumn), byte-accurate including multi-line spans.
+std::string sliceBytes(const std::string& text, std::uint32_t line,
+                       std::uint32_t column, std::uint32_t endLine,
+                       std::uint32_t endColumn) {
+    const std::size_t begin = byteOffsetOf(text, line, column);
+    const std::size_t end = byteOffsetOf(text, endLine, endColumn);
+    if (end <= begin) return std::string();
+    return text.substr(begin, end - begin);
+}
+
+// ---------------------------------------------------------------------------
+// Type hierarchy item serialization (prepareTypeHierarchy/supertypes/subtypes)
+// ---------------------------------------------------------------------------
+
+// One TypeHierarchyItem for `entry`. The item's positions are relative to the
+// text of the file that holds the declaration; a target whose text cannot be
+// read drops the item (never the whole list).
+std::optional<Json> typeHierarchyItemJson(const DocumentView& document,
+                                          const IntelHooks& intel,
+                                          const HierarchyEntry& entry) {
+    if (entry.path.empty()) return std::nullopt;
+    std::optional<std::string> fetched;
+    const std::string* text = targetTextFor(entry.path, document, fetched, intel);
+    if (text == nullptr) return std::nullopt;
+    const LspPosition nameStart = toLspPosition(*text, entry.nameLine, entry.nameColumn);
+    LspPosition nameEnd = advanceOne(*text, nameStart);
+    if (entry.nameEndLine != 0 && entry.nameEndColumn != 0) {
+        const LspPosition reported =
+            toLspPosition(*text, entry.nameEndLine, entry.nameEndColumn);
+        if (endsAfterStart(reported, nameStart)) nameEnd = reported;
+    }
+    Json item = jsonObject();
+    item.set("name", jsonString(entry.name));
+    item.set("kind", jsonInt(entry.kind));
+    item.set("uri", jsonString(pathToUri(entry.path)));
+    item.set("range", rangeJson(*text, entry.line, entry.column,
+                                entry.endLine, entry.endColumn));
+    Json selection = jsonObject();
+    selection.set("start", positionJson(nameStart));
+    selection.set("end", positionJson(nameEnd));
+    item.set("selectionRange", std::move(selection));
+    if (!entry.detail.empty()) item.set("detail", jsonString(entry.detail));
+    Json data = jsonObject();
+    data.set("path", jsonString(entry.path));
+    data.set("line", jsonInt(entry.line));
+    data.set("column", jsonInt(entry.column));
+    item.set("data", std::move(data));
+    return item;
+}
+
+Json typeHierarchyItemsJson(const DocumentView& document, const IntelHooks& intel,
+                            const std::vector<HierarchyEntry>& entries) {
+    Json items = jsonArray();
+    for (const HierarchyEntry& entry : entries) {
+        if (std::optional<Json> item = typeHierarchyItemJson(document, intel, entry)) {
+            items.push(std::move(*item));
+        }
+    }
+    return items;
+}
+
 }  // namespace
 
 Json completionResult(const DocumentView& document, std::uint32_t line,
@@ -258,6 +358,167 @@ Json definitionResult(const DocumentView& document, std::uint32_t line,
         locations.push(std::move(location));
     }
     return locations;
+}
+
+Json referencesResult(const DocumentView& document, std::uint32_t line,
+                      std::uint32_t character, bool includeDeclaration,
+                      const IntelHooks& intel) {
+    Json locations = jsonArray();
+    if (!hasTarget(document) || !intel.references) return locations;
+    std::vector<SourceTarget> targets;
+    try {
+        const std::uint32_t column = toByteColumn(*document.text, line, character);
+        targets = intel.references(*document.path, *document.text, line + 1,
+                                   column, includeDeclaration);
+    } catch (...) {
+        targets.clear();
+    }
+    for (const SourceTarget& target : targets) {
+        if (target.path.empty()) continue;
+        std::optional<std::string> fetched;
+        const std::string* targetText =
+            targetTextFor(target.path, document, fetched, intel);
+        if (targetText == nullptr) continue;  // unreadable: skip that location
+        Json location = jsonObject();
+        location.set("uri", jsonString(pathToUri(target.path)));
+        location.set("range", rangeJson(*targetText, target.line, target.column,
+                                        target.endLine, target.endColumn));
+        locations.push(std::move(location));
+    }
+    // LSP references is a flat Location[]; there is no isIncomplete wrapper.
+    return locations;
+}
+
+Json prepareRenameResult(const DocumentView& document, std::uint32_t line,
+                         std::uint32_t character, const IntelHooks& intel) {
+    if (!hasTarget(document) || !intel.prepareRename) return jsonNull();
+    std::optional<SourceTarget> target;
+    try {
+        const std::uint32_t column = toByteColumn(*document.text, line, character);
+        target = intel.prepareRename(*document.path, *document.text, line + 1,
+                                     column);
+    } catch (...) {
+        target.reset();
+    }
+    if (!target) return jsonNull();
+    const SourceTarget& span = *target;
+    // A missing or zero-length (or inverted) span is not renamable.
+    if (span.endLine == 0 || span.endColumn == 0) return jsonNull();
+    if (span.endLine < span.line ||
+        (span.endLine == span.line && span.endColumn <= span.column)) {
+        return jsonNull();
+    }
+    std::optional<std::string> fetched;
+    const std::string* targetText =
+        targetTextFor(span.path, document, fetched, intel);
+    if (targetText == nullptr) return jsonNull();
+    // The placeholder is the current name, sliced between the 1-based byte
+    // columns (byte-accurate, multi-line safe).
+    const std::string placeholder =
+        sliceBytes(*targetText, span.line, span.column, span.endLine, span.endColumn);
+    if (placeholder.empty()) return jsonNull();
+    Json result = jsonObject();
+    result.set("range", rangeJson(*targetText, span.line, span.column,
+                                  span.endLine, span.endColumn));
+    result.set("placeholder", jsonString(placeholder));
+    return result;
+}
+
+Json renameResult(const DocumentView& document, std::uint32_t line,
+                  std::uint32_t character, const std::string& newName,
+                  const IntelHooks& intel) {
+    Json changes = jsonObject();
+    if (!hasTarget(document) || !intel.rename) {
+        Json result = jsonObject();
+        result.set("changes", std::move(changes));
+        return result;
+    }
+    std::vector<SourceTarget> targets;
+    try {
+        const std::uint32_t column = toByteColumn(*document.text, line, character);
+        targets = intel.rename(*document.path, *document.text, line + 1, column,
+                               newName);
+    } catch (...) {
+        targets.clear();
+    }
+    // Group the per-occurrence edits by uri: WorkspaceEdit.changes maps each
+    // uri to its TextEdit[]; occurrences that cannot be read are skipped.
+    std::map<std::string, std::vector<Json>> editsByUri;
+    for (const SourceTarget& target : targets) {
+        if (target.path.empty()) continue;
+        std::optional<std::string> fetched;
+        const std::string* targetText =
+            targetTextFor(target.path, document, fetched, intel);
+        if (targetText == nullptr) continue;
+        Json edit = jsonObject();
+        edit.set("range", rangeJson(*targetText, target.line, target.column,
+                                    target.endLine, target.endColumn));
+        edit.set("newText", jsonString(newName));
+        editsByUri[pathToUri(target.path)].push_back(std::move(edit));
+    }
+    for (auto& entry : editsByUri) {
+        Json edits = jsonArray();
+        for (Json& edit : entry.second) edits.push(std::move(edit));
+        changes.set(std::move(entry.first), std::move(edits));
+    }
+    Json result = jsonObject();
+    result.set("changes", std::move(changes));
+    return result;
+}
+
+Json prepareTypeHierarchyResult(const DocumentView& document, std::uint32_t line,
+                                std::uint32_t character, const IntelHooks& intel) {
+    Json items = jsonArray();
+    if (!hasTarget(document) || !intel.typeHierarchyPrepare) return items;
+    std::vector<HierarchyEntry> entries;
+    try {
+        const std::uint32_t column = toByteColumn(*document.text, line, character);
+        entries = intel.typeHierarchyPrepare(*document.path, *document.text, line + 1,
+                                             column);
+    } catch (...) {
+        entries.clear();
+    }
+    return typeHierarchyItemsJson(document, intel, entries);
+}
+
+Json typeHierarchyRelativesResult(const DocumentView& document, std::uint32_t itemLine,
+                                  std::uint32_t itemColumn,
+                                  const std::string& itemName,
+                                  const std::string& itemUri, std::uint32_t itemKind,
+                                  const IntelHooks& intel, bool supertypes) {
+    Json items = jsonArray();
+    if (!hasTarget(document) || itemName.empty() || !intel.typeHierarchyRelatives) {
+        return items;
+    }
+    // The view describes the item's file (the server builds it from the
+    // item's `data` block, else from its uri). The item's positions resolve
+    // against the target file's text; an uri that cannot be mapped falls
+    // back to the view's own path.
+    std::string itemPath;
+    if (!uriToPath(itemUri, itemPath) || itemPath.empty()) {
+        if (document.path == nullptr || document.path->empty()) return items;
+        itemPath = *document.path;
+    }
+    const std::string& text = *document.text;
+    HierarchyEntry entry;
+    entry.name = itemName;
+    entry.kind = static_cast<int>(itemKind);
+    entry.path = itemPath;
+    entry.line = itemLine + 1;
+    entry.column = toByteColumn(text, itemLine, itemColumn);
+    entry.endLine = entry.line;
+    entry.endColumn = entry.column;
+    entry.nameLine = entry.line;
+    entry.nameColumn = entry.column;
+    entry.nameEndLine = entry.line;
+    entry.nameEndColumn = entry.column;
+    std::vector<HierarchyEntry> entries;
+    try {
+        entries = intel.typeHierarchyRelatives(itemPath, text, entry, supertypes);
+    } catch (...) {
+        entries.clear();
+    }
+    return typeHierarchyItemsJson(document, intel, entries);
 }
 
 Json documentSymbolResult(const DocumentView& document, const IntelHooks& intel) {

@@ -85,7 +85,11 @@ std::string completionMemberDoc(const AnalyzedDocument& document,
                                 const Type* receiverType,
                                 const std::string& member);
 
-// The parameter names of the function declaration `nodeId`, in order.
+// The parameter names of the function-like declaration `nodeId`, in order:
+// a FunctionDeclaration, an ArrowFunction, a MethodDeclaration, a
+// ConstructorDeclaration, or a variable holding an arrow. Each parameter
+// holds its slot (an empty string for a pattern parameter), so the indices
+// stay aligned with the parameters.
 std::vector<std::string> parameterNamesOf(const AnalyzedDocument& document,
                                           std::uint32_t nodeId);
 
@@ -93,7 +97,7 @@ std::vector<std::string> parameterNamesOf(const AnalyzedDocument& document,
 // declaration's doc comment, matched by parameter name where the names are
 // known and by position otherwise. One entry per parameter.
 std::vector<std::string> parameterDocs(const AnalyzedDocument& document,
-                                       const SymbolInfo* symbol,
+                                       std::uint32_t declNodeId,
                                        std::size_t count);
 
 // The type of the expression that ends at `offset` (the receiver of a member

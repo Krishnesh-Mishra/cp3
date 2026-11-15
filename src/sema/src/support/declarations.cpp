@@ -476,6 +476,11 @@ void Analyzer::registerInterface(InterfaceDeclaration& i) {
     // are resolved, so `value: T` resolves to a type parameter (D26).
     TypeParamScope saved;
     enterClassTypeParams(i.typeParams, saved);
+    // Self-references (`interface Node { kids: Node[] }`) need the interface's
+    // own name in the type table while its members resolve; register a
+    // placeholder first, replaced by the real object type below (the same
+    // trick type aliases use).
+    typeNames_[i.name] = Type::unknown();
     for (auto& m : i.members) {
         if (!m) continue;
         if (m->kind == NodeKind::PropertySignature) {
@@ -504,6 +509,10 @@ void Analyzer::registerInterface(InterfaceDeclaration& i) {
     }
     typeNames_[i.name] = makeObjectType(std::move(fields), open, false, {},
                                         std::move(indexType), hasIndex);
+    // Publish the interface as a resolvable declaration: queries that look
+    // up names (hover, definition fallback, ...) need an entry in the same
+    // symbol table every other declaration uses.
+    publishInterfaceSymbol(i);
     // The cycle analysis identifies an interface by its shape label (an
     // interface is a structural type), so the label -> the interface name
     // mapping is recorded here.

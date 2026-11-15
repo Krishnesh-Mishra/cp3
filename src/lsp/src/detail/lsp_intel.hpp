@@ -44,6 +44,39 @@ Json hoverResult(const DocumentView& document, std::uint32_t line,
 Json definitionResult(const DocumentView& document, std::uint32_t line,
                       std::uint32_t character, const IntelHooks& intel);
 
+// References result: Location[] of every occurrence (includeDeclaration
+// controls whether the declaration itself is present); empty when the
+// document/hook cannot answer.
+Json referencesResult(const DocumentView& document, std::uint32_t line,
+                      std::uint32_t character, bool includeDeclaration,
+                      const IntelHooks& intel);
+
+// PrepareRename result: { range, placeholder } or null when the position
+// is not renamable.
+Json prepareRenameResult(const DocumentView& document, std::uint32_t line,
+                         std::uint32_t character, const IntelHooks& intel);
+
+// Rename result: WorkspaceEdit { changes: TextEdit[] } with every
+// occurrence replaced by `newName`; empty when the position is not renamable.
+Json renameResult(const DocumentView& document, std::uint32_t line,
+                  std::uint32_t character, const std::string& newName,
+                  const IntelHooks& intel);
+
+// PrepareTypeHierarchy result: TypeHierarchyItem[] (empty when the position is
+// not on a hierarchy declaration).
+Json prepareTypeHierarchyResult(const DocumentView& document, std::uint32_t line,
+                               std::uint32_t character, const IntelHooks& intel);
+
+// Supertype/subtype result: TypeHierarchyItem[] for the item passed in
+// params.item (empty when the provider declines). `itemLine`/`itemColumn` are
+// the 0-based LSP coordinates of the item's range.start; the compiler
+// coordinates are recovered from the target file's text.
+Json typeHierarchyRelativesResult(const DocumentView& document, std::uint32_t itemLine,
+                                  std::uint32_t itemColumn,
+                                  const std::string& itemName,
+                                  const std::string& itemUri, std::uint32_t itemKind,
+                                  const IntelHooks& intel, bool supertypes);
+
 // DocumentSymbol result: DocumentSymbol[].
 Json documentSymbolResult(const DocumentView& document, const IntelHooks& intel);
 

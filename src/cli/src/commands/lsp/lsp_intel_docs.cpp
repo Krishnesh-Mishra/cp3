@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "cp3/core/analysis.hpp"
@@ -61,6 +62,48 @@ bool isStdNamespace(const AnalyzedDocument& document, const std::string& name) {
         }
     }
     return false;
+}
+
+// The binding name of a parameter: the identifier it binds, the argument of
+// a rest parameter, nothing for a pattern.
+std::string parameterBindingName(const Parameter& parameter) {
+    const Node* name = parameter.name.get();
+    if (name == nullptr) return std::string();
+    if (name->kind == NodeKind::Identifier) {
+        return static_cast<const Identifier&>(*name).name;
+    }
+    if (name->kind == NodeKind::RestElement) {
+        const auto& rest = static_cast<const RestElement&>(*name);
+        if (rest.argument != nullptr && rest.argument->kind == NodeKind::Identifier) {
+            return static_cast<const Identifier&>(*rest.argument).name;
+        }
+    }
+    return std::string();
+}
+
+// The parameter list of a function-like declaration node, or nullptr. A
+// variable declarator holding an arrow resolves through its initializer.
+const ParamList* paramsOf(const Node& node) {
+    switch (node.kind) {
+        case NodeKind::FunctionDeclaration:
+            return &static_cast<const FunctionDeclaration&>(node).params;
+        case NodeKind::ArrowFunction:
+            return &static_cast<const ArrowFunction&>(node).params;
+        case NodeKind::MethodDeclaration:
+            return &static_cast<const MethodDeclaration&>(node).params;
+        case NodeKind::ConstructorDeclaration:
+            return &static_cast<const ConstructorDeclaration&>(node).params;
+        case NodeKind::VariableDeclarator: {
+            const auto& declarator = static_cast<const VariableDeclarator&>(node);
+            if (declarator.init != nullptr &&
+                declarator.init->kind == NodeKind::ArrowFunction) {
+                return &static_cast<const ArrowFunction&>(*declarator.init).params;
+            }
+            return nullptr;
+        }
+        default:
+            return nullptr;
+    }
 }
 
 // The doc comment of the member `member` of the class declaration `cls`.
@@ -167,13 +210,33 @@ const DocComment* classMemberDocAt(const AnalyzedDocument& document,
                                    const std::string& className,
                                    const std::string& member) {
     if (className.empty() || member.empty()) return nullptr;
-    if (document.entry == nullptr || document.entry->ast == nullptr) return nullptr;
-    for (const StmtPtr& statement : document.entry->ast->body) {
-        if (statement == nullptr) continue;
-        if (statement->kind != NodeKind::ClassDeclaration) continue;
-        const auto& cls = static_cast<const ClassDeclaration&>(*statement);
-        if (cls.name != className) continue;
-        if (const DocComment* doc = memberDocOf(document, cls, member)) {
+    if (document.entry == nullptr || document.entry->ast == nullptr) {
+        return nullptr;
+    }
+    // The declaration may live in the entry unit or in an imported unit; the
+    // node id is meaningless across programs, so the class is found by name.
+    std::vector<const Program*> programs;
+    programs.push_back(document.entry->ast.get());
+    if (document.graph != nullptr) {
+        for (const CompilationUnit* unit : document.graph->units()) {
+            if (unit == nullptr || unit->ast == nullptr) continue;
+            if (unit->ast == document.entry->ast) continue;
+            programs.push_back(unit->ast.get());
+        }
+    }
+    for (const Program* program : programs) {
+        if (program == nullptr) continue;
+        const ClassDeclaration* found = nullptr;
+        forEachNode(*program, [&](const Node& node) {
+            if (found != nullptr || node.kind != NodeKind::ClassDeclaration) {
+                return;
+            }
+            const auto& cls = static_cast<const ClassDeclaration&>(node);
+            if (cls.name != className) return;
+            found = &cls;
+        });
+        if (found == nullptr) continue;
+        if (const DocComment* doc = memberDocOf(document, *found, member)) {
             return doc;
         }
     }
@@ -262,27 +325,30 @@ std::vector<std::string> parameterNamesOf(const AnalyzedDocument& document,
         found = &node;
     });
     if (found == nullptr) return names;
-    if (found->kind != NodeKind::FunctionDeclaration) return names;
-    const auto& fn = static_cast<const FunctionDeclaration&>(*found);
-    for (const ParameterPtr& parameter : fn.params) {
-        if (parameter == nullptr || parameter->name == nullptr) continue;
-        if (parameter->name->kind != NodeKind::Identifier) continue;
-        names.push_back(
-            static_cast<const Identifier&>(*parameter->name).name);
+    const ParamList* params = paramsOf(*found);
+    if (params == nullptr) return names;
+    for (const ParameterPtr& parameter : *params) {
+        if (parameter == nullptr) {
+            names.push_back(std::string());
+            continue;
+        }
+        // One entry per parameter, in order: a pattern parameter holds its
+        // slot with an empty name so the indices stay aligned.
+        names.push_back(parameterBindingName(*parameter));
     }
     return names;
 }
 
 std::vector<std::string> parameterDocs(const AnalyzedDocument& document,
-                                       const SymbolInfo* symbol,
+                                       std::uint32_t declNodeId,
                                        std::size_t count) {
     std::vector<std::string> docs;
-    if (symbol == nullptr) return docs;
-    const auto found = document.sema.docs.find(symbol->declNodeId);
+    if (declNodeId == 0) return docs;
+    const auto found = document.sema.docs.find(declNodeId);
     if (found == document.sema.docs.end()) return docs;
     const DocComment& doc = found->second;
     const std::vector<std::string> names =
-        parameterNamesOf(document, symbol->declNodeId);
+        parameterNamesOf(document, declNodeId);
     for (std::size_t i = 0; i < count; ++i) {
         std::string text;
         // By name where the declaration's parameter names are known.
@@ -295,7 +361,7 @@ std::vector<std::string> parameterDocs(const AnalyzedDocument& document,
         }
         // Otherwise by position.
         if (text.empty() && i < doc.params.size()) text = doc.params[i].text;
-        docs.push_back(text);
+        docs.push_back(std::move(text));
     }
     return docs;
 }
@@ -312,23 +378,27 @@ DocAnswer stdMemberDocAt(const AnalyzedDocument& document,
     // A std VALUE receiver: a Date, a Map, a Set, an array or a string.
     const Type* type = document.sema.typeOf(receiver->nodeId);
     if (type != nullptr) {
+        // Literal receivers (`"aab".repeat(...)`) dispatch by the primitive
+        // base type — the literal tag carries the value, not the member
+        // surface the table is keyed on.
+        const Type effective = type->literalBaseType();
         StdMemberDoc doc;
         std::string label;
         std::vector<std::string> known;
-        if (type->kind == TypeKind::Class) {
-            doc = stdInstanceMemberDoc(type->name, member.property);
-            label = type->name + "." + member.property;
-            known = stdInstanceMemberNames(type->name);
-        } else if (type->kind == TypeKind::Object) {
-            doc = networkObjectMemberDoc(type->name, member.property,
+        if (effective.kind == TypeKind::Class) {
+            doc = stdInstanceMemberDoc(effective.name, member.property);
+            label = effective.name + "." + member.property;
+            known = stdInstanceMemberNames(effective.name);
+        } else if (effective.kind == TypeKind::Object) {
+            doc = networkObjectMemberDoc(effective.name, member.property,
                                          document.typeSystem);
-            label = type->name + "." + member.property;
-            known = networkObjectMemberNames(type->name);
-        } else if (type->kind == TypeKind::Array) {
+            label = effective.name + "." + member.property;
+            known = networkObjectMemberNames(effective.name);
+        } else if (effective.kind == TypeKind::Array) {
             doc = stdArrayMemberDoc(member.property);
             label = "array." + member.property;
             known = stdArrayMemberNames();
-        } else if (type->kind == TypeKind::String) {
+        } else if (effective.kind == TypeKind::String) {
             doc = stdStringMemberDoc(member.property);
             label = "string." + member.property;
             known = stdStringMemberNames();

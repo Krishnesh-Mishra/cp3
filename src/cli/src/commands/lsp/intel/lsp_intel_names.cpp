@@ -28,6 +28,7 @@
 #include "cp3/core/analysis.hpp"
 #include "cp3/core/ast.hpp"
 #include "cp3/lsp.hpp"
+#include "cp3/meta/module.hpp"
 #include "cp3/std_modules.hpp"
 #include "cp3/std_surface.hpp"
 #include "cp3/core/types.hpp"
@@ -583,6 +584,81 @@ void appendImportedCandidates(const AnalyzedDocument& document,
     }
 }
 
+// The imported names that name a type (a class, an interface, an enum or a
+// type alias). A type position offers exactly these: the compiler resolves
+// the imported module, so an import that names a value is not offered there.
+void appendImportedTypeCandidates(
+    const AnalyzedDocument& document,
+    std::vector<lsp::CompletionCandidate>& out) {
+    if (document.entry == nullptr || document.entry->ast == nullptr ||
+        document.graph == nullptr) {
+        return;
+    }
+    for (const StmtPtr& statement : document.entry->ast->body) {
+        if (statement == nullptr || statement->kind != NodeKind::ImportDeclaration) {
+            continue;
+        }
+        const auto& import = static_cast<const ImportDeclaration&>(*statement);
+        const ModuleDependency* dependency =
+            dependencyFor(*document.graph, document.entry->id, import.source);
+        if (dependency == nullptr || !dependency->resolved ||
+            dependency->resolution != ModuleResolution::Local) {
+            continue;
+        }
+        CompilationUnit* unit = document.graph->unit(dependency->imported);
+        if (unit == nullptr || unit->ast == nullptr) continue;
+        // The default import binds the module's default export.
+        if (!import.defaultBinding.empty()) {
+            const ExportHit hit = findExported(*unit->ast, std::string(), true);
+            if (hit.node != nullptr) {
+                switch (hit.node->kind) {
+                    case NodeKind::ClassDeclaration:
+                        appendNamed(out, import.defaultBinding, 5,
+                                    "imported class");
+                        break;
+                    case NodeKind::InterfaceDeclaration:
+                        appendNamed(out, import.defaultBinding, 11,
+                                    "imported interface");
+                        break;
+                    case NodeKind::EnumDeclaration:
+                        appendNamed(out, import.defaultBinding, 10,
+                                    "imported enum");
+                        break;
+                    case NodeKind::TypeAliasDeclaration:
+                        appendNamed(out, import.defaultBinding, 23,
+                                    "imported type alias");
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+        for (const ImportSpecifierPtr& specifier : import.specifiers) {
+            if (specifier == nullptr) continue;
+            const std::string& local =
+                specifier->local.empty() ? specifier->imported : specifier->local;
+            const ExportHit hit = findExported(*unit->ast, specifier->imported, false);
+            if (hit.node == nullptr) continue;
+            switch (hit.node->kind) {
+                case NodeKind::ClassDeclaration:
+                    appendNamed(out, local, 5, "imported class");
+                    break;
+                case NodeKind::InterfaceDeclaration:
+                    appendNamed(out, local, 11, "imported interface");
+                    break;
+                case NodeKind::EnumDeclaration:
+                    appendNamed(out, local, 10, "imported enum");
+                    break;
+                case NodeKind::TypeAliasDeclaration:
+                    appendNamed(out, local, 23, "imported type alias");
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+}
+
 const SymbolInfo* completionSymbol(const AnalyzedDocument& document,
                                   const std::string& name,
                                   std::uint32_t offset) {
@@ -913,8 +989,13 @@ std::vector<lsp::CompletionCandidate> generalCandidates(
         appendNamed(candidates, candidate.label, candidate.kind,
                     candidate.detail, candidate.documentation);
     }
-    // 2. The names the file imports.
-    if (!typesOnly) appendImportedCandidates(document, candidates);
+    // 2. The names the file imports. In a type position only the imports
+    // that name a type belong there.
+    if (typesOnly) {
+        appendImportedTypeCandidates(document, candidates);
+    } else {
+        appendImportedCandidates(document, candidates);
+    }
     // 3. The module-level declarations.
     appendDeclarationCandidates(document, candidates, typesOnly);
     // 4. Compiler globals are real expression names, but they are not

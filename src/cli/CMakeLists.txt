@@ -42,6 +42,8 @@ set(cp3_cli_sources
     src/commands/lsp/intel/lsp_intel_query.cpp
     src/commands/lsp/lsp_intel_define.cpp
     src/commands/lsp/lsp_intel_complete.cpp
+    src/commands/lsp/intel/lsp_intel_references.cpp
+    src/commands/lsp/intel/lsp_intel_hierarchy.cpp
     src/commands/lsp/intel/lsp_intel_members.cpp
     src/commands/lsp/intel/lsp_intel_names.cpp
     src/commands/lsp/intel/lsp_intel_position.cpp

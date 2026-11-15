@@ -9,6 +9,10 @@
 //   * commands/lsp_intel_walk*.cpp        - the AST walk (forEachNode).
 //   * commands/lsp_intel_query.cpp        - hover, symbols, signature.
 //   * commands/lsp_intel_define.cpp       - go-to-definition.
+//   * commands/lsp/intel/lsp_intel_references.cpp - references & rename.
+//   * commands/lsp/intel/lsp_intel_hierarchy.cpp  - type hierarchy.
+//   * commands/lsp/intel/lsp_intel_members.cpp    - completion; member/
+//     property/enum-member references & rename fallback.
 //   * commands/lsp_intel_complete*.cpp    - completion + the probe analysis.
 //
 // The engine answers only from the frozen frontend's own results: the AST the
@@ -119,6 +123,106 @@ std::vector<lsp::SourceTarget> definitionAt(const std::string& path,
                                             const std::string& text,
                                             std::uint32_t line,
                                             std::uint32_t column);
+
+// The declaration an export names, with the name it is exported under.
+struct ExportHit {
+    const Node* node = nullptr;
+    std::string name;
+};
+
+// The exported declaration a local import binds (lsp_intel_define.cpp).
+ExportHit findExported(const Program& program, const std::string& name,
+                       bool wantDefault);
+
+// The import declaration that binds `name` in this unit's file, or nullptr.
+const ImportDeclaration* importForName(const Program& program,
+                                       const std::string& name,
+                                       const SourceFile& file);
+
+// The dependency edge of `specifier` imported by `importer`, or nullptr.
+const ModuleDependency* dependencyFor(const ModuleGraph& graph,
+                                      std::uint32_t importer,
+                                      const std::string& specifier);
+
+// References (lsp_intel_references.cpp): every occurrence of the binding the
+// cursor resolves to, including the declaration itself when asked. Std /
+// package / native imports answer occurrences bound to the import in this
+// unit; member/property positions answer through the member fallback.
+std::vector<lsp::SourceTarget> referencesAt(const std::string& path,
+                                            const std::string& text,
+                                            std::uint32_t line,
+                                            std::uint32_t column,
+                                            bool includeDeclaration);
+
+// Prepare-rename (lsp_intel_references.cpp): the binding's own name span (or
+// the member name span at the cursor on a member position), or null when the
+// cursor does not sit on a renamable binding/member.
+std::optional<lsp::SourceTarget> prepareRenameAt(const std::string& path,
+                                                 const std::string& text,
+                                                 std::uint32_t line,
+                                                 std::uint32_t column);
+
+// Rename (lsp_intel_references.cpp): straight-line replacements over every
+// occurrence referencesAt finds, including the declaration. Std / package /
+// native imports refuse (an empty vector); rename never rewrites a binding it
+// cannot prove. Member positions rewrite through the member fallback (or
+// refuse).
+std::vector<lsp::SourceTarget> renameAt(const std::string& path,
+                                        const std::string& text,
+                                        std::uint32_t line,
+                                        std::uint32_t column,
+                                        const std::string& newName);
+
+// Member/property/enum-member fallback (lsp_intel_members.cpp). When the
+// binding pipeline cannot prove a target at the cursor (a class/interface
+// member key, an enum member, an object-literal property, or the member side
+// of `receiver.member`), these answer references/prepareRename/rename with a
+// member-aware account instead of nothing. Nothing here ever throws: an empty
+// vector / nullopt is a refusal, never a guess. `memberRetarget` resolves the
+// cursor to the member; `memberOccurrences` collects its occurrences,
+// honouring only the relationships the compiler can prove (the owner nominal
+// type, same-file "interface IMPLEMENTATIONS" and same-file extends chains,
+// the synthesized shape label of object literals/interfaces, and direct
+// import edges to the owner unit) and nothing else.
+enum class MemberOccurrenceMode { References, Rename };
+
+struct MemberRetarget {
+    std::string name;            // the member to rewrite
+    // The member name span the cursor sits on - the prepareRename range.
+    lsp::SourceTarget declaration;
+    // Internal recipe (opaque outside lsp_intel_members.cpp).
+    CompilationUnit* ownerUnit = nullptr;
+    std::uint32_t ownerNodeId = 0;   // owner declaration node in its unit's sema
+    NodeKind ownerKind = NodeKind::Program;
+    std::string ownerLabel;          // Object/literal owner: the shape label
+};
+
+std::optional<MemberRetarget> memberRetarget(AnalyzedDocument& document,
+                                             const std::string& path,
+                                             std::uint32_t line,
+                                             std::uint32_t column);
+
+// Every occurrence of the retargeted member, deduplicated by span.
+// `includeDeclaration` drops the declaration occurrences when false. `mode`
+// selects the references family (shadowed same-name declarations are excluded
+// from the occurrence set, uses are matched by the receiver chain receiver
+// rule) instead of the rename family (every same-name declaration in the
+// same-file extends/implementation chains rewrites so a drop-in rename stays
+// consistent). An empty result means "refused", never an incomplete rename.
+std::vector<lsp::SourceTarget> memberOccurrences(
+    AnalyzedDocument& document, const std::string& path,
+    const MemberRetarget& target, bool includeDeclaration,
+    MemberOccurrenceMode mode);
+
+// Prepare/relate a type hierarchy. Same shapes as makeIntelHooks expects.
+std::vector<lsp::HierarchyEntry> typeHierarchyPrepareAt(const std::string& path,
+                                                        const std::string& text,
+                                                        std::uint32_t line,
+                                                        std::uint32_t column);
+std::vector<lsp::HierarchyEntry> typeHierarchyRelativesAt(const std::string& path,
+                                                          const std::string& text,
+                                                          const lsp::HierarchyEntry& entry,
+                                                          bool supertypes);
 
 // Document symbols (lsp_intel_query.cpp): the outline of one document.
 std::vector<lsp::SymbolEntry> symbolsAt(const std::string& path,

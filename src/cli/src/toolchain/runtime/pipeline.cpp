@@ -219,6 +219,21 @@ void addDeclarationExports(const Stmt& decl, const SemaResult& sema,
 
 bool constantTypeDeclaration(const Stmt& stmt, const std::string& name);
 
+// The declaration that binds `name` in a unit, if it has one. Class/interface/
+// alias declarations do not publish a top-level symbol the way functions and
+// variables do, so the codegen and the trailing `export { }` form need this
+// to funnel the declaration's AST node into the binding.
+const Stmt* topLevelDeclaration(const CompilationUnit& unit,
+                                const std::string& name) {
+    if (!unit.ast) return nullptr;
+    for (const StmtPtr& stmt : unit.ast->body) {
+        if (!stmt) continue;
+        const std::string declName = declarationName(*stmt);
+        if (!declName.empty() && declName == name) return stmt.get();
+    }
+    return nullptr;
+}
+
 // The binding of a local name, for `export { local as exported }`.
 std::optional<ImportedBinding> localBinding(const CompilationUnit& unit,
                                             const SemaResult& sema,
@@ -238,7 +253,17 @@ std::optional<ImportedBinding> localBinding(const CompilationUnit& unit,
                 b.returnType = fi->returnType;
             }
         }
-        if (si->type.kind == TypeKind::Class) b.isType = true;
+        if (si->type.kind == TypeKind::Class) {
+            b.isType = true;
+            // The trailing `export { Frame }` form carries no declaration
+            // pointer the way inline exports do; find the class node so
+            // dependent code can type-check/reject members of the exported
+            // class the same way.
+            if (const Stmt* decl = topLevelDeclaration(unit, name);
+                decl != nullptr && decl->kind == NodeKind::ClassDeclaration) {
+                b.classDecl = static_cast<const ClassDeclaration*>(decl);
+            }
+        }
         if (si->type.kind == TypeKind::Enum) b.isType = true;
         return b;
     }
@@ -246,8 +271,18 @@ std::optional<ImportedBinding> localBinding(const CompilationUnit& unit,
     for (const StmtPtr& stmt : unit.ast->body) {
         if (!stmt) continue;
         if (constantTypeDeclaration(*stmt, name)) {
-            return valueBinding(Type::unknown(), /*isType=*/true,
-                                /*isValue=*/false);
+            ImportedBinding b;
+            b.type = Type::unknown();
+            b.isType = true;
+            b.isValue = false;
+            if (stmt->kind == NodeKind::InterfaceDeclaration) {
+                b.interfaceDecl =
+                    static_cast<const InterfaceDeclaration*>(stmt.get());
+            } else if (stmt->kind == NodeKind::TypeAliasDeclaration) {
+                b.aliasDecl =
+                    static_cast<const TypeAliasDeclaration*>(stmt.get());
+            }
+            return b;
         }
     }
     return std::nullopt;

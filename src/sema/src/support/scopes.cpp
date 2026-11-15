@@ -254,6 +254,13 @@ void Analyzer::preRegisterImportTypes() {
             registerImportedObjectShape(binding.type.name);
         }
         if (!binding.isType) continue;
+        // Register the name BEFORE re-resolving the declaration so the
+        // declaration's own self-references (a class's `kids!: Frame[]`)
+        // resolve instead of reporting CP3302 inside the import pre-pass.
+        typeNames_.emplace(name,
+                           binding.type.isUnknown()
+                               ? Type::named(TypeKind::Class, name)
+                               : binding.type);
         if (binding.classDecl != nullptr) {
             const std::uint32_t key = binding.classDecl->nodeId;
             // The TU of the dep already registered this class under the same
@@ -278,10 +285,6 @@ void Analyzer::preRegisterImportTypes() {
                 }
             }
         }
-        typeNames_.emplace(name,
-                           binding.type.isUnknown()
-                               ? Type::named(TypeKind::Class, name)
-                               : binding.type);
     }
 }
 

@@ -37,6 +37,12 @@ Type Analyzer::inferCall(CallExpr& call) {
             reportUndefinedCall(call, id);
             return withType(call, Type::error());
         }
+        // The binding this call resolved to: the editor's reference and
+        // rename answers need it (an identifier expression records the same
+        // binding in `resolvedBindings`).
+        if (id.nodeId != 0 && b.declNodeId != 0) {
+            out_.resolvedBindings[id.nodeId] = b.declNodeId;
+        }
         ct = b.type;
         setType(id, ct);
         if (isAmbientType(b.type)) {

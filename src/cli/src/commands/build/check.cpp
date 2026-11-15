@@ -38,20 +38,6 @@ namespace cp3::cli {
 
 namespace {
 
-bool isWorkerDiagnostic(const Diagnostic& d) {
-    return d.code == diagcode::kWorkerMissingAnnotation ||
-           d.code == diagcode::kWorkerVoidSend ||
-           d.code == diagcode::kWorkerPayloadNotCopyable ||
-           d.code == diagcode::kWorkerPayloadMismatch ||
-           d.code == diagcode::kWorkerEnclosingCapture ||
-           d.code == diagcode::kWorkerComputedPath ||
-           d.code == diagcode::kWorkerHandleMember ||
-           d.code == diagcode::kWorkerEntryShape ||
-           d.code == diagcode::kWorkerListenerParameter ||
-           d.code == diagcode::kWorkerModuleForm ||
-           d.code == diagcode::kModuleNotFound;
-}
-
 }  // namespace
 
 int cmdCheck(const CliOptions& opt) {
@@ -238,18 +224,14 @@ options.importedInterfaces = importedInterfacesFor(*graph, *entry);
     }
 
     // Inline worker form and the main-side send surface. Run the entry's
-    // codegen without writing output, and surface only the worker diagnostics:
-    // check mode is not a build, so codegen diagnostics unrelated to workers
-    // are not part of `check`.
+    // codegen without writing output and surface its diagnostics the same
+    // way the build does — a broken program must not pass `cp3 check`.
     CollectingDiagnosticSink cgSink;
     (void)generateModule(
         {*entry->ast, sema, moduleName, cgSink, false, options});
-    std::vector<Diagnostic> surface;
-    for (const Diagnostic& d : cgSink.diagnostics()) {
-        if (isWorkerDiagnostic(d)) surface.push_back(d);
-    }
-    renderDiagnostics(surface, ro, stderr);
-    for (const Diagnostic& d : surface) {
+    const std::vector<Diagnostic> cgDiagnostics = cgSink.diagnostics();
+    renderDiagnostics(cgDiagnostics, ro, stderr);
+    for (const Diagnostic& d : cgDiagnostics) {
         if (d.severity == Severity::Error || d.severity == Severity::Fatal) {
             return kExitCompileError;
         }

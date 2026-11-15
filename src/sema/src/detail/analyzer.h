@@ -750,6 +750,10 @@ private:
     void setType(const Node& n, const Type& t);
     Type withType(const Node& n, const Type& t);
     void publishSymbol(const Binding& b);
+    // Publishes an interface's SymbolInfo so queries that look up
+    // declarations by name (hover, definition fallback, ...) see interface
+    // declarations the same way they see class declarations.
+    void publishInterfaceSymbol(InterfaceDeclaration& i);
     void publishFunction(const FuncSig& sig, const std::string& name);
     void updateFunctionReturnType(std::uint32_t nodeId, const Type& ret);
     // Publishes the doc comment that documents the declaration starting at

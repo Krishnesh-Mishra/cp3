@@ -37,6 +37,24 @@ void Analyzer::publishSymbol(const Binding& b) {
     out_.symbols[b.declNodeId] = std::move(si);
 }
 
+void Analyzer::publishInterfaceSymbol(InterfaceDeclaration& i) {
+    if (i.nodeId == 0) return;
+    Binding b;
+    b.name = i.name;
+    const auto it = typeNames_.find(i.name);
+    b.type = it != typeNames_.end() ? it->second : Type::unknown();
+    b.declaredType = b.type;
+    b.isConst = true;
+    b.isFunction = false;
+    b.isVar = false;
+    b.hoistedVar = false;
+    b.isAmbient = false;
+    b.publish = true;
+    b.declNodeId = i.nodeId;
+    b.span = i.span;
+    publishSymbol(b);
+}
+
 void Analyzer::publishFunction(const FuncSig& sig, const std::string& name) {
     FunctionInfo fi;
     fi.name = name;

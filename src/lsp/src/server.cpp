@@ -20,6 +20,7 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -46,6 +47,7 @@ constexpr auto kCoalesceWindow = std::chrono::milliseconds(120);
 constexpr int kParseErrorCode = -32700;
 constexpr int kInvalidRequestCode = -32600;
 constexpr int kMethodNotFoundCode = -32601;
+constexpr int kInvalidParamsCode = -32602;
 
 // One open document. `path` is empty for URIs the server cannot map to a file
 // (the document then only ever publishes an empty diagnostics array).
@@ -85,6 +87,23 @@ std::string lowerCopy(std::string_view text) {
         if (ch >= 'A' && ch <= 'Z') ch = static_cast<char>(ch - 'A' + 'a');
     }
     return result;
+}
+
+// A rename target must look like an identifier: letters, digits, '_' or '$',
+// never starting with a digit, at most 512 bytes.
+bool isRenameableName(const std::string& name) {
+    if (name.empty() || name.size() > 512) return false;
+    const char first = name.front();
+    const bool firstOk = (first >= 'A' && first <= 'Z') ||
+                         (first >= 'a' && first <= 'z') || first == '_' ||
+                         first == '$';
+    if (!firstOk) return false;
+    for (const char ch : name) {
+        const bool ok = (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') ||
+                        (ch >= '0' && ch <= '9') || ch == '_' || ch == '$';
+        if (!ok) return false;
+    }
+    return true;
 }
 
 // Fuzzy match in the style of the platform's symbol search: every query
@@ -283,28 +302,197 @@ bool Server::handleIntelRequest(const std::string& method, const Json& id,
            handleIntelDocumentRequest(method, id, params);
 }
 
-// completion/hover/definition/signatureHelp: textDocument + position.
+// The LSP 3.17 type-hierarchy methods. Only the prepare request sits under
+// `textDocument/`; the supertype/subtype requests live under `typeHierarchy/`
+// (they carry the item the client rounded back, not a position). The old
+// `textDocument/supertypes` spellings are accepted as aliases: they are not
+// part of the spec, but a client that was written against them still works.
+constexpr const char* kPrepareTypeHierarchy = "textDocument/prepareTypeHierarchy";
+constexpr const char* kSupertypes = "typeHierarchy/supertypes";
+constexpr const char* kSubtypes = "typeHierarchy/subtypes";
+constexpr const char* kLegacySupertypes = "textDocument/supertypes";
+constexpr const char* kLegacySubtypes = "textDocument/subtypes";
+
+// completion/hover/definition/signatureHelp/references/prepareRename/rename:
+// textDocument + position; prepareTypeHierarchy is also position-shaped, while
+// supertypes and subtypes carry the item the client rounded back (params.item).
 bool Server::handleIntelPositionRequest(const std::string& method,
                                         const Json& id, const Json* params) {
+    const bool isSupertypes = method == kSupertypes || method == kLegacySupertypes;
+    const bool isSubtypes = method == kSubtypes || method == kLegacySubtypes;
     const bool listAnswer = method == "textDocument/completion" ||
-                            method == "textDocument/definition";
+                            method == "textDocument/definition" ||
+                            method == "textDocument/references" ||
+                            method == kPrepareTypeHierarchy || isSupertypes ||
+                            isSubtypes;
     if (method != "textDocument/completion" && method != "textDocument/hover" &&
         method != "textDocument/definition" &&
-        method != "textDocument/signatureHelp") {
+        method != "textDocument/signatureHelp" &&
+        method != "textDocument/references" &&
+        method != "textDocument/prepareRename" &&
+        method != "textDocument/rename" &&
+        method != kPrepareTypeHierarchy && !isSupertypes && !isSubtypes) {
         return false;
     }
-    const RequestTarget target = requestTarget(params);
-    if (target.document == nullptr) {
-        respond(id, listAnswer ? jsonArray() : jsonNull());
+    // supertypes/subtypes carry the TypeHierarchyItem the client rounded
+    // back (params.item): name (string, non-empty), uri (string), kind
+    // (number, default 5), range.start.line/character (defaults 0), and an
+    // optional data block ({ path, line, column } written by this server).
+    // The item file is answered from its open document when there is one,
+    // else read from disk; either way the hook receives a DocumentView that
+    // describes the item file (not necessarily the current document).
+    if (isSupertypes || isSubtypes) {
+        const Json* item = params != nullptr ? params->find("item") : nullptr;
+        if (item == nullptr || !item->isObject()) {
+            respond(id, jsonArray());
+            return true;
+        }
+        const std::string* itemName = stringField(*item, "name");
+        const std::string* itemUri = stringField(*item, "uri");
+        if (itemName == nullptr || itemName->empty() || itemUri == nullptr ||
+            itemUri->empty()) {
+            respond(id, jsonArray());
+            return true;
+        }
+        const std::uint32_t itemKind = numberField(*item, "kind", 5);
+        std::uint32_t itemLine = 0;
+        std::uint32_t itemCharacter = 0;
+        if (const Json* range = item->find("range"); range != nullptr &&
+                                                     range->isObject()) {
+            if (const Json* start = range->find("start"); start != nullptr &&
+                                                          start->isObject()) {
+                itemLine = numberField(*start, "line", 0);
+                itemCharacter = numberField(*start, "character", 0);
+            }
+        }
+        // The compiler path for the item file: our own `data` block wins
+        // (it agrees with the uri), else the uri maps the path; an uri that
+        // does not map answers empty.
+        std::string itemPath;
+        std::string itemUriForView = *itemUri;
+        if (const Json* data = item->find("data"); data != nullptr &&
+                                                   data->isObject()) {
+            if (const std::string* dataPath = stringField(*data, "path");
+                dataPath != nullptr && !dataPath->empty()) {
+                itemPath = *dataPath;
+                itemUriForView = pathToUri(itemPath);
+            }
+        }
+        if (itemPath.empty() && !uriToPath(*itemUri, itemPath)) {
+            respond(id, jsonArray());
+            return true;
+        }
+        // Prefer the open document's (possibly unsaved) text; else read the
+        // file from disk. The DocumentView points at locals, request-scoped.
+        std::string text;
+        std::string viewPath = itemPath;
+        if (const Document* openDoc = findDocument(itemUriForView)) {
+            text = openDoc->text;
+            if (!openDoc->path.empty()) viewPath = openDoc->path;
+        } else {
+            std::optional<std::string> fetched;
+            if (intel_ != nullptr && intel_->readFile) {
+                try {
+                    fetched = intel_->readFile(itemPath);
+                } catch (...) {
+                    fetched.reset();
+                }
+            }
+            if (!fetched) {
+                respond(id, jsonArray());
+                return true;
+            }
+            text = *std::move(fetched);
+        }
+        DocumentView view;
+        view.uri = &itemUriForView;
+        view.path = &viewPath;
+        view.text = &text;
+        respond(id, typeHierarchyRelativesResult(view, itemLine, itemCharacter,
+                                                 *itemName, itemUriForView, itemKind,
+                                                 *intel_, /*supertypes=*/isSupertypes));
         return true;
     }
-    const DocumentView view = viewOf(*target.document);
+    // textDocument/references carries the includeDeclaration flag in
+    // params.context; absent means true (the LSP default).
+    bool includeDeclaration = true;
+    if (method == "textDocument/references" && params != nullptr &&
+        params->isObject()) {
+        const Json* context = params->find("context");
+        if (context != nullptr && context->isObject()) {
+            const Json* decl = context->find("includeDeclaration");
+            if (decl != nullptr && decl->isBool()) includeDeclaration = decl->boolean;
+        }
+    }
+    // textDocument/rename requires an identifier-like newName; reject a
+    // malformed payload before touching the document.
+    std::string renameNewName;
+    if (method == "textDocument/rename") {
+        const std::string* newName =
+            params != nullptr ? stringField(*params, "newName") : nullptr;
+        if (newName == nullptr || !isRenameableName(*newName)) {
+            respondError(id, kInvalidParamsCode, "rename: invalid new name");
+            return true;
+        }
+        renameNewName = *newName;
+    }
+    const RequestTarget target = requestTarget(params);
+    // A request can name a document the server has not opened yet (the
+    // client's didOpen raced the request) or one that was opened elsewhere.
+    // The file on disk is the best answer available in that case.
+    std::string diskUri;
+    std::string diskPath;
+    std::string diskText;
+    DocumentView diskView;
+    bool fromDisk = false;
+    if (target.document == nullptr) {
+        const Json* marker =
+            params != nullptr ? params->find("textDocument") : nullptr;
+        const std::string* uri =
+            marker != nullptr && marker->isObject()
+                ? stringField(*marker, "uri")
+                : nullptr;
+        std::string path;
+        std::optional<std::string> text;
+        if (uri != nullptr && intel_ != nullptr && intel_->readFile &&
+            uriToPath(*uri, path)) {
+            try {
+                text = intel_->readFile(path);
+            } catch (...) {
+                text.reset();
+            }
+        }
+        if (!text.has_value()) {
+            respond(id, listAnswer ? jsonArray() : jsonNull());
+            return true;
+        }
+        diskUri = *uri;
+        diskPath = path;
+        diskText = *text;
+        diskView.uri = &diskUri;
+        diskView.path = &diskPath;
+        diskView.text = &diskText;
+        fromDisk = true;
+    }
+    const DocumentView view = fromDisk ? diskView : viewOf(*target.document);
     if (method == "textDocument/completion") {
         respond(id, completionResult(view, target.line, target.character, *intel_));
     } else if (method == "textDocument/hover") {
         respond(id, hoverResult(view, target.line, target.character, *intel_));
     } else if (method == "textDocument/definition") {
         respond(id, definitionResult(view, target.line, target.character, *intel_));
+    } else if (method == "textDocument/references") {
+        respond(id, referencesResult(view, target.line, target.character,
+                                     includeDeclaration, *intel_));
+    } else if (method == "textDocument/prepareRename") {
+        respond(id, prepareRenameResult(view, target.line, target.character,
+                                        *intel_));
+    } else if (method == "textDocument/rename") {
+        respond(id, renameResult(view, target.line, target.character,
+                                 renameNewName, *intel_));
+    } else if (method == kPrepareTypeHierarchy) {
+        respond(id, prepareTypeHierarchyResult(view, target.line,
+                                               target.character, *intel_));
     } else {
         respond(id, signatureHelpResult(view, target.line, target.character, *intel_));
     }

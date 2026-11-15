@@ -202,6 +202,51 @@ lsp::IntelHooks makeIntelHooks() {
             return std::vector<lsp::SourceTarget>();
         }
     };
+    hooks.references = [](const std::string& path, const std::string& text,
+                          std::uint32_t line, std::uint32_t column,
+                          bool includeDeclaration) {
+        try {
+            return referencesAt(path, text, line, column, includeDeclaration);
+        } catch (...) {
+            return std::vector<lsp::SourceTarget>();
+        }
+    };
+    hooks.prepareRename = [](const std::string& path, const std::string& text,
+                             std::uint32_t line, std::uint32_t column) {
+        try {
+            return prepareRenameAt(path, text, line, column);
+        } catch (...) {
+            return std::optional<lsp::SourceTarget>();
+        }
+    };
+    hooks.rename = [](const std::string& path, const std::string& text,
+                      std::uint32_t line, std::uint32_t column,
+                      const std::string& newName) {
+        try {
+            return renameAt(path, text, line, column, newName);
+        } catch (...) {
+            return std::vector<lsp::SourceTarget>();
+        }
+    };
+    hooks.typeHierarchyPrepare = [](const std::string& path,
+                                    const std::string& text, std::uint32_t line,
+                                    std::uint32_t column) {
+        try {
+            return typeHierarchyPrepareAt(path, text, line, column);
+        } catch (...) {
+            return std::vector<lsp::HierarchyEntry>();
+        }
+    };
+    hooks.typeHierarchyRelatives = [](const std::string& path,
+                                      const std::string& text,
+                                      const lsp::HierarchyEntry& entry,
+                                      bool supertypes) {
+        try {
+            return typeHierarchyRelativesAt(path, text, entry, supertypes);
+        } catch (...) {
+            return std::vector<lsp::HierarchyEntry>();
+        }
+    };
     hooks.documentSymbols = [](const std::string& path,
                                const std::string& text) {
         try {
