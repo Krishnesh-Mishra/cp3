@@ -470,7 +470,6 @@ GeneratedProgramModules assembleProgramModules(const ProgramAssembly& assembly,
         u.name = unitNameForPath(unit.sourceKey);
         u.sourceKey = unit.sourceKey;
         u.source = unitModuleSource(unit);
-        u.namesp = unit.namesp;
         out.units.push_back(std::move(u));
     }
     out.entry.source = entryModuleSource(assembly, moduleName);

@@ -35,9 +35,6 @@
 #include "detail/core/commands.hpp"
 #include "detail/core/diagnostics.hpp"
 #include "detail/core/lane_b.hpp"
-#include "detail/hotpatch/state_map.hpp"
-#include "detail/hotpatch/module_descriptor.hpp"
-#include "detail/hotpatch/bootstrap.hpp"
 #include "detail/pkg/package_json.hpp"
 #include "detail/toolchain/incremental.hpp"
 #include "detail/toolchain/pipeline.hpp"
@@ -310,94 +307,6 @@ int codegenProgram(const FrontendResult& frontend, const BuildContext& ctx,
              /*lineDirectives=*/false, options,
              /*moduleLibs=*/moduleLibsWanted});
         renderDiagnostics(cgSink.diagnostics(), *ctx.render, stderr);
-        const bool devModuleLibs =
-            moduleLibsWanted && !plural.moduleLibsUnsupported;
-        if (plural.moduleLibsUnsupported) {
-            std::fprintf(stderr,
-                         "cp3c: dev module libs not supported (the program uses "
-                         "top-level await); using the whole-program dev build\n");
-        }
-        // Dev hot-patch seam (test-only): CP3_DEV_MODULE_UT=<unit | *> makes a
-        // descriptor block appear at the end of the named unit TU(s). Off by
-        // default; the descriptor documents interface/compiler/state-layout
-        // fingerprints. No behavior change to the program itself. The dev
-        // module-libs build also emits the export-flavored descriptor for
-        // every unit (the bootstrap binds to those symbols).
-        const char* utEnv = std::getenv("CP3_DEV_MODULE_UT");
-        const bool utTest = utEnv != nullptr && *utEnv != '\0';
-        if (devModuleLibs || utTest) {
-            const std::string filter = utTest ? std::string(utEnv) : std::string();
-            std::unordered_map<std::string, const CompilationUnit*> unitsByKey;
-            for (const CompilationUnit* u : frontend.graph->units()) {
-                if (u == nullptr || u->ast == nullptr) continue;
-                unitsByKey.emplace(u->moduleName, u);
-            }
-            const auto ihOf = interfaceHashesForProgram(*frontend.graph,
-                                                        frontend.sema,
-                                                        frontend.unitSemas);
-            const std::string compilerKeyHex =
-                incrementalHex64(fnv1a64(toolchainCacheKey(detectToolchain())));
-            for (GeneratedProgramUnit& unit : plural.units) {
-                if (!devModuleLibs && filter != "*" && unit.sourceKey != filter)
-                    continue;
-                const CompilationUnit* cunit =
-                    unitsByKey.find(unit.sourceKey) != unitsByKey.end()
-                        ? unitsByKey.find(unit.sourceKey)->second
-                        : nullptr;
-                const SemaResult* sema = nullptr;
-                if (cunit != nullptr) {
-                    sema = cunit->isEntry ? &frontend.sema
-                        : (frontend.unitSemas.count(cunit->id) != 0
-                               ? &frontend.unitSemas.at(cunit->id)
-                               : nullptr);
-                }
-                std::string layoutHash = "0000000000000000";
-                if (cunit != nullptr && sema != nullptr) {
-                    layoutHash =
-                        cp3::cli::hotpatch::computeModuleStateLayout(*cunit,
-                                                                      *sema)
-                            .layoutHash;
-                }
-                std::string interfaceHash = "0000000000000000";
-                if (cunit != nullptr) {
-                    const auto h = ihOf.find(cunit->id);
-                    if (h != ihOf.end()) interfaceHash = incrementalHex64(h->second);
-                }
-                if (devModuleLibs) {
-                    const bool isEntryUnit = unit.sourceKey == *ctx.moduleName;
-                    unit.source.append(cp3::cli::hotpatch::emitModuleDescriptor(
-                        unit.sourceKey, unit.namesp, interfaceHash,
-                        compilerKeyHex, layoutHash,
-                        /*exportSymbols=*/true, /*entryUnit=*/isEntryUnit));
-                } else {
-                    unit.source.append(cp3::cli::hotpatch::emitModuleDescriptor(
-                        unit.sourceKey, unit.namesp, interfaceHash,
-                        compilerKeyHex, layoutHash));
-                }
-            }
-        }
-        if (ctx.opt->verbose) {
-            for (const CompilationUnit* unit : frontend.graph->units()) {
-                if (unit == nullptr) continue;
-                const SemaResult* sema =
-                    unit->isEntry ? &frontend.sema
-                                  : (frontend.unitSemas.count(unit->id) != 0
-                                         ? &frontend.unitSemas.at(unit->id)
-                                         : nullptr);
-                if (sema == nullptr) continue;
-                const auto layout =
-                    cp3::cli::hotpatch::computeModuleStateLayout(*unit, *sema);
-                std::fprintf(stderr,
-                             "cp3c: state map: %s - %zu mutable binding(s), "
-                             "%s layout 0x%s%s\n",
-                             unit->moduleName.c_str(), layout.fields.size(),
-                             layout.isSwappable ? "swappable" : "not swappable",
-                             layout.layoutHash.c_str(),
-                             layout.hasDestructuredModuleBindings
-                                 ? " (destructured)"
-                                 : "");
-            }
-        }
         if (cgSink.hasErrors()) {
             return kExitCompileError;
         }
