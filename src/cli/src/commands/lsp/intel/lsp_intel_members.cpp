@@ -494,7 +494,12 @@ std::vector<lsp::CompletionCandidate> memberCandidates(
         // analysis reports it (CP3305) and the access has no type.
         if (reportsUnknownMember(probed->diagnostics, names[i])) continue;
         const Type* type = probed->sema.typeOf(element->nodeId);
-        if (type == nullptr || type->isError() || type->isUnknown()) continue;
+        // An ambient placeholder means the member does not exist on this
+        // receiver (an unknown surface, an unknown class member).
+        if (type == nullptr || type->isError() || type->isUnknown() ||
+            isPlaceholderType(*type)) {
+            continue;
+        }
         lsp::CompletionCandidate candidate;
         candidate.label = names[i];
         candidate.kind = type->kind == TypeKind::Function ? 3 : 5;
