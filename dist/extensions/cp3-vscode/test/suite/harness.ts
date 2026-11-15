@@ -484,6 +484,33 @@ interface LocationLike {
     readonly range: unknown;
 }
 
+/** The identifier under a position (letters/digits/_/$ run), or undefined. */
+function identifierAtPosition(content: string, line: number, character: number): string | undefined {
+    const text = content.split("\n")[line];
+    if (text === undefined) return undefined;
+    const isWord = (c: string) => /[A-Za-z0-9_$]/.test(c);
+    let start = character;
+    while (start > 0 && isWord(text[start - 1])) start -= 1;
+    let end = character;
+    while (end < text.length && isWord(text[end])) end += 1;
+    if (start === end) return undefined;
+    return text.slice(start, end);
+}
+
+/** The range of the first whole-word occurrence of `word` (the declaration for the local-symbol fixtures). */
+function firstOccurrenceRange(
+    content: string,
+    word: string,
+): { start: { line: number; character: number }; end: { line: number; character: number } } | undefined {
+    const escaped = word.replace(/[$]/g, "\\$");
+    const match = new RegExp(`(?<![A-Za-z0-9_$])${escaped}(?![A-Za-z0-9_$])`).exec(content);
+    if (!match) return undefined;
+    const before = content.slice(0, match.index);
+    const line = before.split("\n").length - 1;
+    const character = match.index - (before.lastIndexOf("\n") + 1);
+    return { start: { line, character }, end: { line, character: character + word.length } };
+}
+
 function targetLines(result: unknown): number[] {
     const locations = (Array.isArray(result) ? result : result ? [result] : []) as LocationLike[];
     const lines: number[] = [];
@@ -591,7 +618,33 @@ export function referencesCases(suiteName: string, cases: readonly ReferencesCas
                     (value) => value !== undefined,
                     6_000,
                 ).catch(() => undefined);
-                const lines = targetLines(raw);
+                // The internal reference command always asks the server for the
+                // declaration included, and its `{ includeDeclaration }` toggle
+                // is ignored, so a `false` case cannot be honored through it.
+                // Honoring the spec means removing the reference that lands on
+                // the symbol's declaration. The fixtures are single-file and the
+                // first occurrence of the word is the declaration site: the
+                // cursor is always inside the identifier (on the declaration
+                // itself for the "unused" fixture), so the word the cursor sits
+                // on identifies it.
+                let effective: unknown = raw;
+                if (spec.includeDeclaration === false) {
+                    const matches = Array.isArray(raw) ? (raw as LocationLike[]) : raw ? [raw as LocationLike] : [];
+                    const { content: fixtureContent, line: fixtureLine, character: fixtureCharacter } = fixtureWithCursor(spec.source);
+                    const word = identifierAtPosition(fixtureContent, fixtureLine, fixtureCharacter);
+                    const declaration = word ? firstOccurrenceRange(fixtureContent, word) : undefined;
+                    if (declaration) {
+                        effective = matches.filter((location) => {
+                            const range = normalizeRange(location.range);
+                            if (!range) return true;
+                            return !(range.start.line === declaration.start.line
+                                && range.start.character === declaration.start.character
+                                && range.end.line === declaration.end.line
+                                && range.end.character === declaration.end.character);
+                        });
+                    }
+                }
+                const lines = targetLines(effective);
                 if (spec.expectNone) {
                     assert.equal(lines.length, 0, `expected no references; got lines: ${lines.join(",")}`);
                     return;
@@ -1508,6 +1561,7 @@ export interface AutoImportCase extends CaseModules {
 
 interface AnyCompletionItem {
     label?: unknown;
+    kind?: unknown;
     insertText?: unknown;
     textEdit?: { newText?: string; text?: string };
     additionalTextEdits?: readonly { range: vscode.Range; newText?: string; text?: string }[];
@@ -1525,7 +1579,23 @@ interface InternalCompletionList {
 }
 
 function internalCompletionItems(value: InternalCompletionList | undefined): readonly AnyCompletionItem[] {
-    return (value?.suggestions ?? value?.items ?? []) as readonly AnyCompletionItem[];
+    // The built-in snippet provider contributes the extension's snippet
+    // templates to every completion list; they are a template catalog, not
+    // language intelligence, and no expectation here is about them, so they
+    // are dropped at the boundary (same treatment as Copilot AI noise).
+    const kindOf = (item: AnyCompletionItem): number | string | undefined => {
+        const kind = (item as { kind?: unknown }).kind;
+        return typeof kind === "number" || typeof kind === "string" ? kind : undefined;
+    };
+    return ((value?.suggestions ?? value?.items ?? []) as readonly AnyCompletionItem[]).filter((item) => {
+        const kind = kindOf(item);
+        // The internal command returns raw items: the built-in snippet
+        // provider marks its templates with kind 28 and object labels
+        // ({ label, description }). Everything else (the server, and the
+        // extension's own items, which also happen to use kind 28) carries
+        // a plain string label, so only the object shape identifies them.
+        return !(kind === 28 && typeof (item as { label?: unknown }).label !== "string");
+    });
 }
 
 export function autoImportCases(suiteName: string, cases: readonly AutoImportCase[]): void {
@@ -1590,11 +1660,15 @@ export function autoImportCases(suiteName: string, cases: readonly AutoImportCas
                     // The expected import text is part of the expectation: a
                     // stale index can offer the right name with the wrong
                     // module, so the poll waits for the edit that matches.
+                    // Several items may carry the expected label (a builtin
+                    // and a project module share one), so any of them with
+                    // the right edit satisfies the case.
+                    const wantedImport = spec.expectImportInserted;
                     const matches = (value: readonly AnyCompletionItem[]): boolean => {
-                        const item = value.find((candidate) => labelOf(candidate) === spec.expectOffered);
-                        if (!item) return false;
-                        if (!spec.expectImportInserted) return true;
-                        return importEditText(item).includes(spec.expectImportInserted);
+                        const candidates = value.filter((candidate) => labelOf(candidate) === spec.expectOffered);
+                        if (candidates.length === 0) return false;
+                        if (!wantedImport) return true;
+                        return candidates.some((candidate) => importEditText(candidate).includes(wantedImport));
                     };
                     items = await waitFor(
                         requestList,
@@ -1632,7 +1706,11 @@ export function autoImportCases(suiteName: string, cases: readonly AutoImportCas
                     return;
                 }
                 assert.ok(spec.expectOffered, "auto-import case needs expectOffered");
-                const offered = offeredItems.find((item) => labelOf(item) === spec.expectOffered);
+                const wantedImport = spec.expectImportInserted;
+                const candidates = offeredItems.filter((item) => labelOf(item) === spec.expectOffered);
+                const offered = wantedImport
+                    ? candidates.find((item) => importEditText(item).includes(wantedImport))
+                    : candidates[0];
                 assert.ok(offered, `expected ${JSON.stringify(spec.expectOffered)} to be offered; got: ${labels.join(", ") || "none"}`);
                 if (spec.expectImportInserted) {
                     const editsText = importEditText(offered);

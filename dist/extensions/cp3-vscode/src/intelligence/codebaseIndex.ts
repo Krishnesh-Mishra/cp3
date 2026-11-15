@@ -31,6 +31,8 @@ export interface IndexedSymbol {
 interface FileRecord {
     /** Text the counts were computed from. */
     readonly text: string;
+    /** Absolute fs path of the file (original casing), for scope checks. */
+    readonly absolutePath: string;
     /** Identifier occurrence counts in this file. */
     readonly unigram: Map<string, number>;
     /** Adjacent-pair counts in this file (keys joined with a space). */
@@ -39,6 +41,46 @@ interface FileRecord {
     readonly memberUse: Map<string, number>;
     /** Declarations found in this file. */
     readonly symbols: readonly IndexedSymbol[];
+}
+
+/** Cheap structural check: a file whose strings/comments/delimiters do not
+ * balance did not parse, and contributes nothing to the index. Handles the
+ * common cases (line comments, block comments, quoted strings with escapes,
+ * nested template strings are treated as opaque text for delimiter pairing). */
+function hasBalancedDelimiters(text: string): boolean {
+    const stack: string[] = [];
+    let quote: string | undefined;
+    for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (quote) {
+            if (ch === "\\") {
+                i += 1;
+                continue;
+            }
+            if (ch === quote) quote = undefined;
+            continue;
+        }
+        if (ch === "/" && text[i + 1] === "/") {
+            while (i < text.length && text[i] !== "\n") i += 1;
+            continue;
+        }
+        if (ch === "/" && text[i + 1] === "*") {
+            const end = text.indexOf("*/", i + 2);
+            i = end === -1 ? text.length : end + 1;
+            continue;
+        }
+        if (ch === '"' || ch === "'" || ch === "`") {
+            quote = ch;
+            continue;
+        }
+        if (ch === "(") stack.push(")");
+        else if (ch === "[") stack.push("]");
+        else if (ch === "{") stack.push("}");
+        else if (ch === ")" || ch === "]" || ch === "}") {
+            if (stack.pop() !== ch) return false;
+        }
+    }
+    return stack.length === 0 && quote === undefined;
 }
 
 const TOKEN = /[A-Za-z_$][A-Za-z0-9_$]*/g;
@@ -51,6 +93,14 @@ function emptyRecord(uri: vscode.Uri, text: string): FileRecord {
     const unigram = new Map<string, number>();
     const pairs = new Map<string, number>();
     const memberUse = new Map<string, number>();
+
+    // A file that fails to parse contributes nothing to the index: its
+    // declarations may be mid-sentence (half-typed code, broken fixtures),
+    // and suggesting an import against a module that cannot compile is a
+    // paper cut the user pays for with every accept.
+    if (!hasBalancedDelimiters(text)) {
+        return { text, absolutePath: uri.fsPath, unigram, pairs, memberUse, symbols: [] };
+    }
 
     TOKEN.lastIndex = 0;
     let previous: string | undefined;
@@ -96,7 +146,7 @@ function emptyRecord(uri: vscode.Uri, text: string): FileRecord {
             });
         }
     }
-    return { text, unigram, pairs, memberUse, symbols };
+    return { text, absolutePath: uri.fsPath, unigram, pairs, memberUse, symbols };
 }
 
 function kindFor(raw: string): IndexedSymbol["kind"] {
@@ -267,6 +317,32 @@ export class CodebaseIndex implements vscode.Disposable {
             if (exported !== 0) return exported;
             return this.usage(b.name) - this.usage(a.name);
         });
+        return hits.slice(0, limit);
+    }
+
+    /**
+     * Modules of the workspace whose file basename (minus `.cp3`) starts
+     * with `prefix`, case-insensitively. Used for namespace-import
+     * candidates (`import * as console from "./console.cp3"`), which the
+     * symbol table cannot see because the module's alias is the file name,
+     * not any identifier inside it.
+     */
+    searchPathModules(prefix: string, limit: number): Array<{ qualifier: string; absolutePath: string }> {
+        const wanted = prefix.toLowerCase();
+        const hits: Array<{ qualifier: string; absolutePath: string }> = [];
+        for (const [normalized, record] of this.records) {
+            if (hits.length >= limit) break;
+            if (!normalized.endsWith(".cp3")) continue;
+            const slash = Math.max(record.absolutePath.lastIndexOf("/"), record.absolutePath.lastIndexOf("\\"));
+            const basename = slash >= 0 ? record.absolutePath.slice(slash + 1) : record.absolutePath;
+            const dot = basename.lastIndexOf(".");
+            if (dot <= 0) continue;
+            const stem = basename.slice(0, dot);
+            if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(stem)) continue;
+            if (stem.toLowerCase() === "index") continue;
+            if (!stem.toLowerCase().startsWith(wanted)) continue;
+            hits.push({ qualifier: stem, absolutePath: record.absolutePath });
+        }
         return hits.slice(0, limit);
     }
 

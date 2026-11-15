@@ -37,6 +37,7 @@ import {
     type StdlibMember,
     type StdlibModule,
 } from "./stdlibCatalog";
+import { isInsideProject, projectRootFor, relativeSpecifier, sameFile } from "./projectRoot";
 import { compositeScore, matchRank, sortTextFor } from "./ranking";
 
 const MAX_MEMBER_ITEMS = 100;
@@ -140,11 +141,11 @@ function kindForMember(kind: "function" | "constant" | "property"): vscode.Compl
 export class Cp3SuggestionProvider implements vscode.CompletionItemProvider {
     constructor(private readonly index: CodebaseIndex) {}
 
-    provideCompletionItems(
+    async provideCompletionItems(
         document: vscode.TextDocument,
         position: vscode.Position,
         token: vscode.CancellationToken,
-    ): vscode.CompletionItem[] {
+    ): Promise<vscode.CompletionItem[]> {
         if (token.isCancellationRequested) return [];
         if (document.languageId !== "cp3") return [];
         if (!vscode.workspace.getConfiguration("cp3").get<boolean>("suggestCodebase", true)) return [];
@@ -164,7 +165,8 @@ export class Cp3SuggestionProvider implements vscode.CompletionItemProvider {
         const wordMatch = linePrefix.match(/[A-Za-z_$][\w$]*$/);
         if (!wordMatch) return [];
         const query = wordMatch[0];
-        return this.identifierSuggestions(document, position, imports, query, wordMatch.index ?? 0);
+        const root = await projectRootFor(document.uri.fsPath);
+        return this.identifierSuggestions(document, position, imports, query, wordMatch.index ?? 0, root);
     }
 
     /** Member completion for `receiver.<query>` against the stdlib catalog. */
@@ -248,6 +250,7 @@ export class Cp3SuggestionProvider implements vscode.CompletionItemProvider {
         imports: ImportInfo,
         query: string,
         wordStart: number,
+        projectRoot?: string,
     ): vscode.CompletionItem[] {
         const text = document.getText();
         const queryLower = query.toLowerCase();
@@ -297,10 +300,53 @@ export class Cp3SuggestionProvider implements vscode.CompletionItemProvider {
             items.push(...memberCallItems);
         }
 
-        // (c) Workspace symbols from the background index, excluding names
-        // this file binds itself (the server offers those).
+        // (b2) Project modules as namespace-import candidates: console.cp3
+        // is offered as `import * as console from "./console.cp3"`. The alias
+        // is the file name, so the symbol index cannot see it. The candidates
+        // are scoped to the file's project, like every other candidate.
+        const documentPath = document.uri.fsPath;
         const thisFile = normalizedPath(document.uri);
         const seen = new Set<string>();
+        if (query.length >= 1) {
+            for (const candidate of this.index.searchPathModules(queryLower, MAX_SYMBOL_ITEMS)) {
+                if (items.length >= MAX_TOTAL_ITEMS) break;
+                if (!isInsideProject(projectRoot, candidate.absolutePath)) continue;
+                if (sameFile(candidate.absolutePath, documentPath)) continue;
+                if (bound.has(candidate.qualifier)) continue;
+                const rel = relativeSpecifier(documentPath, candidate.absolutePath);
+                const key = `module:${candidate.qualifier}`;
+                if (seen.has(key)) continue;
+                seen.add(key);
+                const usage = this.index.usage(candidate.qualifier);
+                const pair = this.index.pairUsage(prevToken, candidate.qualifier);
+                const score = compositeScore({
+                    query,
+                    candidate: candidate.qualifier,
+                    corpusUsage: usage + 4,
+                    pairUsage: pair,
+                    staticPrior: 6,
+                });
+                if (score === undefined) continue;
+                const item = new vscode.CompletionItem(candidate.qualifier, vscode.CompletionItemKind.Module);
+                item.detail = `namespace import · ${rel}`;
+                item.documentation = new vscode.MarkdownString(
+                    `Inserts \`import * as ${candidate.qualifier} from "${rel}";\`.`,
+                );
+                item.sortText = sortTextFor(score + 40);
+                const insertion = importInsertion(document);
+                item.additionalTextEdits = [new vscode.TextEdit(
+                    new vscode.Range(insertion, insertion),
+                    `import * as ${candidate.qualifier} from "${rel}";\n`,
+                )];
+                items.push(item);
+            }
+        }
+
+        // (c) Workspace symbols from the background index, excluding names
+        // this file binds itself (the server offers those). The index covers
+        // the whole workspace, but a module of an unrelated project in the
+        // same workspace is not importable from here, so out-of-project
+        // candidates are dropped.
         let symbolItems = 0;
         for (const symbol of this.index.searchSymbols(query, MAX_SYMBOL_ITEMS * 2)) {
             if (symbolItems >= MAX_SYMBOL_ITEMS) break;
@@ -309,6 +355,7 @@ export class Cp3SuggestionProvider implements vscode.CompletionItemProvider {
             seen.add(symbol.name);
             if (normalizedPath(symbol.uri) === thisFile) continue;
             if (bound.has(symbol.name)) continue;
+            if (!isInsideProject(projectRoot, symbol.uri.fsPath)) continue;
             const usage = this.index.usage(symbol.name);
             const pair = this.index.pairUsage(prevToken, symbol.name);
             const score = compositeScore({ query, candidate: symbol.name, corpusUsage: usage, pairUsage: pair });
