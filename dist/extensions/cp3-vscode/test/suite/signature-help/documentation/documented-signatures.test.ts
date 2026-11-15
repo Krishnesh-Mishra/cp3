@@ -5,7 +5,8 @@ signatureHelpCases("Signature help: documentation", [
     {
         name: "a documented function shows its description in signature help",
         source: "/**\n * Renders a greeting card.\n */\nfunction greet(name: string): string {\n  return `Hello, ${name}`;\n}\nconst out = greet(__CURSOR__\"Asha\");\n",
-        contains: ["greeting"],
+        contains: ["greet"],
+        expectDocumentation: ["greeting"],
     },
     {
         name: "a documented function shows the parameter docs",
@@ -40,7 +41,8 @@ signatureHelpCases("Signature help: documentation", [
     {
         name: "a documented constructor shows the constructor docs",
         source: "class Widget {\n  /** Creates a widget with the given size. */\n  constructor(size: number) {\n  }\n}\nconst w = new Widget(__CURSOR__10);\n",
-        contains: ["widget"],
+        contains: ["Widget"],
+        expectDocumentation: ["widget"],
     },
     {
         name: "a documented method shows the method docs",

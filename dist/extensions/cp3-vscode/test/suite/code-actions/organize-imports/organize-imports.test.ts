@@ -98,6 +98,7 @@ codeActionCases("Code actions: organize imports", [
         name: "an empty file has nothing to organize",
         source: "",
         expectNone: true,
+        kind: vscode.CodeActionKind.SourceOrganizeImports,
     },
 ]);
 

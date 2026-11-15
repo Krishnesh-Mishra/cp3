@@ -46,7 +46,7 @@ completionCases("Autocomplete: cursor-position edge cases", [
     },
     {
         name: "cursor at end of file after an open brace",
-        source: "function main(): void {\n  if (true) {\n    const scoped = 1;\n    const read = scoped;\n",
+        source: "function main(): void {\n  if (true) {\n    const scoped = 1;\n    const read = scoped;\n__CURSOR__",
         expectPresent: [],
     },
     {

@@ -57,7 +57,7 @@ callHierarchyCases("Call hierarchy: functions", [
     },
     {
         name: "a callback invocation reports the callee it passes",
-        source: "function render(item: number): void {\n}\nfunction each(items: number[], cb: (item: number) => void): void {\n  for (const item of items) {\n    cb(item);\n  }\n}\neach([1, 2], render);\n",
+        source: "function render(item: number): void {\n}\nfunction each(items: number[], cb: (item: number) => void): void {\n  for (const item of items) {\n    cb(item);\n  }\n}\neach([1, 2], __CURSOR__render);\n",
         prepareContains: ["render"],
     },
 ]);

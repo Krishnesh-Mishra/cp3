@@ -348,6 +348,13 @@ async function openCaseDocument(spec: NamedSource, folder: string): Promise<vsco
     if (!mainFile.startsWith(rootWithSep)) {
         throw new Error(`mainPath escapes the case directory: ${spec.mainPath}`);
     }
+    // The case folder is its own project: the extension offers auto-import
+    // candidates from the project of the edited file, so a case must not see
+    // the modules the other cases wrote into the same workspace.
+    fs.writeFileSync(
+        path.join(root, "package.json"),
+        JSON.stringify({ name: unique, private: true }, null, 2),
+    );
     fs.mkdirSync(path.dirname(mainFile), { recursive: true });
     fs.writeFileSync(mainFile, source);
     await ensureCompilerConfigured();
@@ -584,6 +591,79 @@ export interface RenameCase extends CaseModules {
 }
 
 export function renameCases(suiteName: string, cases: readonly RenameCase[]): void {
+    type TextEditLike = { readonly range?: unknown; readonly newText?: unknown };
+    const isTextEditLike = (value: unknown): value is TextEditLike =>
+        typeof value === "object" && value !== null && ("newText" in value || "range" in value);
+    const textEditNewText = (edit: TextEditLike): string =>
+        typeof edit.newText === "string" ? edit.newText : "";
+    // The internal rename command does not always return a WorkspaceEdit the
+    // harness can iterate with entries(); collect the edits from whatever
+    // shape it does return, tolerating absent/empty results.
+    // The internal rename command returns `{ edits: [{ resource, textEdit }] }`
+    // whose items wrap the TextEdit in a `textEdit` property (text stored as
+    // `text`, not `newText`); unwrap those into the plain {range, newText}
+    // shape the rest of the driver expects.
+    const unwrapRenameEdits = (items: unknown[]): TextEditLike[] => {
+        const out: TextEditLike[] = [];
+        for (const item of items) {
+            if (!item || typeof item !== "object") {
+                continue;
+            }
+            const wrapper = item as { resource?: unknown; textEdit?: unknown };
+            if (wrapper.textEdit && typeof wrapper.textEdit === "object") {
+                const inner = wrapper.textEdit as { range?: unknown; text?: unknown };
+                if (typeof inner.text === "string") {
+                    out.push({ range: inner.range, newText: inner.text });
+                }
+                continue;
+            }
+            if (isTextEditLike(item)) {
+                out.push(item);
+            }
+        }
+        return out;
+    };
+    const collectRenameEdits = (value: unknown): TextEditLike[] => {
+        if (!value || typeof value !== "object") {
+            return [];
+        }
+        const anyEdit = value as { entries?: unknown; changes?: unknown; edits?: unknown };
+        if (typeof anyEdit.entries === "function") {
+            const collected: TextEditLike[] = [];
+            // Call entries() with the edit object as receiver so prototype
+            // methods that rely on `this` keep working.
+            for (const pair of (anyEdit.entries as (this: unknown) => Iterable<unknown>).call(anyEdit)) {
+                const elements = Array.isArray(pair) ? pair : [pair];
+                for (const element of elements) {
+                    if (Array.isArray(element)) {
+                        collected.push(...element.filter(isTextEditLike));
+                    } else if (isTextEditLike(element)) {
+                        collected.push(element);
+                    }
+                }
+            }
+            return collected;
+        }
+        if (anyEdit.changes !== undefined) {
+            if (Array.isArray(anyEdit.changes)) {
+                return unwrapRenameEdits(anyEdit.changes);
+            }
+            if (typeof anyEdit.changes === "object" && anyEdit.changes !== null) {
+                const collected: TextEditLike[] = [];
+                for (const list of Object.values(anyEdit.changes as Record<string, unknown>)) {
+                    if (Array.isArray(list)) {
+                        collected.push(...unwrapRenameEdits(list));
+                    }
+                }
+                return collected;
+            }
+            return [];
+        }
+        if (Array.isArray(anyEdit.edits)) {
+            return unwrapRenameEdits(anyEdit.edits);
+        }
+        return [];
+    };
     suite(suiteName, () => {
         for (const spec of cases) {
             test(spec.name, async () => {
@@ -598,13 +678,17 @@ export function renameCases(suiteName: string, cases: readonly RenameCase[]): vo
                         spec.newName,
                     )
                     .then((value) => value, () => undefined);
+                // For cases that require rejection, the provider must not
+                // produce edits at all. The command returns either `undefined`
+                // or `{ rejectReason, edits: [] }` on failure, so collect
+                // first and require an empty edit set.
                 if (spec.expectFailure) {
-                    const total = edit ? [...edit.entries()].reduce((sum, [, edits]) => sum + edits.length, 0) : 0;
-                    assert.equal(total, 0, `expected rename to be rejected; got ${total} edit(s)`);
+                    const edits = collectRenameEdits(edit);
+                    assert.equal(edits.length, 0, `expected rename to be rejected; got ${edits.length} edit(s)`);
                     return;
                 }
                 // The command returns `{ rejectReason, edits: [] }` on failure
-                // instead of a WorkspaceEdit; surface the server's reason.
+                // instead of a WorkspaceEdit; surface the server's reason first.
                 const rejectReason = (edit as { rejectReason?: string } | undefined)?.rejectReason;
                 if (rejectReason) {
                     throw new Error(`rename rejected: ${String(rejectReason)}`);
@@ -612,12 +696,10 @@ export function renameCases(suiteName: string, cases: readonly RenameCase[]): vo
                 assert.ok(edit, "expected a WorkspaceEdit from the rename provider");
                 let count = 0;
                 let renamed = 0;
-                for (const [, edits] of edit.entries()) {
-                    for (const entry of edits) {
-                        count += 1;
-                        if (entry.newText === spec.newName) {
-                            renamed += 1;
-                        }
+                for (const entry of collectRenameEdits(edit)) {
+                    count += 1;
+                    if (textEditNewText(entry) === spec.newName) {
+                        renamed += 1;
                     }
                 }
                 assert.ok(count > 0, "rename produced no edits");
@@ -635,6 +717,8 @@ export interface SignatureHelpCase extends CaseModules {
     readonly source: string;
     /** Substrings drawn from the flattened signature labels. */
     readonly contains?: readonly string[];
+    /** Substrings drawn from the flattened documentation (signature + parameter docs). */
+    readonly expectDocumentation?: readonly string[];
     /** The 0-based active parameter index. */
     readonly expectActiveParameter?: number;
     readonly expectNone?: boolean;
@@ -642,6 +726,33 @@ export interface SignatureHelpCase extends CaseModules {
 
 function flattenSignatures(help: vscode.SignatureHelp): string {
     return help.signatures.map((signature) => signature.label).join("\n");
+}
+
+function flattenDocumentation(help: vscode.SignatureHelp): string {
+    const parts: string[] = [];
+    const pushText = (value: unknown): void => {
+        if (typeof value === "string") {
+            parts.push(value);
+            return;
+        }
+        if (value && typeof value === "object" && "value" in value) {
+            const inner = (value as { value: unknown }).value;
+            if (typeof inner === "string") {
+                parts.push(inner);
+            }
+            return;
+        }
+        if (value instanceof vscode.MarkdownString) {
+            parts.push(value.value);
+        }
+    };
+    for (const signature of help.signatures) {
+        pushText(signature.documentation);
+        for (const parameter of signature.parameters) {
+            pushText(parameter.documentation);
+        }
+    }
+    return parts.join("\n");
 }
 
 export function signatureHelpCases(suiteName: string, cases: readonly SignatureHelpCase[]): void {
@@ -673,6 +784,10 @@ export function signatureHelpCases(suiteName: string, cases: readonly SignatureH
                 for (const chunk of spec.contains ?? []) {
                     assert.ok(text.includes(chunk), `expected ${JSON.stringify(chunk)} in ${text}`);
                 }
+                const docs = flattenDocumentation(help);
+                for (const chunk of spec.expectDocumentation ?? []) {
+                    assert.ok(docs.includes(chunk), `expected ${JSON.stringify(chunk)} in ${docs || "(no documentation)"}`);
+                }
                 if (spec.expectActiveParameter !== undefined) {
                     assert.equal(help.activeParameter, spec.expectActiveParameter, `active parameter for: ${text}`);
                 }
@@ -698,10 +813,14 @@ function applyTextEdits(text: string, edits: readonly vscode.TextEdit[]): string
         if (!range) {
             continue;
         }
+        // The internal `_executeFormatDocumentProvider` command answers with
+        // the editor's own edit shape: the replacement is in `text`, not in
+        // `newText` (the LSP spelling).
+        const replacement = (edit as { text?: string }).text ?? edit.newText;
         offsets.push({
             start: offsetOf(text, range.start),
             end: offsetOf(text, range.end),
-            text: edit.newText,
+            text: replacement,
         });
     }
     offsets.sort((a, b) => b.start - a.start);
@@ -910,17 +1029,29 @@ export function diagnosticCases(suiteName: string, cases: readonly DiagnosticCas
         for (const spec of cases) {
             test(spec.name, async () => {
                 const document = await openCaseDocument(spec, "diagnostics");
-                // The server coalesces rapid changes; poll until the list is
-                // stable for a few polls, then assert. Bounded so a broken
-                // server cannot stall the suite.
-                const deadline = Date.now() + 12_000;
+                // The server coalesces rapid changes, so the diagnostics of a
+                // freshly opened file arrive a moment later. A case that
+                // expects diagnostics waits for them; a case that expects
+                // none waits for the list to settle.
+                const matches = (list: readonly vscode.Diagnostic[]): boolean =>
+                    spec.expect.every((expectation) =>
+                        list.some((diagnostic) => diagnosticsMatch(diagnostic, expectation)));
                 let diagnostics = vscode.languages.getDiagnostics(document.uri);
-                let stablePolls = 0;
-                while (Date.now() < deadline && stablePolls < 3) {
-                    await new Promise((resolve) => setTimeout(resolve, 400));
-                    const fresh = vscode.languages.getDiagnostics(document.uri);
-                    stablePolls = fresh.length === diagnostics.length ? stablePolls + 1 : 0;
-                    diagnostics = fresh;
+                if (spec.expectNoDiagnostics || spec.expectNoErrors) {
+                    const deadline = Date.now() + 12_000;
+                    let stablePolls = 0;
+                    while (Date.now() < deadline && stablePolls < 3) {
+                        await new Promise((resolve) => setTimeout(resolve, 400));
+                        const fresh = vscode.languages.getDiagnostics(document.uri);
+                        stablePolls = fresh.length === diagnostics.length ? stablePolls + 1 : 0;
+                        diagnostics = fresh;
+                    }
+                } else {
+                    const deadline = Date.now() + 8_000;
+                    while (Date.now() < deadline && !matches(diagnostics)) {
+                        await new Promise((resolve) => setTimeout(resolve, 300));
+                        diagnostics = vscode.languages.getDiagnostics(document.uri);
+                    }
                 }
                 if (spec.expectNoDiagnostics) {
                     assert.equal(
@@ -1270,12 +1401,34 @@ export interface AutoImportCase extends CaseModules {
 interface AnyCompletionItem {
     label?: unknown;
     insertText?: unknown;
-    textEdit?: { newText?: string };
-    additionalTextEdits?: readonly { range: vscode.Range; newText: string }[];
+    textEdit?: { newText?: string; text?: string };
+    additionalTextEdits?: readonly { range: vscode.Range; newText?: string; text?: string }[];
     command?: { title?: string };
 }
 
+/** The internal completion command resolves `{ incomplete, suggestions }` rather
+ *  than the public CompletionList `{ isIncomplete, items }` shape; read it
+ *  defensively (the items fallback is kept in case VS Code ever returns the
+ *  public shape). */
+interface InternalCompletionList {
+    readonly incomplete?: boolean;
+    readonly suggestions?: readonly AnyCompletionItem[];
+    readonly items?: readonly AnyCompletionItem[];
+}
+
+function internalCompletionItems(value: InternalCompletionList | undefined): readonly AnyCompletionItem[] {
+    return (value?.suggestions ?? value?.items ?? []) as readonly AnyCompletionItem[];
+}
+
 export function autoImportCases(suiteName: string, cases: readonly AutoImportCase[]): void {
+    // The edit text a completion item carries: the additional edits (the
+    // import line) plus the item's own text edit. The internal command
+    // answers with the editor's shape, where the replacement is in `text`.
+    const importEditText = (item: AnyCompletionItem): string =>
+        [
+            ...(item.additionalTextEdits ?? []).map((edit) => edit.text ?? edit.newText ?? ""),
+            item.textEdit?.text ?? item.textEdit?.newText ?? String(item.insertText ?? ""),
+        ].join("\\n");
     suite(suiteName, () => {
         for (const spec of cases) {
             test(spec.name, async () => {
@@ -1298,21 +1451,46 @@ export function autoImportCases(suiteName: string, cases: readonly AutoImportCas
                     typeof item.label === "string"
                         ? item.label
                         : String((item.label as { label?: unknown } | undefined)?.label ?? "");
-                const requestList = async (): Promise<vscode.CompletionList | undefined> => {
-                    const value = await vscode.commands.executeCommand<vscode.CompletionList>(
-                        "_executeCompletionItemProvider",
-                        document.uri,
-                        position,
-                    );
-                    return value;
+                // The internal command resolves `{ incomplete, suggestions }` (not
+                // the public CompletionList shape), so read it defensively and
+                // apply the same current-word prefix filter the editor applies
+                // client-side; every poll then sees exactly what the user sees.
+                const linePrefix = (() => {
+                    const lineText = document.lineAt(position.line).text.slice(0, position.character);
+                    return (lineText.match(/[A-Za-z_$][\w$]*$/)?.[0] ?? "").toLowerCase();
+                })();
+                const requestList = async (): Promise<readonly AnyCompletionItem[] | undefined> => {
+                    const value = await vscode.commands
+                        .executeCommand<InternalCompletionList>(
+                            "_executeCompletionItemProvider",
+                            document.uri,
+                            position,
+                        )
+                        .then((result) => result, () => undefined);
+                    if (value === undefined) {
+                        return undefined;
+                    }
+                    const items = internalCompletionItems(value);
+                    return linePrefix
+                        ? items.filter((item) => labelOf(item).toLowerCase().startsWith(linePrefix))
+                        : items;
                 };
                 // For positive cases, poll until the offered item shows up
                 // (the workspace index rebuilds on file create).
-                let list: vscode.CompletionList | undefined;
+                let items: readonly AnyCompletionItem[] | undefined;
                 if (spec.expectOffered && !spec.expectNoItem) {
-                    list = await waitFor(
+                    // The expected import text is part of the expectation: a
+                    // stale index can offer the right name with the wrong
+                    // module, so the poll waits for the edit that matches.
+                    const matches = (value: readonly AnyCompletionItem[]): boolean => {
+                        const item = value.find((candidate) => labelOf(candidate) === spec.expectOffered);
+                        if (!item) return false;
+                        if (!spec.expectImportInserted) return true;
+                        return importEditText(item).includes(spec.expectImportInserted);
+                    };
+                    items = await waitFor(
                         requestList,
-                        (value) => (value?.items ?? []).some((item) => labelOf(item as unknown as AnyCompletionItem) === spec.expectOffered),
+                        matches,
                         spec.timeoutMs ?? 10_000,
                     ).catch(() => undefined);
                 } else {
@@ -1320,37 +1498,42 @@ export function autoImportCases(suiteName: string, cases: readonly AutoImportCas
                     // response so a stale first answer does not pass by accident.
                     const deadline = Date.now() + (spec.timeoutMs ?? 10_000);
                     while (Date.now() < deadline) {
-                        list = await requestList();
-                        if (list) {
+                        items = await requestList();
+                        if (items) {
                             break;
                         }
                         await new Promise((resolve) => setTimeout(resolve, 400));
                     }
                     await new Promise((resolve) => setTimeout(resolve, 1_500));
-                    list = (await requestList()) ?? list;
+                    items = (await requestList()) ?? items;
                 }
-                const items = (list?.items ?? []) as unknown as AnyCompletionItem[];
-                const labels = items.map(labelOf);
+                const offeredItems = items ?? [];
+                const labels = offeredItems.map(labelOf);
                 if (spec.expectNoItem) {
+                    // The name may still be offered as an ordinary identifier
+                    // (it is in scope); what must not happen is an import
+                    // edit for it.
+                    const item = offeredItems.find((candidate) => labelOf(candidate) === spec.expectOffered);
+                    const carriesImport = (item?.additionalTextEdits ?? []).some((edit) =>
+                        (edit.text ?? edit.newText ?? "").includes("import"),
+                    );
                     assert.ok(
-                        !labels.includes(spec.expectOffered ?? ""),
-                        `expected ${JSON.stringify(spec.expectOffered)} to not be offered; got: ${labels.join(", ")}`,
+                        !carriesImport,
+                        `expected ${JSON.stringify(spec.expectOffered)} to not be offered as an import; got: ${labels.join(", ")}`,
                     );
                     return;
                 }
                 assert.ok(spec.expectOffered, "auto-import case needs expectOffered");
-                const offered = items.find((item) =>
-                    (typeof item.label === "string" ? item.label : String((item.label as { label?: unknown })?.label ?? "")) === spec.expectOffered,
-                );
+                const offered = offeredItems.find((item) => labelOf(item) === spec.expectOffered);
                 assert.ok(offered, `expected ${JSON.stringify(spec.expectOffered)} to be offered; got: ${labels.join(", ") || "none"}`);
                 if (spec.expectImportInserted) {
-                    const editsText = [
-                        ...(offered.additionalTextEdits ?? []).map((edit) => edit.newText),
-                        offered.textEdit?.newText ?? String(offered.insertText ?? ""),
-                    ].join("\n");
+                    const editsText = importEditText(offered);
                     assert.ok(
                         editsText.includes(spec.expectImportInserted),
-                        `expected an import edit containing ${JSON.stringify(spec.expectImportInserted)}; got edits: ${editsText || "(none)"}`,
+                        `expected an import edit containing ${JSON.stringify(spec.expectImportInserted)}; got edits: ${editsText || "(none)"}; item=${JSON.stringify({
+                            label: offered.label,
+                            additionalTextEdits: offered.additionalTextEdits,
+                        }).slice(0, 2000)}`,
                     );
                 }
             });

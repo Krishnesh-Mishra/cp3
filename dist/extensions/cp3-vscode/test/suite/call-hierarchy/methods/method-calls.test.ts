@@ -48,7 +48,7 @@ callHierarchyCases("Call hierarchy: methods", [
     },
     {
         name: "a module-scope function called via a callback reports its callee",
-        source: "function render(item: number): void {\n}\nfunction each(items: number[], cb: (item: number) => void): void {\n  cb(items[0]);\n}\neach([1, 2], render);\n",
+        source: "function render(item: number): void {\n}\nfunction each(items: number[], cb: (item: number) => void): void {\n  cb(items[0]);\n}\neach([1, 2], __CURSOR__render);\n",
         prepareContains: ["render"],
     },
     {

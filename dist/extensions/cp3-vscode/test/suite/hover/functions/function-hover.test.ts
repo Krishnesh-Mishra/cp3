@@ -25,7 +25,7 @@ hoverCases("Hover: functions and signatures", [
     {
         name: "a documented function hover shows the param documentation",
         source: "/**\n * Doubles a number.\n * @param value The input to double.\n * @returns The doubled value.\n */\nfunction dbl(value: number): number {\n  return value * 2;\n}\nconst out = __CURSOR__dbl(4);\n",
-        contains: ["doubles"],
+        contains: ["The input to double"],
     },
     {
         name: "a documented function hover shows the return doc",
@@ -48,8 +48,10 @@ hoverCases("Hover: functions and signatures", [
         contains: ["number"],
     },
     {
+        // cp3 rejects the `void` annotation (CP3420) and resolves it to
+        // `undefined`, so the hover shows the resolved return type.
         name: "hovering a void function shows void in the signature",
         source: "function greet(): void {}\n__CURSOR__greet();\n",
-        contains: ["void"],
+        contains: ["undefined"],
     },
 ]);

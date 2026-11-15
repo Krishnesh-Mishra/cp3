@@ -19,6 +19,17 @@ function repoRoot(): string {
 }
 
 suite("Configuration: contributed surface", () => {
+    // The contributed commands only exist once the extension is activated.
+    // Activation is normally triggered by opening a .cp3 file, which another
+    // suite may or may not have done by the time this suite runs - so the
+    // suite activates the extension itself instead of depending on the run
+    // order.
+    const activateExtension = async (): Promise<void> => {
+        const extension = vscode.extensions.getExtension("cp3.cp3-vscode");
+        assert.ok(extension, "extension is present in the registry");
+        await extension.activate();
+    };
+
     test("cp3.compilerPath defaults to a bare name when never set", async () => {
         // The test harness pinned it in ensureCompilerConfigured for the LSP;
         // read the effective value to make sure it is a usable path here.
@@ -38,21 +49,25 @@ suite("Configuration: contributed surface", () => {
     });
 
     test("cp3.run command is registered", async () => {
+        await activateExtension();
         const commands = await vscode.commands.getCommands(true);
         assert.ok(commands.includes("cp3.run"), "cp3.run is registered");
     });
 
     test("cp3.restartServer command is registered", async () => {
+        await activateExtension();
         const commands = await vscode.commands.getCommands(true);
         assert.ok(commands.includes("cp3.restartServer"), "cp3.restartServer is registered");
     });
 
     test("cp3.organizeImports command is registered", async () => {
+        await activateExtension();
         const commands = await vscode.commands.getCommands(true);
         assert.ok(commands.includes("cp3.organizeImports"), "cp3.organizeImports is registered");
     });
 
     test("cp3.applyPackageJsonSchema command is registered", async () => {
+        await activateExtension();
         const commands = await vscode.commands.getCommands(true);
         assert.ok(commands.includes("cp3.applyPackageJsonSchema"), "cp3.applyPackageJsonSchema is registered");
     });
