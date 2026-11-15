@@ -95,7 +95,7 @@ The initializer, condition, and update run in that order. `let` loop bindings ar
 
 ## `for...of`
 
-`for...of` is supported for the iterable shapes implemented by the front end, such as arrays and supported collection iteration. Its behavior is not a blanket guarantee that every JavaScript iterable protocol is available. Arrays, `Map`s, `Set`s, and typed arrays are the ordinary cases; if the checker rejects a receiver, use the array or collection API documented for its type. A narrowed binding (see above) iterates correctly at sites such as `for (const x of narrowed) { x.length }`.
+`for...of` is supported for the iterable shapes implemented by the front end: **arrays** (`T[]`, element by element) and **strings** (whole UTF-8 code points, not bytes). Anything else — a `Map`, a `Set`, a typed array, a custom class — is rejected with a type error. To iterate a collection, walk `values()`/`keys()`/`entries()` (they return arrays) or spread it into an array: `[...map]`, then `for...of`. A narrowed binding iterates correctly at sites such as `for (const x of narrowed) { x.length }`.
 
 ### `for await`
 
