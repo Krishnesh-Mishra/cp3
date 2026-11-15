@@ -1,4 +1,7 @@
 {
   "mode": "check",
-  "exitCode": 0
+  "exitCode": 1,
+  "error": {
+    "code": "CP3204"
+  }
 }

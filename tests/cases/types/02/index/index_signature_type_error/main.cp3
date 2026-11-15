@@ -1,4 +1,8 @@
-
-
-
+// An object type literal carrying an index signature (`[key: string]: number`)
+// is a legal declaration - assignments into it honor the index value type -
+// but open (wildcard) shapes were never lowered to C++ (commit 83c9503d
+// refused the wildcard shape label on purpose: no C++ value spelling for open
+// objects). `cp3 check` runs the entry's codegen, so a declared binding whose
+// type has no spelling is CP3401, not exit 0, even when the binding is never
+// read. Interfaces with the same member still spell through the wrapper.
 let d: { [key: string]: number } = {};

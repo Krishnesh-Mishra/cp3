@@ -5,7 +5,7 @@ const words: string[] = ["alpha", "bravo"];
   words.length = 0;
   console.log(word);
 }
-// The frontend accepts this write. Codegen does not implement an assignment
-// to a non-identifier target on this branch, so the reference cannot dangle at
-// runtime today; the whole-unit proof still treats the write as a mutation for
-// the day length assignment lands.
+// An array's length is read-only in cp3 today (assigning to it has no C++
+// write form), so `cp3 check` reports CP3204 (invalid assignment target).
+// Pinned as the current, deliberate diagnostic; revisit when a length write
+// form lands.
