@@ -537,6 +537,17 @@ Type Analyzer::inferAs(AsExpr& a) {
         target.kind == TypeKind::Array || isTupleType(target);
     const bool emptyArrayCast =
         operandIsEmptyArrayLiteral && targetIsArrayOrTuple;
+    // An erased `object` holds whatever was passed in; the generated C++
+    // cannot reinterpret an erased value as a concrete handle type, so an
+    // assertion OUT of `object` to a non-ambient target is CP3401 - it used
+    // to slip past here and fail in the C++ step with a raw clang error.
+    if (isAmbientType(operand) && !isAmbientType(target) && !target.isUnknown()) {
+        report(diagcode::kTypeMismatch, a.span,
+               "type mismatch: '" + pretty(operand) +
+                   "' cannot be asserted as '" + pretty(target) +
+                   "' (an 'object' value has no concrete handle to reinterpret)");
+        return withType(a, target);
+    }
     if (!operandIsClass && !targetIsClass && !numericPair && !emptyArrayCast &&
         !isAmbientType(operand) && !isAmbientType(target)) {
         report(diagcode::kTypeMismatch, a.span,
