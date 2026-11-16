@@ -219,6 +219,8 @@ std::string declaredName(const Node& declaration) {
             return static_cast<const FunctionDeclaration&>(declaration).name;
         case NodeKind::MethodDeclaration:
             return memberKey(declaration);
+        case NodeKind::MethodSignature:
+            return memberKey(declaration);
         case NodeKind::ConstructorDeclaration:
             return std::string();
         case NodeKind::ClassDeclaration:
@@ -237,6 +239,16 @@ std::string declaredDetail(const Node& declaration) {
     switch (declaration.kind) {
         case NodeKind::MethodDeclaration: {
             const auto& method = static_cast<const MethodDeclaration&>(declaration);
+            std::string out = declaredName(declaration) + "(";
+            for (std::size_t i = 0; i < method.params.size(); ++i) {
+                if (i != 0) out += ", ";
+                out += "arg";
+            }
+            out += ")";
+            return out;
+        }
+        case NodeKind::MethodSignature: {
+            const auto& method = static_cast<const MethodSignature&>(declaration);
             std::string out = declaredName(declaration) + "(";
             for (std::size_t i = 0; i < method.params.size(); ++i) {
                 if (i != 0) out += ", ";
@@ -264,6 +276,8 @@ std::string declaredDetail(const Node& declaration) {
 int kindOf(const Node& declaration) {
     switch (declaration.kind) {
         case NodeKind::MethodDeclaration:
+            return kKindMethod;
+        case NodeKind::MethodSignature:
             return kKindMethod;
         case NodeKind::ConstructorDeclaration:
             return kKindConstructor;
@@ -526,8 +540,9 @@ std::optional<Callable> callableAt(const AnalyzedDocument& document,
         return std::nullopt;
     }
     // A call at the cursor: the hierarchy points at what the call names - the
-    // callee, wherever in the callee the cursor sits. A cursor on an argument
-    // names that argument instead (a function passed as a value).
+    // callee, anywhere in the call (a member-expression callee only spans its
+    // property token, so the receiver sits outside it). A cursor on an
+    // argument names that argument instead (a function passed as a value).
     const Node* call =
         innermostCallAt(*document.entry->ast, *document.file, line, column);
     if (call != nullptr) {
@@ -535,8 +550,25 @@ std::optional<Callable> callableAt(const AnalyzedDocument& document,
             call->kind == NodeKind::CallExpr
                 ? static_cast<const CallExpr&>(*call).callee.get()
                 : static_cast<const NewExpr&>(*call).callee.get();
-        if (callee != nullptr &&
-            spanContains(callee->span, *document.file, line, column)) {
+        // A cursor on an argument names what the argument names (a function
+        // passed as a value). An argument's span covers the whole argument,
+        // so this is exact even for a cursor on a member-expression receiver
+        // inside one.
+        const ExprList* arguments = nullptr;
+        if (call->kind == NodeKind::CallExpr) {
+            arguments = &static_cast<const CallExpr&>(*call).arguments;
+        } else {
+            arguments = &static_cast<const NewExpr&>(*call).arguments;
+        }
+        bool onArgument = false;
+        for (const ExprPtr& argument : *arguments) {
+            if (argument != nullptr &&
+                spanContains(argument->span, *document.file, line, column)) {
+                onArgument = true;
+                break;
+            }
+        }
+        if (callee != nullptr && !onArgument) {
             const std::optional<Callable> callable =
                 resolveCallee(document, callee);
             if (callable.has_value()) return callable;
@@ -549,10 +581,19 @@ std::optional<Callable> callableAt(const AnalyzedDocument& document,
             return std::nullopt;
         }
     }
-    // No call at the cursor: the name itself (a function passed as a value).
+    // No call at the cursor (or the cursor sits on one of the call's
+    // arguments): the name itself (a function passed as a value) or the
+    // callable declaration the cursor sits on (`function helper`, a
+    // method's name).
     const Node* node =
         innermostNodeAt(*document.entry->ast, *document.file, line, column);
     if (node == nullptr) return std::nullopt;
+    if (isCallableKind(node->kind)) {
+        const Callable callable = callableOf(*node);
+        // A constructor carries no name of its own; nothing to point at.
+        if (callable.name.empty()) return std::nullopt;
+        return callable;
+    }
     if (node->kind != NodeKind::Identifier && node->kind != NodeKind::MemberExpr) {
         return std::nullopt;
     }
