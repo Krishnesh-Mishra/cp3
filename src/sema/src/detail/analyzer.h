@@ -83,6 +83,9 @@ public:
     void run(Program& program);
     // Stage 1: cycle-capability analysis over class field types.
     void computeCycleCapable();
+    // Stage 1.5: a class that implements an interface must declare every
+    // member the interface requires, with a type the interface accepts.
+    void checkInterfaceConformance();
     // The whole-program reference graph behind the automatic cycle
     // collector (detail/cycle_analysis.h): the strongly connected components
     // and the cycle-capable verdict per class.

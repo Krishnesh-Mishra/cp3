@@ -93,7 +93,22 @@ void Analyzer::declareBinding(const std::string& name, const Type& type,
             // Function overloading (spec §17): a second function with the same
             // name in the same scope is an overload set, not a duplicate. Record
             // every candidate signature so the call site can resolve against the
-            // set; expose the name permissively otherwise.
+            // set; expose the name permissively otherwise. An identical
+            // parameter signature is not an overload - it is a duplicate.
+            if (spec.sig != nullptr && existing->second.sig.declNodeId != 0) {
+                const FuncSig& a = existing->second.sig;
+                const FuncSig* b = spec.sig;
+                bool identical =
+                    a.rest == b->rest && a.params.size() == b->params.size();
+                for (std::size_t i = 0; identical && i < a.params.size(); ++i) {
+                    if (!(a.params[i] == b->params[i])) identical = false;
+                }
+                if (identical && a.typeParams.size() == b->typeParams.size()) {
+                    report(diagcode::kDuplicateDeclaration, span,
+                           "duplicate declaration of '" + name + "'");
+                    return;
+                }
+            }
             if (existing->second.overloads.empty() &&
                 existing->second.sig.declNodeId != 0) {
                 existing->second.overloads.push_back(existing->second.sig);

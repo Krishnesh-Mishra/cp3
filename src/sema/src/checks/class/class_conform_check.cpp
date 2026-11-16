@@ -496,4 +496,48 @@ bool Analyzer::emitLiteralToClassDiff(const Type& from, const ClassInfo& ci,
     return false;
 }
 
+// =============================================================================
+// Interface conformance (the `implements` clause)
+// =============================================================================
+// A class that implements an interface must declare every member the
+// interface requires, with a type the interface accepts. The check runs as a
+// post pass over the classes table (every shape is registered by then, and
+// an interface may be declared after the class that implements it).
+void Analyzer::checkInterfaceConformance() {
+    for (const auto& [name, info] : classes_) {
+        if (info.implementsNames.empty()) continue;
+        for (const std::string& iface : info.implementsNames) {
+            const auto it = typeNames_.find(iface);
+            if (it == typeNames_.end()) continue;  // unresolved: reported elsewhere
+            Shape* sh = shapeOf(it->second);
+            if (sh == nullptr || sh->open || sh->tuple) continue;
+            for (const Field& tf : sh->fields) {
+                const ClassMemberInfo* m =
+                    findClassMemberChain(info, tf.name, nullptr);
+                if (!m) {
+                    if (tf.optional) continue;
+                    report(diagcode::kMissingProperty, info.span,
+                           "missing required member '" + tf.name +
+                               "' in class '" + info.name +
+                               "' (required by interface '" + iface + "')");
+                    continue;
+                }
+                const Type mt = classMemberType(*m);
+                const bool ok =
+                    mt.kind == TypeKind::Function &&
+                            tf.type.kind == TypeKind::Function
+                        ? functionTypesEquivalent(mt, tf.type)
+                        : wouldAccept(mt, tf.type, false);
+                if (!ok) {
+                    report(diagcode::kTypeMismatch, info.span,
+                           "type mismatch: member '" + tf.name + "' of class '" +
+                               info.name + "' has type '" + pretty(mt) +
+                               "' but '" + pretty(tf.type) +
+                               "' is required by interface '" + iface + "'");
+                }
+            }
+        }
+    }
+}
+
 }  // namespace cp3

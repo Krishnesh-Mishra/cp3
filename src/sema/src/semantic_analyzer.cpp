@@ -126,6 +126,7 @@ void Analyzer::run(Program& program) {
     // (consumed by the step-4 diagnostic gate in computeCycleCapable).
     computeCycleComponents();
     computeCycleCapable();
+    checkInterfaceConformance();
 }
 
 // =============================================================================

@@ -17,6 +17,7 @@
 #include "detail/analyzer.h"
 
 #include <cstddef>
+#include <functional>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -204,6 +205,62 @@ Type Analyzer::inferGenericCall(CallExpr& call, const FuncSig& sig) {
         } else if (sig.rest && !sig.params.empty()) {
             unifyParam(sig.params.back(), inferExpr(*a), subst);
         }
+    }
+
+    // True when `t` mentions the type parameter `name` (a self-referential
+    // constraint such as `T extends Box<T>` cannot be decided by
+    // `wouldAccept` and is treated permissively).
+    auto mentionsParam = [&](const Type& t, const std::string& name) {
+        std::function<bool(const Type&)> has = [&](const Type& x) {
+            if (x.kind == TypeKind::TypeParam && x.name == name) return true;
+            if (x.kind == TypeKind::Object) {
+                Shape* sh = shapeOf(x);
+                if (sh != nullptr) {
+                    if (sh->tuple) {
+                        for (const Type& e : sh->tupleElems) {
+                            if (has(e)) return true;
+                        }
+                    } else {
+                        for (const Field& f : sh->fields) {
+                            if (has(f.type)) return true;
+                        }
+                    }
+                }
+            }
+            for (const Type& p : x.parts) {
+                if (has(p)) return true;
+            }
+            return false;
+        };
+        return has(t);
+    };
+    // Inferred instantiations satisfy the same constraint the explicit
+    // `<T>` argument does (05-generics: a violated bound is a type mismatch at
+    // the call). Inferred bindings used to be trusted; an argument that does
+    // not satisfy the constraint could bind silently.
+    for (std::size_t i = 0; i < sig.typeParams.size(); ++i) {
+        if (i < call.typeArgs.size()) continue;  // explicitly checked above
+        const Type& tp = sig.typeParams[i];
+        if (tp.parts.empty()) continue;
+        const Type& constraint = tp.parts.front();
+        if (constraint.isUnknown() || isAmbientType(constraint)) continue;
+        if (mentionsParam(constraint, tp.name)) continue;
+        const auto it = subst.find(tp.name);
+        if (it == subst.end()) continue;  // unbound: permissive
+        const Type& arg = it->second;
+        if (arg.isUnknown() || arg.isError() || isAmbientType(arg) ||
+            arg.kind == TypeKind::TypeParam) {
+            continue;
+        }
+        if (wouldAccept(arg, constraint, false)) continue;
+        std::string cname = pretty(constraint);
+        const auto spelled = typeParamConstraintNames_.find(typeKey(constraint));
+        if (spelled != typeParamConstraintNames_.end()) {
+            cname = spelled->second;
+        }
+        report(diagcode::kTypeMismatch, call.span,
+               "type mismatch: type argument '" + pretty(arg) +
+                   "' does not satisfy the constraint '" + cname + "'");
     }
 
     FuncSig sub = sig;
