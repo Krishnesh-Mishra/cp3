@@ -46,10 +46,10 @@ pass; kept here so the history stays readable.
 | `reexport_from_barrel` | `export { X } from "./x.cp3";` re-exports a usable symbol | ok |
 | `imported_class_annotation` | an imported class is usable in an annotation position | ok |
 | `imported_interface_annotation` | an imported interface is usable in an annotation position | ok |
-| `sibling_class_parameter` | a class naming a **sibling** class of the same module in a parameter annotation resolves when the module is imported | FAIL (CP3302) |
-| `alias_before_class` | a type alias naming a class declared **later** in the same module resolves | FAIL (CP3302) |
-| `alias_after_class` | a type alias naming a class declared **earlier** in the same module resolves | FAIL (CP3302, then CP3414) |
-| `recursive_interface_binding` | a recursive interface can be used as a binding type | FAIL (CP3401 "no C++ spelling") |
+| `sibling_class_parameter` | a class naming a **sibling** class of the same module in a parameter annotation resolves when the module is imported | fixed in 398a10b1 |
+| `alias_before_class` | a type alias naming a class declared **later** in the same module resolves | fixed in 398a10b1 |
+| `alias_after_class` | a type alias naming a class declared **earlier** in the same module resolves | fixed in 398a10b1 |
+| `recursive_interface_binding` | a recursive interface can be used as a binding type | fixed in 7719ba8a |
 
 ### `check-vs-build/`
 
@@ -80,9 +80,9 @@ pass; kept here so the history stays readable.
   behind; a later run in the same folder may then fail in the C++ step
   instead of with the CP diagnostic. Delete the case folder's `.cp3/`
   directory (gitignored) to get the diagnostic back. The corpus runner does
-  not clean `.cp3/` between runs, so stale caches can also produce false
-  failures (empty stdout, link mismatches against an older object set); wipe
-  the folder's `.cp3/` before trusting them.
+  not clean `.cp3/` between runs, but now wipes it and retries every failing
+  case (see `retry_transient_failures` in tests/runner/run_tests.py), so a
+  stale cache can no longer cause a permanent false red.
 * `tests/cases/v0-2-2/empty_literal_cast` pins the same empty-array-literal
   defect from the v0.2.2 angle; it is green as of 2c85498f.
 * The packaging half of this work (the `.cp3pak` route, the installer and the
