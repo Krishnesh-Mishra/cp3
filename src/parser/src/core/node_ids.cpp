@@ -503,6 +503,18 @@ void ParserImpl::assignTypeChildren(Node& node) {
         case NodeKind::ParenthesizedType:
             assignOpt(static_cast<ParenthesizedType&>(node).inner.get());
             break;
+        case NodeKind::TypeofType:
+            assignOpt(static_cast<TypeofType&>(node).operand.get());
+            break;
+        case NodeKind::KeyofType:
+            assignOpt(static_cast<KeyofType&>(node).operand.get());
+            break;
+        case NodeKind::IndexedAccessType: {
+            auto& ia = static_cast<IndexedAccessType&>(node);
+            assignOpt(ia.object.get());
+            assignOpt(ia.index.get());
+            break;
+        }
         default:
             break;
     }

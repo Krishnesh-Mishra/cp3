@@ -1,9 +1,11 @@
 // =============================================================================
 // src/parser/src/types.cpp - type syntax.
 //
-// Implements the type grammar: union types, postfix array types, and primary
-// types (parenthesized / function types, tuples, object type literals, literal
-// types, prefixed escape-hatch types `r_'u32'`, and named/generic types).
+// Implements the type grammar: union types, postfix array/indexed-access
+// types, and primary types (parenthesized / function types, tuples, object
+// type literals, literal types, prefixed escape-hatch types `r_'u32'`, named/
+// generic types, and the v0.2.6 type operators `typeof <entity>` and
+// `keyof <type>`).
 // =============================================================================
 #include "detail/tokens.h"
 
@@ -58,13 +60,27 @@ TypePtr ParserImpl::parsePostfixType() {
     const Token start = peek();
     TypePtr base = parsePrimaryType();
     if (!base) return nullptr;
-    while (check(TokenKind::LBracket)) {
+    // Postfix array types (`T[]`) and indexed-access types (`T[K]`). The
+    // two disambiguate on the token right after `[`: `]` means array, any
+    // type means indexed access (v0.2.6).
+    for (;;) {
+        if (!check(TokenKind::LBracket)) break;
         (void)advance();
-        if (!expect(TokenKind::RBracket, "expected ']' in array type")) break;
-        auto arr = std::make_unique<ArrayType>(start.span);
-        arr->element = std::move(base);
-        arr->span = spanFrom(start);
-        base = std::move(arr);
+        if (match(TokenKind::RBracket)) {
+            auto arr = std::make_unique<ArrayType>(start.span);
+            arr->element = std::move(base);
+            arr->span = spanFrom(start);
+            base = std::move(arr);
+            continue;
+        }
+        TypePtr index = parseType();
+        if (!index) return nullptr;
+        (void)expect(TokenKind::RBracket, "expected ']' in indexed access type");
+        auto idx = std::make_unique<IndexedAccessType>(start.span);
+        idx->object = std::move(base);
+        idx->index = std::move(index);
+        idx->span = spanFrom(start);
+        base = std::move(idx);
     }
     return base;
 }
@@ -121,10 +137,65 @@ TypePtr ParserImpl::parseTupleType() {
     return tuple;
 }
 
+// `typeof <entity>` in type position (v0.2.6): the operand is a value name
+// (`typeof a`) or a member chain on one (`typeof a.b.c`), built as an
+// ordinary expression so sema re-infers it. Arbitrary expressions are not
+// accepted (TypeScript parity).
+ExprPtr ParserImpl::parseEntityName() {
+    if (!isIdentLike(peek())) {
+        report(diagcode::kUnexpectedToken, "expected a name after 'typeof' in a type");
+        return nullptr;
+    }
+    ExprPtr expr = makeIdentifier(advance());
+    while (check(TokenKind::Dot)) {
+        (void)advance();
+        const Token propTok = peek();
+        if (!isNameToken(propTok)) {
+            report(diagcode::kUnexpectedToken, "expected a property name after '.'");
+            break;
+        }
+        (void)advance();
+        auto member = std::make_unique<MemberExpr>(expr->span);
+        member->object = std::move(expr);
+        member->property = textOf(propTok);
+        member->optional = false;
+        member->span = spanFrom(propTok);
+        expr = std::move(member);
+    }
+    return expr;
+}
+
+TypePtr ParserImpl::parseTypeofType() {
+    const Token start = advance();  // typeof
+    ExprPtr operand = parseEntityName();
+    if (!operand) return nullptr;
+    auto tt = std::make_unique<TypeofType>(start.span);
+    tt->operand = std::move(operand);
+    tt->span = spanFrom(start);
+    return tt;
+}
+
+// `keyof T` in type position (v0.2.6). `keyof` is a contextual marker: a
+// regular type name `keyof` does not exist, so an identifier spelling
+// "keyof" followed by a type starts the key union (cf. `readonly`).
+TypePtr ParserImpl::parseKeyofType() {
+    const Token start = advance();  // keyof
+    TypePtr operand = parsePostfixType();
+    if (!operand) return nullptr;
+    auto kt = std::make_unique<KeyofType>(start.span);
+    kt->operand = std::move(operand);
+    kt->span = spanFrom(start);
+    return kt;
+}
+
 TypePtr ParserImpl::parsePrimaryType() {
     if (check(TokenKind::LParen)) return parseParenOrFunctionType();
     if (check(TokenKind::LBracket)) return parseTupleType();
     if (check(TokenKind::LBrace)) return parseObjectType();
+    if (check(TokenKind::KwTypeof)) return parseTypeofType();
+    if (check(TokenKind::Identifier) && textOf(peek()) == "keyof") {
+        return parseKeyofType();
+    }
 
     const Token start = peek();
 

@@ -1,0 +1,5 @@
+// pin: value-position typeof is unchanged - it prints the runtime type name
+import console from "std/console";
+
+const x: number = 42;
+console.log(typeof x);

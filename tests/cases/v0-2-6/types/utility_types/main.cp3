@@ -1,0 +1,23 @@
+// pin: the query utility types - Parameters / ReturnType / ConstructorParameters /
+// InstanceType / Awaited - resolve structurally from the queried signature
+// (typeof Box names the constructor type of the class value)
+class Box {
+    value: number;
+    constructor(value: number) { this.value = value; }
+}
+
+type Fn = (a: number, b: string) => boolean;
+type Params = Parameters<Fn>;
+type Ret = ReturnType<Fn>;
+type CtorParams = ConstructorParameters<typeof Box>;
+type Instance = InstanceType<typeof Box>;
+type PromiseNumber = Promise<number>;
+type AwaitedNumber = Awaited<PromiseNumber>;
+type AwaitedPlain = Awaited<number>;
+
+const params: Params = [1, "one"];
+const ret: Ret = true;
+const ctorParams: CtorParams = [42];
+const box: Instance = new Box(7);
+const resolved: AwaitedNumber = 42;
+const plain: AwaitedPlain = 7;

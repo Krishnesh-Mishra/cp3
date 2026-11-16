@@ -16,7 +16,7 @@ Practical expectations:
 
 - **Inference when supported, explicit arguments when not** — add `<...>` when inference is ambiguous or the API reads clearly with them.
 - **Generic classes with empty constructors need arguments**: `new Map<string, number>()` — the checker cannot guess element types from nothing.
-- **Not all of TypeScript's type-level machinery exists.** Arbitrary conditional, mapped, indexed-access, and higher-kinded types are not implemented; unsupported forms get diagnostics, not silent pass-through.
+- **Not all of TypeScript's type-level machinery exists.** Arbitrary conditional, mapped, and higher-kinded types are not implemented; unsupported forms get diagnostics, not silent pass-through. Indexed access (`T[K]`), `keyof`, type-position `typeof`, and `as const` are supported on closed shapes; see the [language guide](../language/05-generics/01-generics.md).
 - **"Compiles" is not "zero cost."** Generic instantiation improves type knowledge; calls, allocation, and reference operations in the body still cost. If a hot generic path matters, look at the generated C++ rather than trusting the angles.
 
 The language guide covers the rules in full: [Generics](../language/05-generics/01-generics.md). For how instantiation is spelled in the emitted code, see [Compiler design](../internal-engineering/01-compiler-design.md).

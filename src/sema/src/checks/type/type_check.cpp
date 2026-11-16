@@ -282,19 +282,54 @@ std::vector<std::string> Analyzer::mixedMathHints(const BinaryExpr* be,
     return out;
 }
 
+// Percent-escapes `%` and `|` so a payload never corrupts the pipe-delimited
+// shape-label encoding. Injective; used for literal field keys so codegen's
+// pipe-separated label parser can read the base spelling of a literal while
+// sema keeps the full value for deduplication.
+static std::string percentEscape(const std::string& s) {
+    std::string out;
+    out.reserve(s.size() + 8);
+    for (const char c : s) {
+        if (c == '%') {
+            out += "%25";
+        } else if (c == '|') {
+            out += "%7C";
+        } else {
+            out += c;
+        }
+    }
+    return out;
+}
+
 std::string typeKey(const Type& t) {
+    if (t.isLiteral()) {
+        // A literal spells its base primitive in the label: codegen only
+        // reads the kind (number/string/boolean) and spells the struct
+        // field accordingly, so the payload is free to carry the exact
+        // value for sema's deduplication. The `kind|payload|` shape keeps
+        // every part pipe-terminated, matching the non-literal encoding.
+        std::string payload;
+        switch (t.literalBase) {
+            case TypeKind::Number:
+                payload = t.numberRaw.empty() ? std::to_string(t.numberValue)
+                                              : t.numberRaw;
+                break;
+            case TypeKind::String:
+                payload = percentEscape(t.stringValue);
+                break;
+            case TypeKind::Boolean:
+                payload = t.boolValue ? "T" : "F";
+                break;
+            default:
+                payload = "?";
+                break;
+        }
+        return std::string(typeKindName(t.literalBase)) + "|" + payload + "|";
+    }
     std::string s = typeKindName(t.kind);
     s += '|';
     s += t.name;
     s += '|';
-    if (t.isLiteral()) {
-        switch (t.literalBase) {
-            case TypeKind::Number: s += std::to_string(t.numberValue); break;
-            case TypeKind::String: s += t.stringValue; break;
-            case TypeKind::Boolean: s += t.boolValue ? "T" : "F"; break;
-            default: break;
-        }
-    }
     for (const Type& p : t.parts) {
         s += '<';
         s += typeKey(p);
@@ -447,6 +482,39 @@ bool isClosedLiteralKeys(const Type& keys) {
     return utilityKeysOf(keys, tmp);
 }
 
+// The v0.2.6 built-in utilities. They are deliberately NOT part of the frozen
+// `UtilityKind` vocabulary in cp3/core/utility_types.hpp; the six names there
+// stay as they are and these five live here, matching the placement rule
+// (they are checked after the user alias/interface/type-name lookups, so a
+// user-declared `Parameters` shadows the builtin exactly as the six do).
+enum class ClosedUtility {
+    Parameters,
+    ReturnType,
+    ConstructorParameters,
+    InstanceType,
+    Awaited,
+};
+
+std::optional<ClosedUtility> closedUtilityOf(const std::string& name) {
+    if (name == "Parameters") return ClosedUtility::Parameters;
+    if (name == "ReturnType") return ClosedUtility::ReturnType;
+    if (name == "ConstructorParameters") return ClosedUtility::ConstructorParameters;
+    if (name == "InstanceType") return ClosedUtility::InstanceType;
+    if (name == "Awaited") return ClosedUtility::Awaited;
+    return std::nullopt;
+}
+
+const char* closedUtilityName(ClosedUtility kind) {
+    switch (kind) {
+        case ClosedUtility::Parameters: return "Parameters";
+        case ClosedUtility::ReturnType: return "ReturnType";
+        case ClosedUtility::ConstructorParameters: return "ConstructorParameters";
+        case ClosedUtility::InstanceType: return "InstanceType";
+        case ClosedUtility::Awaited: return "Awaited";
+    }
+    return "unknown";
+}
+
 }  // namespace
 
 // =============================================================================
@@ -483,6 +551,12 @@ Type Analyzer::resolveTypeInner(TypeNode& node) {
             auto& p = static_cast<ParenthesizedType&>(node);
             return p.inner ? resolveType(*p.inner) : Type::unknown();
         }
+        case NodeKind::TypeofType:
+            return resolveTypeofType(static_cast<TypeofType&>(node));
+        case NodeKind::KeyofType:
+            return resolveKeyofType(static_cast<KeyofType&>(node));
+        case NodeKind::IndexedAccessType:
+            return resolveIndexedAccessType(static_cast<IndexedAccessType&>(node));
         default:
             return Type::unknown();
     }
@@ -1115,6 +1189,109 @@ Type Analyzer::resolveNamedType(NamedType& nt) {
         };
         return apply(source);
     }
+    // The v0.2.6 built-in utilities (Parameters / ReturnType /
+    // ConstructorParameters / InstanceType / Awaited). Like the six above,
+    // they resolve structurally to a plain `Type` published through the
+    // ordinary `resolveType` side table; nothing is emitted for them. A
+    // union source distributes member-wise (TypeScript parity); a nullable
+    // source wraps the distributed result.
+    if (const std::optional<ClosedUtility> cu = closedUtilityOf(nt.name)) {
+        const char* cname = closedUtilityName(*cu);
+        if (args.size() != 1) {
+            report(diagcode::kInvalidTypeArgument, nt.span,
+                   std::string(cname) +
+                       " requires exactly 1 type argument(s); got " +
+                       std::to_string(args.size()));
+            return Type::unknown();
+        }
+        const Type source = args.front();
+        // Distribution over a union/nullable source. An error/unknown/
+        // type-parameter member (a cascade artifact or an unresolved generic)
+        // passes through untouched, as for the six built-ins above.
+        const auto distribute = [&](std::function<Type(const Type&)> fn) {
+            if (source.isUnion()) {
+                std::vector<Type> members;
+                members.reserve(source.parts.size());
+                for (const Type& m : source.parts) members.push_back(fn(m));
+                return Type::unionOf(std::move(members));
+            }
+            if (source.isNullable()) {
+                const Type inner =
+                    source.parts.empty() ? Type::unknown() : source.parts.front();
+                return Type::nullable(fn(inner));
+            }
+            return fn(source);
+        };
+        const auto isCascade = [](const Type& s) {
+            return s.isUnknown() || s.isError() || isAmbientType(s) ||
+                   s.kind == TypeKind::TypeParam;
+        };
+        switch (*cu) {
+            case ClosedUtility::Parameters:
+            case ClosedUtility::ReturnType: {
+                // `Type::function` carries the return type as the last part,
+                // so the parameter list is every part before it. A nullary
+                // function is `[returnType]` only, which yields the empty
+                // tuple for Parameters.
+                const bool wantsParams = *cu == ClosedUtility::Parameters;
+                return distribute([&](const Type& src) -> Type {
+                    if (isCascade(src)) return src;
+                    if (src.kind != TypeKind::Function) {
+                        report(diagcode::kUtilityNotFunction, nt.span,
+                               std::string(cname) +
+                                   " requires a closed function type; got '" +
+                                   pretty(src) + "'");
+                        return Type::unknown();
+                    }
+                    if (!wantsParams) {
+                        return src.parts.empty() ? Type::unknown() : src.parts.back();
+                    }
+                    std::vector<Type> params = src.parts;
+                    if (!params.empty()) params.pop_back();  // return type is last
+                    return makeObjectType({}, false, true, std::move(params));
+                });
+            }
+            case ClosedUtility::ConstructorParameters:
+            case ClosedUtility::InstanceType: {
+                const bool wantsParams = *cu == ClosedUtility::ConstructorParameters;
+                return distribute([&](const Type& src) -> Type {
+                    if (isCascade(src)) return src;
+                    const ClassInfo* ci =
+                        src.kind == TypeKind::Class ? findClass(src.name) : nullptr;
+                    if (ci == nullptr) {
+                        report(diagcode::kUtilityNotClass, nt.span,
+                               std::string(cname) +
+                                   " requires a closed class type; got '" +
+                                   pretty(src) + "'");
+                        return Type::unknown();
+                    }
+                    if (!wantsParams) {
+                        // cp3 has no separate constructor-object type: the
+                        // class type IS the instance type (it is nominal).
+                        return src;
+                    }
+                    std::vector<Type> params = ci->ctorSig.params;
+                    if (!src.parts.empty()) {
+                        for (Type& p : params) {
+                            p = substituteClassTypeParams(p, *ci, src.parts);
+                        }
+                    }
+                    return makeObjectType({}, false, true, std::move(params));
+                });
+            }
+            case ClosedUtility::Awaited:
+                return distribute([&](const Type& src) -> Type {
+                    if (isCascade(src)) return src;
+                    Type cur = src;
+                    for (int hops = 0; hops < 32; ++hops) {
+                        if (!isPromiseType(cur) || cur.parts.empty()) break;
+                        cur = cur.parts.front();
+                    }
+                    return cur;
+                });
+        }
+        return Type::unknown();
+    }
     // A non-TypeScript project also accepts its own plain value-type names:
     // `let a: i64 = 10;` (rust) or `let a: long long = 10;` (cpp). Unsupported
     // spellings (i128, long double, ...) get their precise diagnostic; a name
@@ -1366,6 +1543,284 @@ Type Analyzer::selectByTypeof(const Type& t, std::string_view kind,
     }
     if (keep.empty()) return Type::unknown();
     return Type::unionOf(std::move(keep));
+}
+
+// =============================================================================
+// Closed-world type queries (v0.2.6): `typeof <entity>`, `keyof T`, `T[K]`
+// =============================================================================
+// `keyof` and indexed access resolve only on statically closed shapes (an
+// interface, class, type alias, exact object literal, or an enum member set).
+// Anything else (`object`, `unknown`, an ambient shape, an open index
+// signature, a tuple, a nominal class the unit does not know) is rejected
+// with a diagnostic whose message contains "closed". Tuples and index
+// signatures are deliberately outside the closed set.
+
+namespace {
+
+// The union of the string literal member-name types `names` spells. Empty
+// names collapse to `never` (an empty closed shape has no keys).
+Type stringLiteralUnion(const std::vector<std::string>& names) {
+    std::vector<Type> lits;
+    lits.reserve(names.size());
+    for (const std::string& n : names) lits.push_back(Type::stringLiteral(n));
+    return Type::unionOf(std::move(lits));
+}
+
+std::string joinedKeyList(const std::vector<Field>& members, std::size_t limit) {
+    std::string out;
+    const std::size_t n = members.size() < limit ? members.size() : limit;
+    for (std::size_t i = 0; i < n; ++i) {
+        if (i != 0) out += " | ";
+        out += members[i].name;
+    }
+    if (members.size() > limit) out += " | ...";
+    return out;
+}
+
+}  // namespace
+
+// The member set of a statically closed shape, in declaration order (D44).
+// See the section comment above. Type parameters stand for their `extends`
+// constraint when one is present.
+bool Analyzer::closedMembersOf(const Type& t, std::vector<Field>& out,
+                               unsigned depth) {
+    if (depth > 8) return false;
+    if (t.kind == TypeKind::Object) {
+        Shape* sh = shapeOf(t);
+        if (sh == nullptr || sh->open || sh->tuple || sh->hasIndex) {
+            return false;
+        }
+        out = sh->fields;
+        return true;
+    }
+    if (t.kind == TypeKind::Class) {
+        const ClassInfo* ci = findClass(t.name);
+        if (ci == nullptr) return false;
+        std::vector<Field> fields;
+        for (const ClassMemberInfo& m : ci->members) {
+            if (m.isStatic) continue;
+            if (m.isMethod) {
+                fields.push_back(Field{m.name,
+                                       Type::function(m.sig.params, m.sig.ret),
+                                       m.optional});
+            } else {
+                const Type mt =
+                    t.parts.empty()
+                        ? m.type
+                        : substituteClassTypeParams(m.type, *ci, t.parts);
+                fields.push_back(Field{m.name, mt, m.optional});
+            }
+        }
+        // Declaration order, first occurrence wins (a cp3 class has at most
+        // one member per name).
+        for (const Field& f : fields) {
+            if (!hasFieldNamed(out, f.name)) out.push_back(f);
+        }
+        return true;
+    }
+    if (t.kind == TypeKind::Enum) {
+        const auto it = enums_.find(t.name);
+        if (it == enums_.end()) return false;
+        const Type enumType = Type::named(TypeKind::Enum, t.name);
+        for (const EnumMemberInfo& m : it->second.members) {
+            out.push_back(Field{m.name, enumType, false});
+        }
+        return true;
+    }
+    if (t.kind == TypeKind::TypeParam) {
+        if (t.parts.empty()) return false;
+        return closedMembersOf(t.parts.front(), out, depth + 1);
+    }
+    if (t.isNullable() && !t.parts.empty()) {
+        return closedMembersOf(t.parts.front(), out, depth + 1);
+    }
+    return false;
+}
+
+// `keyof T` on one (stripped, non-union) member type: the union of the
+// member-name literal types, or an error type when the shape is not closed.
+Type Analyzer::closedKeyUnion(const Type& t, const SourceSpan& span,
+                              unsigned depth) {
+    const Type stripped = stripNullish(t);
+    if (stripped.isUnion()) {
+        // keyof (A | B) is the keys EVERY member has (TypeScript semantics),
+        // preserving the surviving accumulated order (D44 insertion order).
+        std::vector<std::string> acc;
+        bool first = true;
+        for (const Type& m : stripped.parts) {
+            std::vector<Field> members;
+            if (!closedMembersOf(m, members, depth + 1)) {
+                report(diagcode::kKeyofOpenWorld, span,
+                       "keyof requires a statically closed shape (an interface, "
+                       "class, type alias or object literal type); '" +
+                           pretty(m) + "' is not closed for keyof");
+                return Type::error();
+            }
+            std::vector<std::string> names;
+            names.reserve(members.size());
+            for (const Field& f : members) names.push_back(f.name);
+            if (first) {
+                acc = std::move(names);
+                first = false;
+                continue;
+            }
+            std::unordered_set<std::string> other(names.begin(), names.end());
+            std::vector<std::string> keep;
+            for (const std::string& n : acc) {
+                if (other.count(n) != 0) keep.push_back(n);
+            }
+            acc = std::move(keep);
+        }
+        return stringLiteralUnion(acc);
+    }
+    std::vector<Field> members;
+    if (!closedMembersOf(stripped, members, depth)) {
+        report(diagcode::kKeyofOpenWorld, span,
+               "keyof requires a statically closed shape (an interface, class, "
+               "type alias or object literal type); '" +
+                   pretty(stripped) + "' is not closed for keyof");
+        return Type::error();
+    }
+    std::vector<std::string> names;
+    names.reserve(members.size());
+    for (const Field& f : members) names.push_back(f.name);
+    return stringLiteralUnion(names);
+}
+
+// `T[K]` on one closed member set: select `members` whose name is in
+// `keyLits` (the order of K's literals) and union their types.
+Type Analyzer::selectIndexedMembers(const std::vector<Field>& members,
+                                    const std::vector<std::string>& keyLits,
+                                    const Type& object, const SourceSpan& span) {
+    std::vector<Type> selected;
+    selected.reserve(keyLits.size());
+    for (const std::string& k : keyLits) {
+        const Field* match = nullptr;
+        for (const Field& f : members) {
+            if (f.name == k) {
+                match = &f;
+                break;
+            }
+        }
+        if (match == nullptr) {
+            report(diagcode::kIndexedAccessKey, span,
+                   "indexed access key '" + k + "' is not a subtype of keyof '" +
+                       pretty(object) + "' (the closed keys are: " +
+                       joinedKeyList(members, 12) + ")");
+            return Type::error();
+        }
+        selected.push_back(match->type);
+    }
+    return Type::unionOf(std::move(selected));
+}
+
+// `typeof <entity>` in type position (v0.2.6): the compile-time type of the
+// value. A const binding with a literal initializer keeps the literal type;
+// every other expression resolves to its inferred type (literals are
+// preserved, bindings are widened per D51). No C++ is emitted for the query.
+Type Analyzer::resolveTypeofType(TypeofType& tt) {
+    const auto cached = typeQueryCache_.find(tt.nodeId);
+    if (cached != typeQueryCache_.end()) return cached->second;
+    Type result = Type::error();
+    if (tt.operand) {
+        if (tt.operand->kind == NodeKind::Identifier) {
+            auto& id = static_cast<Identifier&>(*tt.operand);
+            Binding b;
+            if (lookup(id.name, b)) {
+                const auto it = constLiteralTypes_.find(b.declNodeId);
+                result = it != constLiteralTypes_.end() ? it->second : b.type;
+            } else {
+                reportUndefinedName(id.span, id.name);
+            }
+        } else {
+            result = inferExpr(*tt.operand);
+        }
+    }
+    typeQueryCache_.emplace(tt.nodeId, result);
+    return result;
+}
+
+// `keyof T` in type position (v0.2.6): the union of the string literal types
+// of the keys of a statically closed shape.
+Type Analyzer::resolveKeyofType(KeyofType& kt) {
+    const auto cached = typeQueryCache_.find(kt.nodeId);
+    if (cached != typeQueryCache_.end()) return cached->second;
+    const Type src = kt.operand ? resolveType(*kt.operand) : Type::error();
+    // Void is already diagnosed at its resolution site (it is the banned
+    // spelling that resolves to `undefined`); piling a second error on top is
+    // noise.
+    Type result = (src.isError() || src.isVoid()) ? Type::error()
+                                                  : closedKeyUnion(src, kt.span);
+    typeQueryCache_.emplace(kt.nodeId, result);
+    return result;
+}
+
+// `T[K]` in type position (v0.2.6): the property type(s) of T selected by K.
+// K must be a subtype of keyof T; the nullish members of a nullable source
+// contribute nothing. Unions in the OBJECT distribute (TypeScript parity);
+// unions in K keep their own order (D44).
+Type Analyzer::resolveIndexedAccessType(IndexedAccessType& ia) {
+    const auto cached = typeQueryCache_.find(ia.nodeId);
+    if (cached != typeQueryCache_.end()) return cached->second;
+    const SourceSpan span = ia.span;
+    Type result = Type::error();
+    const Type obj = ia.object ? resolveType(*ia.object) : Type::error();
+    const Type key = ia.index ? resolveType(*ia.index) : Type::error();
+    if (!obj.isError() && !key.isError() && !obj.isVoid()) {
+        std::vector<std::string> keyLits;
+        if (!utilityKeysOf(key, keyLits)) {
+            // A cascade artifact (unknown/error/type parameter) defers
+            // silently; anything else is a key that is not a subtype of
+            // keyof T.
+            if (!key.isUnknown() && !key.isError() &&
+                key.kind != TypeKind::TypeParam) {
+                report(diagcode::kIndexedAccessKey, span,
+                       "indexed access key '" + pretty(key) +
+                           "' is not a subtype of keyof '" + pretty(obj) + "'");
+            }
+        } else {
+            const Type stripped = stripNullish(obj);
+            if (stripped.isUnion()) {
+                std::vector<Type> parts;
+                parts.reserve(stripped.parts.size());
+                bool failed = false;
+                for (const Type& m : stripped.parts) {
+                    std::vector<Field> members;
+                    if (!closedMembersOf(m, members)) {
+                        report(diagcode::kIndexedAccessOpenWorld, span,
+                               "indexed access requires a statically closed "
+                               "shape (an interface, class, type alias or "
+                               "object literal type); '" +
+                                   pretty(m) +
+                                   "' is not closed for indexed access");
+                        failed = true;
+                        break;
+                    }
+                    parts.push_back(
+                        selectIndexedMembers(members, keyLits, m, span));
+                }
+                for (const Type& p : parts) {
+                    if (p.isError()) failed = true;
+                }
+                if (!failed) result = Type::unionOf(std::move(parts));
+            } else {
+                std::vector<Field> members;
+                if (closedMembersOf(stripped, members)) {
+                    result = selectIndexedMembers(members, keyLits, stripped,
+                                                  span);
+                } else {
+                    report(diagcode::kIndexedAccessOpenWorld, span,
+                           "indexed access requires a statically closed shape "
+                           "(an interface, class, type alias or object literal "
+                           "type); '" +
+                               pretty(stripped) +
+                               "' is not closed for indexed access");
+                }
+            }
+        }
+    }
+    typeQueryCache_.emplace(ia.nodeId, result);
+    return result;
 }
 
 }  // namespace cp3

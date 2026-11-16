@@ -1,0 +1,5 @@
+// pin: keyof on an open shape (`object`) is rejected - the key set is not closed,
+// so no literal union can be resolved
+type K = keyof object;
+
+const k: K = "a";

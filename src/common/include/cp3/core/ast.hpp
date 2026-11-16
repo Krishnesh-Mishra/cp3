@@ -163,7 +163,10 @@ enum class ExportKind { Named, Default, Declaration, ReExportAll, ReExportNamed 
     X(ObjectType)                 \
     X(PrefixedType)               \
     X(LiteralType)                \
-    X(ParenthesizedType)
+    X(ParenthesizedType)          \
+    X(TypeofType)                 \
+    X(KeyofType)                  \
+    X(IndexedAccessType)
 
 enum class NodeKind {
 #define CP3_DECLARE_KIND(Name) Name,
@@ -484,9 +487,13 @@ struct RangeExpr : Expr {
 };
 
 // `expr as Type` - a compile-time-checked type assertion (TypeScript `as`).
+// `expr as const` (v0.2.6) is the literal-preserving assertion form: `type`
+// is null and `isConst` is true. Sema gives the operand its exact literal /
+// readonly shape; the assertion itself emits nothing.
 struct AsExpr : Expr {
     ExprPtr expression;
-    TypePtr type;
+    TypePtr type;             // null when `isConst` is true
+    bool isConst = false;     // `as const` (v0.2.6)
     explicit AsExpr(SourceSpan s) : Expr(NodeKind::AsExpr, std::move(s)) {}
 };
 
@@ -936,6 +943,32 @@ struct ParenthesizedType : TypeNode {
     TypePtr inner;
     explicit ParenthesizedType(SourceSpan s)
         : TypeNode(NodeKind::ParenthesizedType, std::move(s)) {}
+};
+
+// `typeof <entity>` (type position): the compile-time type of a value. The
+// operand is an entity name (Identifier, or MemberExpr chains on one), built
+// like an ordinary expression so sema can re-infer it. Resolved by sema; it
+// emits no C++ of its own.
+struct TypeofType : TypeNode {
+    ExprPtr operand;  // Identifier or MemberExpr chain
+    explicit TypeofType(SourceSpan s) : TypeNode(NodeKind::TypeofType, std::move(s)) {}
+};
+
+// `keyof T`: the union of the string literal types of the keys of a
+// statically closed shape. Resolved by sema; it emits no C++ of its own.
+struct KeyofType : TypeNode {
+    TypePtr operand;
+    explicit KeyofType(SourceSpan s) : TypeNode(NodeKind::KeyofType, std::move(s)) {}
+};
+
+// `T[K]`: the property type(s) of T selected by K. K must be a subtype of
+// keyof T for a closed T; a union K selects a union of property types.
+// Resolved by sema; it emits no C++ of its own.
+struct IndexedAccessType : TypeNode {
+    TypePtr object;
+    TypePtr index;
+    explicit IndexedAccessType(SourceSpan s)
+        : TypeNode(NodeKind::IndexedAccessType, std::move(s)) {}
 };
 
 // -----------------------------------------------------------------------------

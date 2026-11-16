@@ -139,26 +139,46 @@ Type Analyzer::inferIdentifier(Identifier& id) {
 
 Type Analyzer::inferArray(ArrayLiteral& al) {
     std::vector<Type> elems;
+    bool sawSpread = false;
     for (auto& e : al.elements) {
         if (!e) continue;
         if (e->kind == NodeKind::SpreadElement) {
+            sawSpread = true;
             auto& sp = static_cast<SpreadElement&>(*e);
             Type at = sp.argument ? inferExpr(*sp.argument) : Type::unknown();
             if (at.kind == TypeKind::Array) {
-                elems.push_back(widen(elemOf(at)));
+                elems.push_back(keepLiterals_ ? elemOf(at) : widen(elemOf(at)));
             } else if (at.kind == TypeKind::Class && at.name == "Set" &&
                        !at.parts.empty()) {
-                elems.push_back(widen(at.parts.front()));
+                elems.push_back(keepLiterals_ ? at.parts.front()
+                                              : widen(at.parts.front()));
             } else if (at.kind == TypeKind::Class && at.name == "Map" &&
                        at.parts.size() >= 2) {
-                elems.push_back(widen(makeObjectType(
-                    {}, false, true, {at.parts[0], at.parts[1]})));
+                if (keepLiterals_) {
+                    elems.push_back(makeObjectType({}, false, true,
+                                                   {at.parts[0], at.parts[1]}));
+                } else {
+                    elems.push_back(widen(makeObjectType(
+                        {}, false, true, {at.parts[0], at.parts[1]})));
+                }
             } else {
                 elems.push_back(Type::unknown());
             }
             continue;
         }
-        elems.push_back(widen(inferExpr(*e)));
+        elems.push_back(keepLiterals_ ? inferExpr(*e) : widen(inferExpr(*e)));
+    }
+    // `as const` on a literal without spread: an array of the union of the
+    // literal element types (cp3 has no readonly-array variant; the closest
+    // readonly shape is this one - see the wave report). A tuple type cannot
+    // lower here: the `as const` wrapper defeats the annotated-tuple emission
+    // path, and the element spelling stays exact through the union.
+    if (keepLiterals_ && !sawSpread) {
+        Type elem = elems.empty() ? Type::unknown() : elems.front();
+        for (std::size_t i = 1; i < elems.size(); ++i) {
+            elem = Type::unionOf({std::move(elem), elems[i]});
+        }
+        return withType(al, Type::array(std::move(elem)));
     }
     Type elem = Type::unknown();
     if (!elems.empty()) {
@@ -215,12 +235,17 @@ Type Analyzer::inferObject(ObjectLiteral& ol) {
             open = true;
         }
         if (p->value) {
-            vt = widen(inferExpr(*p->value));
+            vt = keepLiterals_ ? inferExpr(*p->value) : widen(inferExpr(*p->value));
         } else if (!name.empty()) {
             // D13: shorthand `{ a }` behaves as `{ a: a }`.
             Binding b;
             if (lookup(name, b)) {
-                vt = widen(b.type);
+                if (keepLiterals_) {
+                    const auto it = constLiteralTypes_.find(b.declNodeId);
+                    vt = it != constLiteralTypes_.end() ? it->second : b.type;
+                } else {
+                    vt = widen(b.type);
+                }
             } else {
                 reportUndefinedName(p->span, name);
             }
@@ -229,6 +254,9 @@ Type Analyzer::inferObject(ObjectLiteral& ol) {
             fields.push_back(Field{name, vt, false});
         }
     }
+    // `as const`: the shape is built with literal field types; the label
+    // itself stays an ordinary `$o{...}` one so codegen spells the value as a
+    // plain all-primitive record struct, exactly like a mutable literal.
     return withType(ol, makeObjectType(std::move(fields), open, false, {}));
 }
 
@@ -512,6 +540,17 @@ Type Analyzer::inferWeak(WeakExpr& w) {
 // and numeric conversions are legal; anything else is CP3401 (TS-only
 // diagnostics rule §7 - no generic cast syntax).
 Type Analyzer::inferAs(AsExpr& a) {
+    // `<expr> as const` (v0.2.6): the assertion keeps the literal shape the
+    // operand already has (literal types, tuples, readonly-like object
+    // shapes). It emits nothing; sema does all the work.
+    if (a.isConst) {
+        if (!a.expression) return withType(a, Type::unknown());
+        const bool prevKeep = keepLiterals_;
+        keepLiterals_ = true;
+        const Type t = inferExpr(*a.expression);
+        keepLiterals_ = prevKeep;
+        return withType(a, t);
+    }
     const Type operand = a.expression ? inferExpr(*a.expression) : Type::unknown();
     Type target = Type::unknown();
     if (a.type) {

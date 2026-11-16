@@ -1,0 +1,13 @@
+// pin: indexed access on a closed interface - a known key resolves to its field
+// type, and `keyof IFace` indexes the union of all field types
+interface IFace {
+    a: string;
+    b: number;
+}
+
+type T = IFace["a"];
+type All = IFace[keyof IFace];
+
+const t: T = "hello";
+const one: All = "hello";
+const two: All = 42;

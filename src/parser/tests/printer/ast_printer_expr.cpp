@@ -229,6 +229,25 @@ bool printTypeNode(const Node* n, int ind) {
             std::printf("\n");
             printNode(static_cast<const ParenthesizedType*>(n)->inner.get(), ind + 2);
             return true;
+        case NodeKind::TypeofType: {
+            const auto& x = *static_cast<const TypeofType*>(n);
+            std::printf("\n");
+            printNode(x.operand.get(), ind + 2);
+            return true;
+        }
+        case NodeKind::KeyofType: {
+            const auto& x = *static_cast<const KeyofType*>(n);
+            std::printf("\n");
+            printNode(x.operand.get(), ind + 2);
+            return true;
+        }
+        case NodeKind::IndexedAccessType: {
+            const auto& x = *static_cast<const IndexedAccessType*>(n);
+            std::printf("\n");
+            printNode(x.object.get(), ind + 2);
+            printNode(x.index.get(), ind + 2);
+            return true;
+        }
         default:
             return false;
     }

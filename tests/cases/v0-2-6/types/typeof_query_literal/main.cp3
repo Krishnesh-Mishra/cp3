@@ -1,0 +1,5 @@
+// pin: typeof in type position on a const string names the string literal type;
+// assigning the same literal checks clean
+const a = "x";
+type S = typeof a;
+let s: S = "x";

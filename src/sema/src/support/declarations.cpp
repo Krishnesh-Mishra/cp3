@@ -109,6 +109,13 @@ void Analyzer::declareDeclarator(VariableDeclarator& d, VarKind kind) {
     bool hasInit = d.init != nullptr;
     Type initType = Type::unknown();
     if (hasInit) initType = inferExpr(*d.init);
+    // v0.2.6 `as const`: the assertion gives the initializer its exact
+    // literal shape, so the binding is declared with it instead of the D51
+    // default widening below. A direct mutation of such a binding's
+    // properties is rejected (see checkAssignToTarget).
+    const bool asConstInit =
+        hasInit && d.init->kind == NodeKind::AsExpr &&
+        static_cast<const AsExpr&>(*d.init).isConst;
 
     // Unannotated heterogeneous array literal is a type error.
     if (!hasAnn && hasInit && d.init->kind == NodeKind::ArrayLiteral &&
@@ -126,7 +133,9 @@ void Analyzer::declareDeclarator(VariableDeclarator& d, VarKind kind) {
 
     Type varType =
         hasAnn ? annType
-               : (hasInit ? defaultLiteralType(options_.typeSystem, initType)
+               : (hasInit ? (asConstInit ? initType
+                                          : defaultLiteralType(
+                                                options_.typeSystem, initType))
                           : Type::undefined());
 
     if (hasAnn && hasInit) {
@@ -170,6 +179,17 @@ void Analyzer::declareDeclarator(VariableDeclarator& d, VarKind kind) {
             if (auto v = constantNumber(*d.init)) it->second.constNumber = *v;
             if (auto len = knownTypedLength(*d.init)) it->second.typedLength = *len;
         }
+    }
+    // v0.2.6 `as const`: a direct binding to an as-const assertion carries
+    // readonly semantics; remember the declarator so writes through it fail.
+    if (asConstInit && d.id && d.id->kind == NodeKind::Identifier) {
+        constBindings_.insert(d.nodeId);
+    }
+    // v0.2.6 `typeof <identifier>`: a const binding with a literal
+    // initializer keeps the literal type in a type query, even though the
+    // binding itself is widened by default (D51).
+    if (isConst && !hasAnn && hasInit && initType.isLiteral()) {
+        constLiteralTypes_[d.nodeId] = initType;
     }
 }
 

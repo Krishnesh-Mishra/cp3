@@ -1,0 +1,5 @@
+// pin: indexed access into an open shape (`object`) is rejected - there is no
+// known field set to read from
+type V = object["a"];
+
+const v: V = "x";

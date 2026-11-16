@@ -167,4 +167,25 @@ inline constexpr const char* kWorkerEntryShape = "CP3914";
 inline constexpr const char* kWorkerListenerParameter = "CP3915";
 inline constexpr const char* kWorkerModuleForm = "CP3916";
 
+// --- closed-world type queries (v0.2.6) --------------------------------------
+// `keyof T` requires a statically closed shape (an interface, class, type
+// alias or exact object literal type, or an enum member set). The message
+// contains "closed" (the v0.2.6 corpus contract).
+inline constexpr const char* kKeyofOpenWorld = "CP3620";
+// Indexed access `T[K]` requires a statically closed shape T. The message
+// contains "closed" (the v0.2.6 corpus contract).
+inline constexpr const char* kIndexedAccessOpenWorld = "CP3621";
+// Indexed access key is not a subtype of keyof T.
+inline constexpr const char* kIndexedAccessKey = "CP3622";
+// `Parameters` / `ReturnType` require a function type. The message
+// contains "closed" (the v0.2.6 corpus contract).
+inline constexpr const char* kUtilityNotFunction = "CP3623";
+// `ConstructorParameters` / `InstanceType` require a class type. The message
+// contains "closed" (the v0.2.6 corpus contract).
+inline constexpr const char* kUtilityNotClass = "CP3624";
+// Mutating a property of an `as const` value (readonly-like semantics). The
+// message contains "const" (the v0.2.6 corpus contract).
+inline constexpr const char* kAsConstMutation = "CP3625";
+// CP3626-CP3629 stay free for this wave.
+
 }  // namespace cp3::diagcode

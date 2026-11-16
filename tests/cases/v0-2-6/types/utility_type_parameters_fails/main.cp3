@@ -1,0 +1,5 @@
+// pin: Parameters over a non-function type is rejected - there is no parameter
+// tuple to query
+type Bad = Parameters<number>;
+
+const bad: Bad = [1];

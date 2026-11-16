@@ -132,6 +132,17 @@ ExprPtr ParserImpl::parseMemberAccess(ExprPtr expr, const Token& start) {
             expr = std::move(nonNull);
         } else if (check(TokenKind::KwAs) && !peek().precededByNewline) {
             advance();
+            // `as const` (v0.2.6): the literal-preserving assertion form. It
+            // carries no type; sema gives the operand its exact literal shape.
+            if (check(TokenKind::KwConst)) {
+                advance();
+                auto asExpr = std::make_unique<AsExpr>(start.span);
+                asExpr->expression = std::move(expr);
+                asExpr->isConst = true;
+                asExpr->span = spanFrom(start);
+                expr = std::move(asExpr);
+                continue;
+            }
             TypePtr type = parseType();
             if (type) {
                 auto asExpr = std::make_unique<AsExpr>(start.span);

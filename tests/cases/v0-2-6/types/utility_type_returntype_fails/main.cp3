@@ -1,0 +1,5 @@
+// pin: ReturnType over a non-function type is rejected - there is no return
+// type to query
+type Bad = ReturnType<string>;
+
+const bad: Bad = "x";

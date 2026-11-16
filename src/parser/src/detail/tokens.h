@@ -193,6 +193,11 @@ private:
     TypePtr parseTupleType();
     TypePtr parseObjectType();
     TypeList parseTypeArgs();
+    // `typeof <entity>` and `keyof <type>` in type position, and the entity
+    // name grammar the former takes (Identifier with optional member chains).
+    TypePtr parseTypeofType();
+    TypePtr parseKeyofType();
+    ExprPtr parseEntityName();
 
     // --- expressions (expressions.cpp) --------------------------------------
     ExprPtr parseexpression();

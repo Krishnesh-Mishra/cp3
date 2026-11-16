@@ -1,0 +1,5 @@
+// pin: typeof in type position - `type A = typeof a` names the type of a value,
+// and the alias is usable as an object type annotation
+const a = { a: "123" };
+type A = typeof a;
+let b: A = { a: "123" };

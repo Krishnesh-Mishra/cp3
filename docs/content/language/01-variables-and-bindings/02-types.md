@@ -106,7 +106,7 @@ const length = maybeText?.length ?? 0;
 
 ## Literal types and enums
 
-Literal values can participate in type checking. A union of all-literal members of one string family spells itself as the base family at assignability sites (`"a" | "b"` behaves as `string`); number- and boolean-literal unions behave as their base families as well (`1 | 2` is assignable to/from `number`). CP3 also supports enum declarations with their backing-value rules; see the [enums page](../04-values-and-objects/03-enums.md) for the implemented syntax.
+Literal values can participate in type checking. A union of all-literal members of one string family spells itself as the base family at assignability sites (`"a" | "b"` behaves as `string`); number- and boolean-literal unions behave as their base families as well (`1 | 2` is assignable to/from `number`). An `as const` assertion on an object or array literal preserves the literal types instead and gives the shape a readonly-like form; see [Generics](../05-generics/01-generics.md). CP3 also supports enum declarations with their backing-value rules; see the [enums page](../04-values-and-objects/03-enums.md) for the implemented syntax.
 
 ## `any`, `void`, and `unknown` are retired
 
@@ -256,7 +256,7 @@ type WithDefault<T = number> = { value: T };
 function identity<T extends { id: number }>(value: T): T { return value; }
 ```
 
-The compiler checks substitutions at use sites (`CP3412` on a violated constraint), and fills missing type arguments from their declared defaults. A generic alias does not make conditional, mapped, or indexed-access type operators available. See [Generics](../05-generics/01-generics.md).
+The compiler checks substitutions at use sites (`CP3412` on a violated constraint), and fills missing type arguments from their declared defaults. See [Generics](../05-generics/01-generics.md) for the type-level queries the language supports on closed shapes (`typeof` in type position, `keyof`, `T[K]`, `as const`, and the built-in utility types).
 
 ## Enums
 

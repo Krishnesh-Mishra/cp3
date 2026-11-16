@@ -1,0 +1,6 @@
+// pin: the literal type named by `typeof a` rejects any other string literal
+// (wording reused from the existing CP3401 assignability diagnostic,
+// `type mismatch: cannot assign '...' to '...'`)
+const a = "x";
+type S = typeof a;
+let s: S = "y";

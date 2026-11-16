@@ -231,6 +231,28 @@ private:
                                  const std::vector<Type>& args);
     // The primitive a type name spells; false when the name is not one.
     bool primitiveTypeOf(const std::string& name, Type& out);
+    // The closed-world type query resolvers (v0.2.6). Each caches its result
+    // in `typeQueryCache_` so a double-resolved annotation reports once.
+    Type resolveTypeofType(TypeofType& tt);
+    Type resolveKeyofType(KeyofType& tt);
+    Type resolveIndexedAccessType(IndexedAccessType& tt);
+    // The enumerable member set of a statically closed shape, in declaration
+    // order (D44). Handles object shapes, classes (instance members), enums
+    // and type parameters with a `extends` constraint. False when the shape is
+    // not closed (open index signature, ambient object, unknown, a nominal
+    // class the unit does not know, a union, a tuple).
+    bool closedMembersOf(const Type& t, std::vector<Field>& out,
+                         unsigned depth = 0);
+    // `keyof T`: the union of the member-name literal types of a closed T.
+    // Reports CP3620 (message contains "closed") and returns an error type
+    // when the shape is not closed.
+    Type closedKeyUnion(const Type& t, const SourceSpan& span, unsigned depth = 0);
+    // `T[K]` on a single closed member type: the union of the selected
+    // property types (declaration order of K's literals). Reports CP3622
+    // (key not a subtype of keyof T) and returns an error type on failure.
+    Type selectIndexedMembers(const std::vector<Field>& members,
+                              const std::vector<std::string>& keyLits,
+                              const Type& object, const SourceSpan& span);
     // Enum declaration model (enum_check.cpp).
     void registerEnum(EnumDeclaration& e);
 
@@ -845,6 +867,23 @@ private:
     // User classes: member tables, declaration guard, class stack, weak reads;
     // `weakFieldHit_` is set by userClassMember and consumed by inferMember.
     std::unordered_map<std::string, ClassInfo> classes_;
+    // v0.2.6 type queries: a `const` binding whose initializer is a literal
+    // (or a negated literal), keyed by the declarator's nodeId. Consulted by
+    // `typeof <identifier>` so the literal type survives (D51 otherwise
+    // widens the binding to its base primitive).
+    std::unordered_map<std::uint32_t, Type> constLiteralTypes_;
+    // v0.2.6 `as const`: declarator nodeIds of bindings whose initializer is
+    // an `as const` assertion. A write to a property of such a binding is the
+    // readonly violation the assertion forbids.
+    std::unordered_set<std::uint32_t> constBindings_;
+    // While inferring the operand of an `as const`, literal expressions keep
+    // their literal type instead of the D51 widening, and array literals
+    // produce tuples of literal element types (object literals produce their
+    // ordinary closed shape with literal field types).
+    bool keepLiterals_ = false;
+    // v0.2.6 type queries: resolved types of the three operator nodes, so a
+    // double-resolved annotation never re-reports its diagnostics.
+    std::unordered_map<std::uint32_t, Type> typeQueryCache_;
     // The union of every name the body inspected at a reference position,
     // for unused-import reporting. Fed by lookup. Mutable so `lookup` (a
     // const observer of the scope table) can record usages as it probes.

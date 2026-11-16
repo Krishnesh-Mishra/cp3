@@ -147,6 +147,22 @@ Type Analyzer::inferUpdate(UpdateExpr& up) {
             setType(id, b.type);
         } else {
             inferExpr(*up.operand);
+            if (up.operand->kind == NodeKind::MemberExpr) {
+                // v0.2.6 `as const`: `obj.field++` / `obj.field--` mutate the
+                // field, which the assertion forbids (same binding-identity
+                // rule as the assignment target).
+                const auto& me = static_cast<MemberExpr&>(*up.operand);
+                if (me.object && me.object->kind == NodeKind::Identifier) {
+                    const auto& objId = static_cast<const Identifier&>(*me.object);
+                    Binding ob;
+                    if (lookup(objId.name, ob, /*countAsUse*/ false) &&
+                        constBindings_.count(ob.declNodeId) != 0) {
+                        report(diagcode::kAsConstMutation, up.span,
+                               "cannot update property of an as-const value; the "
+                               "value is readonly like a const binding");
+                    }
+                }
+            }
         }
     }
     // `++`/`--` keep a native operand's declared width (C++ narrows back to
@@ -390,7 +406,20 @@ Type Analyzer::inferConditional(ConditionalExpr& ce) {
     applyConditionNarrowings(elseNarrows, false);
     Type b = ce.whenFalse ? inferExpr(*ce.whenFalse) : Type::unknown();
     popScope();
-    Type t = unify(widen(a), widen(b));
+    Type t;
+    if (keepLiterals_) {
+        // `as const`: literal arms stay literals in a conditional type query
+        // (the frozen `unify` always widens literals).
+        if (a.isError() || b.isError()) {
+            t = Type::unknown();
+        } else if (a == b) {
+            t = a;
+        } else {
+            t = Type::unionOf({std::move(a), std::move(b)});
+        }
+    } else {
+        t = unify(widen(a), widen(b));
+    }
     return withType(ce, t);
 }
 
@@ -648,6 +677,22 @@ void Analyzer::checkAssignToTarget(Expr& target, const Type& valType,
             Type mt = memberOf(ot, m.property, m.span, m.optional);
             assignTarget_ = prevTarget;
             setType(m, mt);
+            // v0.2.6 `as const`: a write through a direct reference to an
+            // as-const-bound object is the readonly violation the assertion
+            // forbids (deep writes are tracked per binding; see the wave
+            // report for the documented limit).
+            if (m.object && m.object->kind == NodeKind::Identifier) {
+                const auto& objId = static_cast<const Identifier&>(*m.object);
+                Binding ob;
+                if (lookup(objId.name, ob, /*countAsUse*/ false) &&
+                    constBindings_.count(ob.declNodeId) != 0) {
+                    report(diagcode::kAsConstMutation, span,
+                           "cannot assign to property '" + m.property +
+                               "' of an as-const value; the value is readonly "
+                               "like a const binding");
+                    return;
+                }
+            }
             if (isReadOnlyFamilyProp(ot, m.property)) {
                 report(diagcode::kTypeMismatch, span,
                        "property '" + m.property +

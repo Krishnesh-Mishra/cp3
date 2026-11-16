@@ -1,0 +1,4 @@
+// pin: `as const` freezes an object literal to its literal shape - `keyof typeof x`
+// names the literal key union and accepts "a"
+const x = { a: "hello" } as const;
+const keys: keyof typeof x = "a";

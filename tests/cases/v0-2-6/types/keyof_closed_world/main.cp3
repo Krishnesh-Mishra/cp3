@@ -1,0 +1,10 @@
+// pin: keyof on a closed interface resolves to the union of its literal keys -
+// both members are assignable
+interface IFace {
+    a: string;
+    b: number;
+}
+
+type K = keyof IFace;
+const ka: K = "a";
+const kb: K = "b";
