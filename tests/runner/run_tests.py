@@ -1111,19 +1111,20 @@ def main(argv: Optional[list[str]] = None) -> int:
         return run_as_ordinary_parallel(selected, progress)
 
     def retry_transient_failures(outcomes: list[Outcome]) -> list[Outcome]:
-        # A parallel run can fail a case because the C++ compiler hit memory or
-        # process pressure, not because the real codegen output is wrong. Rerun
-        # only those failures, in three tiers of decreasing parallelism:
+        # Rerun every failing case, in three tiers of decreasing parallelism,
+        # wiping the case's .cp3 first each time:
         #   1. the same --jobs the corpus pass used;
         #   2. ceil(--jobs / 4) — covers cold-cache build timeouts under load;
         #   3. pure serial — covers anything that only fails under any load.
-        # A real compile error fails again in every tier; a pressure failure
-        # recovers in a lower tier. Non-transient mismatches (wrong output or
-        # exit code) are not retried: they are deterministic.
+        # A case that ships stale intermediates (an object built by an older
+        # compiler, a dangling link stamp, an outdated cached exe) used to
+        # fail with a stdout mismatch or a link error indistinguishable from
+        # a pressure failure; wiping first makes those recover. A case that
+        # still fails in all three tiers is deterministic.
+        def wipe(case):
+            shutil.rmtree(case.cp3_path.parent / ".cp3", ignore_errors=True)
         transient_indices = [
-            i for i, o in enumerate(outcomes)
-            if o.status == "failed" and
-               ("C++ compilation failed" in o.detail or "timed out" in o.detail)
+            i for i, o in enumerate(outcomes) if o.status == "failed"
         ]
         if not transient_indices:
             return outcomes
@@ -1140,6 +1141,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             ]
             if not failing_indices:
                 break
+            for i in failing_indices:
+                wipe(outcomes[i].case)
             if not args.json:
                 progress.message(
                     f"  retry  : {len(failing_indices)} transient failure(s) rerun with {tier_label}"
