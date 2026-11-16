@@ -185,6 +185,13 @@ void appendLoopBinding(const Node& node, const SemaResult& sema,
         left = static_cast<const ForOfStatement&>(node).left.get();
     } else if (node.kind == NodeKind::ForInStatement) {
         left = static_cast<const ForInStatement&>(node).left.get();
+    } else if (node.kind == NodeKind::ForStatement) {
+        const Node* init = static_cast<const ForStatement&>(node).init.get();
+        if (init != nullptr && init->kind == NodeKind::VariableDeclaration) {
+            appendVariableNames(static_cast<const VariableDeclaration&>(*init),
+                                sema, out);
+        }
+        return;
     }
     if (left == nullptr) return;
     if (left->kind == NodeKind::VariableDeclaration) {
@@ -229,8 +236,24 @@ void appendLocalNames(const Node& node, const SemaResult& sema,
         }
         case NodeKind::ForOfStatement:
         case NodeKind::ForInStatement:
+        case NodeKind::ForStatement:
             appendLoopBinding(node, sema, out);
             return;
+        case NodeKind::FunctionDeclaration: {
+            // cp3 hoists a function declaration into the scope of its own
+            // body, so the enclosing declaration's name is offered inside the
+            // body (a recursive call is an ordinary reference). An arrow
+            // bound to a const is deliberately not this case: that const
+            // binding is not hoisted.
+            const auto& declaration = static_cast<const FunctionDeclaration&>(node);
+            lsp::CompletionCandidate candidate;
+            candidate.label = declaration.name;
+            candidate.kind = 3;
+            candidate.detail = typeDetail(sema, node.nodeId, "function");
+            candidate.documentation = docFor(sema, node.nodeId);
+            out.push_back(std::move(candidate));
+            return;
+        }
         case NodeKind::ClassDeclaration: {
             const auto& declaration = static_cast<const ClassDeclaration&>(node);
             lsp::CompletionCandidate candidate;
