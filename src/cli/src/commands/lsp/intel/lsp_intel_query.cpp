@@ -14,6 +14,7 @@
 #include "detail/lsp/lsp_intel.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -27,8 +28,11 @@
 #include "cp3/lsp.hpp"
 #include "cp3/core/source.hpp"
 #include "cp3/core/types.hpp"
+#include "cp3/diag/diagnostic.hpp"
+#include "cp3/host/options.hpp"
 
 #include "detail/lsp/lsp_intel_docs.hpp"
+#include "detail/toolchain/pipeline.hpp"
 
 namespace cp3::cli {
 namespace {
@@ -1441,26 +1445,27 @@ std::optional<Type> substitutedArgumentTypeAt(const AnalyzedDocument& document,
     return std::nullopt;
 }
 
-// The declaration an import binds, in the imported module: the export the
-// import names (resolving re-export chains through barrels). Null when the
+// The terminal declaration for `name` as the import binds it: the export the
+// import names (resolving re-export chains through barrels), with the unit it
+// lives in - the doc comment rides with that unit's own sema. Null when the
 // name is not imported from a local module.
-const Node* importedDeclarationFor(const AnalyzedDocument& document,
-                                   const std::string& name) {
+std::optional<ExportedDeclaration> importedUnitFor(
+    const AnalyzedDocument& document, const std::string& name) {
     if (document.entry == nullptr || document.entry->ast == nullptr ||
         document.graph == nullptr || document.file == nullptr) {
-        return nullptr;
+        return std::nullopt;
     }
     const ImportDeclaration* import =
         importForName(*document.entry->ast, name, *document.file);
-    if (import == nullptr) return nullptr;
+    if (import == nullptr) return std::nullopt;
     const ModuleDependency* dependency =
         dependencyFor(*document.graph, document.entry->id, import->source);
     if (dependency == nullptr || !dependency->resolved ||
         dependency->resolution != ModuleResolution::Local) {
-        return nullptr;
+        return std::nullopt;
     }
     CompilationUnit* unit = document.graph->unit(dependency->imported);
-    if (unit == nullptr || unit->ast == nullptr) return nullptr;
+    if (unit == nullptr || unit->ast == nullptr) return std::nullopt;
     const bool wantDefault = import->defaultBinding == name;
     std::string importedName;
     bool matched = wantDefault;
@@ -1473,12 +1478,44 @@ const Node* importedDeclarationFor(const AnalyzedDocument& document,
         matched = true;
         break;
     }
-    if (!matched) return nullptr;
+    if (!matched) return std::nullopt;
     // A re-export chain (`export { combine as merge } from "./a.cp3"`,
     // `export * from "./a.cp3"`) lands on the declaring module.
-    const std::optional<ExportedDeclaration> hit = resolveExportChain(
-        *document.graph, unit, importedName, wantDefault);
-    return hit.has_value() ? hit->declaration : nullptr;
+    return resolveExportChain(*document.graph, unit, importedName, wantDefault);
+}
+
+// The declaration an import binds, in the imported module: the unit-scoped
+// half of `importedUnitFor` for the callers that only need the node.
+const Node* importedDeclarationFor(const AnalyzedDocument& document,
+                                   const std::string& name) {
+    const std::optional<ExportedDeclaration> chain =
+        importedUnitFor(document, name);
+    return chain.has_value() ? chain->declaration : nullptr;
+}
+
+// The doc comment of a declaration that lives in another unit: the graph's
+// sema table answers first (companion modules were analyzed with the import
+// wiring); a standalone re-analysis of the unit covers what that table
+// misses, exactly as the import-binding doc lookup in documentationAt does.
+bool chainDeclarationDocOf(const AnalyzedDocument& document,
+                           const CompilationUnit& unit, const Node& declaration,
+                           DocComment& out) {
+    if (unit.ast == nullptr) return false;
+    const auto found = document.unitSemas.find(unit.id);
+    if (found != document.unitSemas.end()) {
+        const auto doc = found->second.docs.find(declaration.nodeId);
+        if (doc != found->second.docs.end()) {
+            out = doc->second;
+            return true;
+        }
+    }
+    SemaResult fallback;
+    CollectingDiagnosticSink sink;
+    analyzeProgram(*unit.ast, fallback, sink, CompileOptions{}, nullptr);
+    const auto doc = fallback.docs.find(declaration.nodeId);
+    if (doc == fallback.docs.end()) return false;
+    out = doc->second;
+    return true;
 }
 
 // The visible type of an unannotated `const X = <literal>` declaration: the
@@ -1864,6 +1901,44 @@ std::string describeValueMembers(const AnalyzedDocument& document,
     return std::string();
 }
 
+// Carve `name` inside `span`, requiring identifier-boundary bytes around the
+// occurrence. Used to tell which spelling of an export specifier the cursor
+// sits on. Returns false when there is no such occurrence.
+bool carveHoverName(const SourceSpan& span, const std::string& name,
+                    SourceSpan* out) {
+    if (!span.valid() || span.file == nullptr || name.empty() ||
+        out == nullptr) {
+        return false;
+    }
+    const auto isIdentByte = [](unsigned char c) {
+        return std::isalnum(c) != 0 || c == '_' || c == '$';
+    };
+    const std::string& text = span.file->text;
+    const std::uint32_t limit = span.end.offset;
+    const std::size_t wanted = name.size();
+    std::uint32_t at = span.begin.offset;
+    for (;;) {
+        const std::size_t hit = text.find(name, at);
+        if (hit == std::string::npos) return false;
+        if (hit >= limit || hit + wanted > limit) return false;
+        const bool leftOk = hit == 0 ||
+            !isIdentByte(static_cast<unsigned char>(text[hit - 1]));
+        const bool rightOk =
+            hit + wanted >= text.size() ||
+            !isIdentByte(static_cast<unsigned char>(text[hit + wanted]));
+        if (leftOk && rightOk) {
+            SourceSpan found;
+            found.file = span.file;
+            found.begin = span.file->positionAt(static_cast<std::uint32_t>(hit));
+            found.end = span.file->positionAt(static_cast<std::uint32_t>(hit +
+                                                                          wanted));
+            *out = found;
+            return true;
+        }
+        at = static_cast<std::uint32_t>(hit + 1);
+    }
+}
+
 std::optional<lsp::HoverAnswer> hoverAt(const std::string& path,
                                         const std::string& text,
                                         std::uint32_t line,
@@ -1915,6 +1990,92 @@ std::optional<lsp::HoverAnswer> hoverAt(const std::string& path,
     // The documentation: the std surface's own description, or the doc
     // comment of the declaration the name refers to.
     const DocAnswer doc = documentationAt(*document, *node, name, symbol);
+    // An `import { X }`-style specifier position: the declaration the
+    // specifier binds in the imported module is what the hover should
+    // describe - the same declaration the gotoDef resolver chain lands on.
+    // The documentation is read from that unit's own sema, so the comment
+    // travels with the declaration across the import boundary.
+    if (node->kind == NodeKind::ImportSpecifier && !name.empty()) {
+        if (const std::optional<ExportedDeclaration> chain =
+                importedUnitFor(*document, name)) {
+            answer.contents =
+                describeImportedDeclaration(*chain->declaration, name);
+            DocComment comment;
+            if (chainDeclarationDocOf(*document, *chain->unit,
+                                      *chain->declaration, comment)) {
+                answer.documentation = renderDocComment(comment);
+            } else {
+                answer.documentation = doc.body;
+            }
+            return answer;
+        }
+    }
+    // The `export { x as y }` specifier position (a barrel, say): the same
+    // resolver serves both spellings - the local spelling of a sourced
+    // re-export resolves on the source module, the exported spelling (and
+    // any plain alias) resolves here. The declaration's docs are read from
+    // the declaring unit, exactly as on the import side.
+    if (node->kind == NodeKind::ExportSpecifier && !name.empty()) {
+        if (document->graph == nullptr) return std::nullopt;
+        const auto& specifier = static_cast<const ExportSpecifier&>(*node);
+        bool onLocal = true;
+        SourceSpan carved;
+        if (!specifier.local.empty() &&
+            carveHoverName(specifier.span, specifier.local, &carved) &&
+            offset >= carved.begin.offset && offset < carved.end.offset) {
+            onLocal = true;
+        } else if (!specifier.exported.empty() &&
+                   carveHoverName(specifier.span, specifier.exported, &carved) &&
+                   offset >= carved.begin.offset && offset < carved.end.offset) {
+            onLocal = false;
+        }
+        CompilationUnit* seedUnit = document->entry;
+        if (onLocal) {
+            const ExportDeclaration* exporting = nullptr;
+            for (const StmtPtr& statement : document->entry->ast->body) {
+                if (statement == nullptr ||
+                    statement->kind != NodeKind::ExportDeclaration) {
+                    continue;
+                }
+                if (!spanContains(statement->span, *document->file, line,
+                                  column)) {
+                    continue;
+                }
+                exporting = static_cast<const ExportDeclaration*>(
+                    statement.get());
+                break;
+            }
+            if (exporting != nullptr && !exporting->source.empty()) {
+                const ModuleDependency* dependency =
+                    dependencyFor(*document->graph, document->entry->id,
+                                  exporting->source);
+                if (dependency == nullptr || !dependency->resolved ||
+                    dependency->resolution != ModuleResolution::Local) {
+                    return std::nullopt;
+                }
+                CompilationUnit* target =
+                    document->graph->unit(dependency->imported);
+                if (target == nullptr || target->ast == nullptr) {
+                    return std::nullopt;
+                }
+                seedUnit = target;
+            }
+        }
+        const std::string seedName =
+            onLocal ? specifier.local : specifier.exported;
+        if (const std::optional<ExportedDeclaration> chain =
+                resolveExportChain(*document->graph, seedUnit, seedName,
+                                   /*wantDefault=*/false)) {
+            answer.contents =
+                describeImportedDeclaration(*chain->declaration, seedName);
+            DocComment comment;
+            if (chainDeclarationDocOf(*document, *chain->unit,
+                                      *chain->declaration, comment)) {
+                answer.documentation = renderDocComment(comment);
+            }
+            return answer;
+        }
+    }
     // A generic instantiation site (`identity<number>(3)`, `new Box<string>()`):
     // the hover shows the instantiation, not the declaration's bare type
     // parameter list.

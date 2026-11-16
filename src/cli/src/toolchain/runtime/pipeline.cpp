@@ -653,6 +653,21 @@ private:
                     }
                     b.isValue = true;
                     out.defaultExport = std::move(b);
+                    return;
+                }
+                // `export default function show() {}` / `export default class
+                // Frame {} / `export default interface Sized {}` / enums /
+                // aliases: the declaration itself is the default. The
+                // function's local binding resolves like `export default
+                // show` would, so every cross-module resolver can find it.
+                if (ed.declaration) {
+                    const std::string name = declarationName(*ed.declaration);
+                    if (!name.empty()) {
+                        if (const auto binding =
+                                localBinding(unit, sema, name)) {
+                            out.defaultExport = *binding;
+                        }
+                    }
                 }
                 return;
             }

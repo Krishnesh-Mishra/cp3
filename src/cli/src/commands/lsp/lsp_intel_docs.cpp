@@ -22,8 +22,12 @@
 
 #include "cp3/core/analysis.hpp"
 #include "cp3/core/ast.hpp"
+#include "cp3/diag/diagnostic.hpp"
+#include "cp3/host/options.hpp"
 #include "cp3/std_surface.hpp"
 #include "cp3/core/types.hpp"
+
+#include "detail/toolchain/pipeline.hpp"
 
 namespace cp3::cli {
 namespace {
@@ -382,25 +386,28 @@ std::vector<std::string> parameterDocs(const AnalyzedDocument& document,
 // The doc comment of a declaration that lives in another module: an import
 // binding's declaration is published in the importing module
 // (`document.sema.docs` only knows this file), so look the declaration up in
-// its own unit's sema - the entries share the unit's nodeIds.
-const DocComment* importedDocCommentOf(const AnalyzedDocument& document,
-                                       const std::string& name) {
+// its own unit's sema - the entries share the unit's nodeIds. Returns false
+// when there is no doc to show. The graph's sema table answers first; a
+// declaring unit missing from that table (or carrying no comment at its
+// node) is re-analyzed standalone so the comment is still readable.
+bool importedDocCommentOf(const AnalyzedDocument& document,
+                          const std::string& name, DocComment& out) {
     if (name.empty() || document.file == nullptr ||
         document.entry == nullptr || document.graph == nullptr ||
         document.entry->ast == nullptr) {
-        return nullptr;
+        return false;
     }
     const ImportDeclaration* import =
         importForName(*document.entry->ast, name, *document.file);
-    if (import == nullptr) return nullptr;
+    if (import == nullptr) return false;
     const ModuleDependency* dependency = dependencyFor(
         *document.graph, document.entry->id, import->source);
     if (dependency == nullptr || !dependency->resolved ||
         dependency->resolution != ModuleResolution::Local) {
-        return nullptr;
+        return false;
     }
     CompilationUnit* unit = document.graph->unit(dependency->imported);
-    if (unit == nullptr || unit->ast == nullptr) return nullptr;
+    if (unit == nullptr || unit->ast == nullptr) return false;
     const bool wantDefault = import->defaultBinding == name;
     std::string importedName;
     bool matched = wantDefault;
@@ -413,16 +420,31 @@ const DocComment* importedDocCommentOf(const AnalyzedDocument& document,
         matched = true;
         break;
     }
-    if (!matched) return nullptr;
+    if (!matched) return false;
     // Follow re-export chains (`export { x as y } from "./m"`): the doc lives
     // with the declaration the import ultimately binds.
     const std::optional<ExportedDeclaration> hit =
         resolveExportChain(*document.graph, unit, importedName, wantDefault);
-    if (!hit.has_value() || hit->declaration == nullptr) return nullptr;
+    if (!hit.has_value() || hit->declaration == nullptr) return false;
     const auto found = document.unitSemas.find(hit->unit->id);
-    if (found == document.unitSemas.end()) return nullptr;
-    const auto doc = found->second.docs.find(hit->declaration->nodeId);
-    return doc == found->second.docs.end() ? nullptr : &doc->second;
+    if (found != document.unitSemas.end()) {
+        const auto doc = found->second.docs.find(hit->declaration->nodeId);
+        if (doc != found->second.docs.end()) {
+            out = doc->second;
+            return true;
+        }
+    }
+    // The graph's sema table did not answer: re-analyze the declaring unit
+    // standalone (its own doc comments ride along) rather than fall back to
+    // an empty description at this position.
+    if (hit->unit->ast == nullptr) return false;
+    SemaResult fallback;
+    CollectingDiagnosticSink sink;
+    analyzeProgram(*hit->unit->ast, fallback, sink, CompileOptions{}, nullptr);
+    const auto doc = fallback.docs.find(hit->declaration->nodeId);
+    if (doc == fallback.docs.end()) return false;
+    out = doc->second;
+    return true;
 }
 
 DocAnswer stdMemberDocAt(const AnalyzedDocument& document,
@@ -531,7 +553,11 @@ DocAnswer documentationAt(const AnalyzedDocument& document, const Node& node,
     if (doc == nullptr) {
         // An import binding: the declaring module's own sema carries the
         // doc comment, not this file's.
-        doc = importedDocCommentOf(document, name);
+        DocComment imported;
+        if (importedDocCommentOf(document, name, imported)) {
+            answer.body = renderDocComment(imported);
+            return answer;
+        }
     }
     if (doc != nullptr) answer.body = renderDocComment(*doc);
     return answer;

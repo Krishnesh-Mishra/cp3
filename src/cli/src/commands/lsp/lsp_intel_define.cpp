@@ -809,12 +809,43 @@ std::vector<lsp::SourceTarget> definitionAt(const std::string& path,
     if (!analysisReady(*document)) return targets;
     const Node* node =
         innermostNodeAt(*document->entry->ast, *document->file, line, column);
-    // A cursor sitting on the boundary just past a name (`count|;`) is inside
-    // no span: retry from the byte before the cursor, which belongs to the
-    // name the cursor follows.
-    if (node == nullptr && column > 1) {
-        node = innermostNodeAt(*document->entry->ast, *document->file, line,
-                               column - 1);
+    // A cursor sitting at a position that belongs to a wrapping node instead
+    // of a name token (`count|;` is held by the expression statement) is
+    // inside no name-bearing span: retry from the byte before the cursor,
+    // which belongs to the name the cursor follows.
+    auto isNameBearing = [](const Node* n) {
+        if (n == nullptr) return false;
+        switch (n->kind) {
+            case NodeKind::Identifier:
+            case NodeKind::NamedType:
+            case NodeKind::MemberExpr:
+            case NodeKind::ImportSpecifier:
+            case NodeKind::ExportSpecifier:
+            case NodeKind::InterfaceDeclaration:
+            case NodeKind::ClassDeclaration:
+            case NodeKind::EnumDeclaration:
+            case NodeKind::TypeAliasDeclaration:
+            case NodeKind::FunctionDeclaration:
+            case NodeKind::ConstructorDeclaration:
+            case NodeKind::MethodDeclaration:
+            case NodeKind::PropertyDeclaration:
+            case NodeKind::MethodSignature:
+            case NodeKind::PropertySignature:
+            case NodeKind::Parameter:
+            case NodeKind::VariableDeclarator:
+            case NodeKind::ObjectProperty:
+            case NodeKind::ObjectPatternProperty:
+            case NodeKind::EnumMember:
+                return true;
+            default:
+                return false;
+        }
+    };
+    if (!isNameBearing(node) && column > 0) {
+        const Node* before = innermostNodeAt(*document->entry->ast,
+                                             *document->file, line,
+                                             column - 1);
+        if (isNameBearing(before)) node = before;
     }
     if (node == nullptr) return targets;
     // A member access (`receiver.member`): jump to the member's declaration

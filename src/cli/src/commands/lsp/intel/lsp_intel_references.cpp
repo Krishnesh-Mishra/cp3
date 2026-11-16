@@ -708,6 +708,40 @@ std::optional<ResolvedTarget> resolveTarget(AnalyzedDocument& document,
     collectPatternBindingSpans(program, patternSpans);
 
     const Node* node = innermostNodeAt(program, file, line, column);
+    // A cursor sitting at a position that belongs only to a wrapping node
+    // (`count|;`) is not the name; the byte before it in the name does.
+    auto isNameBearing = [](const Node* n) {
+        if (n == nullptr) return false;
+        switch (n->kind) {
+            case NodeKind::Identifier:
+            case NodeKind::NamedType:
+            case NodeKind::MemberExpr:
+            case NodeKind::ImportSpecifier:
+            case NodeKind::ExportSpecifier:
+            case NodeKind::InterfaceDeclaration:
+            case NodeKind::ClassDeclaration:
+            case NodeKind::EnumDeclaration:
+            case NodeKind::TypeAliasDeclaration:
+            case NodeKind::FunctionDeclaration:
+            case NodeKind::ConstructorDeclaration:
+            case NodeKind::MethodDeclaration:
+            case NodeKind::PropertyDeclaration:
+            case NodeKind::MethodSignature:
+            case NodeKind::PropertySignature:
+            case NodeKind::Parameter:
+            case NodeKind::VariableDeclarator:
+            case NodeKind::ObjectProperty:
+            case NodeKind::ObjectPatternProperty:
+            case NodeKind::EnumMember:
+                return true;
+            default:
+                return false;
+        }
+    };
+    if (!isNameBearing(node) && column > 0) {
+        const Node* before = innermostNodeAt(program, file, line, column - 1);
+        if (isNameBearing(before)) node = before;
+    }
     if (node == nullptr) return std::nullopt;
 
     ResolvedTarget target;
@@ -979,27 +1013,47 @@ std::optional<ResolvedTarget> resolveTarget(AnalyzedDocument& document,
     return target;
 }
 
+// The normalized spelling of a file path, for identity checks across graphs:
+// forward slashes with "." and redundant segments collapsed. Two spellings of
+// one file compare equal, so a module the loader joined from a specifier like
+// "./x.cp3" matches an entry the editor opened as "x.cp3" - the two never
+// share a SourceFile, because SourceManager::addFile dedupes on the spelling.
+std::string normalizedPathOf(const std::string& path) {
+    if (path.empty()) return std::string();
+    std::string forward = path;
+    std::replace(forward.begin(), forward.end(), '\\', '/');
+    const std::filesystem::path normalized =
+        std::filesystem::path(forward).lexically_normal();
+    return normalized.generic_string();
+}
+
 // The declaring unit of `target` inside `graph`: each graph has its own
-// CompilationUnit per file, so identity is compared by the shared SourceFile
-// pointer (every graph walked here is built over the same SourceManager).
+// CompilationUnit per file, so identity is first compared by the shared
+// SourceFile pointer (every graph walked here is built over the same
+// SourceManager), then by the normalized spelling of the unit's path (the
+// scratch graphs load dependency files from joined specifier paths, which
+// spell the same file differently than the entry point the editor opened).
 // Returns nullptr when the graph never reaches the declaration (a sibling
 // module whose closure lacks the declaring module).
 CompilationUnit* declaringUnitIn(ModuleGraph& graph, const ResolvedTarget& target) {
     if (target.declaringUnit == nullptr || target.declaringUnit->file == nullptr) {
         return nullptr;
     }
+    const std::string targetPath = normalizedPathOf(target.declaringUnit->file->path);
     for (CompilationUnit* unit : graph.units()) {
-        if (unit != nullptr && unit->file == target.declaringUnit->file) {
+        if (unit == nullptr || unit->file == nullptr) continue;
+        if (unit->file == target.declaringUnit->file) return unit;
+        if (!targetPath.empty() && normalizedPathOf(unit->file->path) == targetPath) {
             return unit;
         }
     }
     return nullptr;
 }
 
-// The .cp3 modules sitting next to `entryPath`: the display of a project is
-// the folder it shares with its modules. A folder-only scan (no recursion)
-// keeps the walk bounded; hidden and compiler-owned prelude files are
-// skipped and the entry itself is filtered out by SourceManager path dedupe
+// The .cp3 modules sitting next to `entryPath`: a project shares one
+// folder with its sibling modules. A folder-only scan (no recursion) keeps
+// the walk bounded; hidden and compiler-owned prelude files are skipped,
+// and the entry itself is filtered out by SourceManager path dedupe
 // downstream.
 void collectSiblingModules(const std::string& entryPath,
                            std::vector<std::string>& out) {
@@ -1007,7 +1061,7 @@ void collectSiblingModules(const std::string& entryPath,
     std::error_code ec;
     const fs::path dir = fs::path(entryPath).parent_path();
     if (dir.empty()) return;
-    const fs::path end;
+    const fs::directory_iterator end;
     for (fs::directory_iterator it(dir, ec); !ec && it != end; it.increment(ec)) {
         if (ec) return;
         const fs::directory_entry& entry = *it;
@@ -1278,199 +1332,52 @@ std::vector<Occurrence> collectOccurrences(AnalyzedDocument& document,
     }
 
     // The names each unit in the import closure exports under (pre-rename
-    // state), keyed by unit id. The declaring unit contributes `target.follows`;
-    // a unit that re-exports a followed name re-exports it under the exported
-    // specifier name (`export *` forwards every followed name verbatim). The
-    // module loader orders dependencies before their importers, so a unit's
-    // own export table is final by the time its importers visit it; one extra
-    // pass covers import cycles.
-    std::unordered_map<std::uint32_t, std::vector<std::string>> exportsOf;
+    // state), propagated through every graph that can see the declaration:
+    // the entry's own closure first, then the scratch graph of every sibling
+    // module sitting next to the entry (a sibling importer is invisible to
+    // the entry's closure, and it may re-export the declaration to yet more
+    // modules). The through-lane is shared by both walks.
     if (document.graph != nullptr) {
-        if (target.declaringUnit != nullptr) {
-            exportsOf[target.declaringUnit->id] = target.follows;
-        }
-        for (std::size_t pass = 0; pass < 2; ++pass) {
-            for (CompilationUnit* unit : document.graph->compilationOrder()) {
-                if (unit == nullptr || unit->isPrelude || unit->ast == nullptr) {
-                    continue;
-                }
-                if (unit == target.declaringUnit) continue;
-                std::vector<std::string> added;
-                for (const ModuleDependency& dependency :
-                     document.graph->dependencies()) {
-                    if (dependency.importer != unit->id) continue;
-                    if (!dependency.resolved ||
-                        dependency.resolution != ModuleResolution::Local) {
-                        continue;
-                    }
-                    const auto followedIt = exportsOf.find(dependency.imported);
-                    if (followedIt == exportsOf.end()) continue;
-                    const std::vector<std::string>& followed = followedIt->second;
-                    if (followed.empty()) continue;
-                    for (const StmtPtr& statement : unit->ast->body) {
-                        if (statement == nullptr ||
-                            statement->kind != NodeKind::ExportDeclaration) {
-                            continue;
-                        }
-                        const auto& exporter =
-                            static_cast<const ExportDeclaration&>(*statement);
-                        if (exporter.kind != ExportKind::ReExportNamed &&
-                            exporter.kind != ExportKind::ReExportAll) {
-                            continue;
-                        }
-                        if (exporter.source != dependency.specifier) continue;
-                        if (exporter.kind == ExportKind::ReExportAll) {
-                            for (const std::string& name : followed) {
-                                if (std::find(added.begin(), added.end(), name) !=
-                                    added.end()) {
-                                    continue;
-                                }
-                                added.push_back(name);
-                            }
-                            continue;
-                        }
-                        for (const ExportSpecifierPtr& specifier :
-                             exporter.specifiers) {
-                            if (specifier == nullptr) continue;
-                            if (std::find(followed.begin(), followed.end(),
-                                          specifier->local) == followed.end()) {
-                                continue;
-                            }
-                            const std::string exported =
-                                specifier->exported.empty() ? specifier->local
-                                                            : specifier->exported;
-                            if (std::find(added.begin(), added.end(), exported) !=
-                                added.end()) {
-                                continue;
-                            }
-                            added.push_back(exported);
-                        }
-                    }
-                }
-                if (!added.empty()) {
-                    auto& slot = exportsOf[unit->id];
-                    for (const std::string& name : added) {
-                        if (std::find(slot.begin(), slot.end(), name) != slot.end()) {
-                            continue;
-                        }
-                        slot.push_back(name);
-                    }
+        throughLane(*document.graph, document.sema, unitSemas, compile, target,
+                    occurrences);
+        const std::string origin = document.file != nullptr
+                                       ? document.file->path
+                                       : std::string();
+        std::vector<std::string> siblings;
+        collectSiblingModules(origin, siblings);
+        for (const std::string& sibling : siblings) {
+            const std::optional<std::string> text = readFileAt(sibling);
+            if (!text.has_value()) continue;
+            SourceFile* file = document.sources.addFile(sibling, *text);
+            if (file == nullptr) continue;
+            bool already = false;
+            const std::string siblingPath = normalizedPathOf(file->path);
+            for (const CompilationUnit* known : document.graph->units()) {
+                if (known == nullptr || known->file == nullptr) continue;
+                if (known->file == file ||
+                    (!siblingPath.empty() &&
+                     normalizedPathOf(known->file->path) == siblingPath)) {
+                    already = true;
+                    break;
                 }
             }
-        }
-    }
-
-    // Uses and import/export tokens in every unit that has a Local edge to a
-    // unit whose export table carries a followed name.
-    for (CompilationUnit* unit : document.graph->units()) {
-        if (unit == nullptr) continue;
-        if (unit == target.declaringUnit) continue;
-        if (unit->isPrelude) continue;
-        if (unit->ast == nullptr) continue;
-        // A unit that could bind none of the followed names cannot match.
-        bool hasEdge = false;
-        for (const ModuleDependency& dependency : document.graph->dependencies()) {
-            if (dependency.importer != unit->id) continue;
-            if (!dependency.resolved) continue;
-            if (dependency.resolution != ModuleResolution::Local) continue;
-            const auto followedIt = exportsOf.find(dependency.imported);
-            if (followedIt != exportsOf.end() && !followedIt->second.empty()) {
-                hasEdge = true;
-                break;
+            if (already) continue;
+            // A sibling analyzed as its own scratch graph: its forward
+            // closure carries the same files over the same SourceManager,
+            // so its occurrence spans dedupe with the entry's own set.
+            CollectingDiagnosticSink scratchSink;
+            std::unique_ptr<ModuleGraph> scratch =
+                loadModuleGraph(document.sources, *file, scratchSink);
+            if (scratch == nullptr || scratch->entry() == nullptr ||
+                scratch->entry()->ast == nullptr) {
+                continue;
             }
-        }
-        if (!hasEdge) continue;
-
-        UnitView view = analyzeUnitFor(document, unit, compile, unitSemas);
-        if (view.sema == nullptr || unit->file == nullptr) continue;
-        const Program& program = *unit->ast;
-        const SourceFile& file = *unit->file;
-        for (const ModuleDependency& dependency : document.graph->dependencies()) {
-            if (dependency.importer != unit->id) continue;
-            if (!dependency.resolved) continue;
-            if (dependency.resolution != ModuleResolution::Local) continue;
-            const auto followedIt = exportsOf.find(dependency.imported);
-            if (followedIt == exportsOf.end()) continue;
-            const std::vector<std::string>& followed = followedIt->second;
-            if (followed.empty()) continue;
-            for (const StmtPtr& statement : program.body) {
-                if (statement == nullptr) continue;
-                if (statement->kind == NodeKind::ImportDeclaration) {
-                    const auto& import =
-                        static_cast<const ImportDeclaration&>(*statement);
-                    if (import.source != dependency.specifier) continue;
-                    for (const ImportSpecifierPtr& specifier : import.specifiers) {
-                        if (specifier == nullptr) continue;
-                        const bool importedFollows =
-                            std::find(followed.begin(), followed.end(),
-                                      specifier->imported) != followed.end();
-                        if (!importedFollows) continue;
-                        SourceSpan carve;
-                        if (carveName(specifier->span, specifier->imported, &carve)) {
-                            addOccurrence(occurrences, carve,
-                                          /*isDeclaration=*/false);
-                        }
-                        const bool aliased = !specifier->local.empty() &&
-                                             specifier->local != specifier->imported;
-                        if (aliased) {
-                            // The alias is this unit's binding; the
-                            // type-position scan matches on text alone and
-                            // cannot prove it names this import.
-                            continue;
-                        }
-                        const std::string local = specifier->local.empty()
-                                                      ? specifier->imported
-                                                      : specifier->local;
-                        if (typeTarget) {
-                            collectTypeOccurrences(program, file, local,
-                                                   occurrences);
-                        }
-                        collectBoundUses(program, file, *view.sema, specifier->nodeId,
-                                         occurrences);
-                    }
-                    continue;
-                }
-                if (statement->kind == NodeKind::ExportDeclaration) {
-                    const auto& exporter =
-                        static_cast<const ExportDeclaration&>(*statement);
-                    if (exporter.source.empty() ||
-                        exporter.source != dependency.specifier) {
-                        continue;
-                    }
-                    for (const ExportSpecifierPtr& specifier :
-                         exporter.specifiers) {
-                        if (specifier == nullptr) continue;
-                        const bool localFollows =
-                            std::find(followed.begin(), followed.end(),
-                                      specifier->local) != followed.end();
-                        if (localFollows) {
-                            SourceSpan carve;
-                            if (carveName(specifier->span, specifier->local,
-                                          &carve)) {
-                                addOccurrence(occurrences, carve,
-                                              /*isDeclaration=*/false);
-                            }
-                        }
-                        const bool exportedFollows =
-                            !specifier->exported.empty() &&
-                            std::find(followed.begin(), followed.end(),
-                                      specifier->exported) != followed.end();
-                        // A re-export hop renames the binding itself - an
-                        // alias in the middle of a chain is part of the
-                        // symbol too, so an unrenamed alias would leave the
-                        // importers of this unit dangling.
-                        if (exportedFollows) {
-                            SourceSpan carve;
-                            if (carveName(specifier->span, specifier->exported,
-                                          &carve)) {
-                                addOccurrence(occurrences, carve,
-                                              /*isDeclaration=*/false);
-                            }
-                        }
-                    }
-                    continue;
-                }
-            }
+            SemaResult scratchEntrySema;
+            std::unordered_map<std::uint32_t, SemaResult> scratchSemas;
+            analyzeProgramGraph(*scratch, scratchEntrySema, scratchSemas,
+                                scratchSink, compile);
+            throughLane(*scratch, scratchEntrySema, &scratchSemas, compile,
+                        target, occurrences);
         }
     }
     return occurrences;

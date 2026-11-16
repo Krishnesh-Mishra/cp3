@@ -1742,6 +1742,30 @@ void growMemberFamily(const ModuleGraph& graph, MemberPass& pass,
                 classJoined.insert(D);
                 grew = true;
             }
+            // (f) Class members named like a family class member are one
+            // family: an unrelated class declaring the same member name
+            // shares the symbol with the family (the Sized/I linking rule
+            // mirrored class-vs-class, seeded from either side).
+            for (const ClassDeclaration* D : decls.classes) {
+                if (classJoined.count(D) != 0) continue;
+                bool holdsClassMember = false;
+                for (const FamilyMember& fm : fam.members) {
+                    if (fm.owner == nullptr) continue;
+                    if (fm.owner->kind != NodeKind::ClassDeclaration) continue;
+                    if (static_cast<const ClassDeclaration*>(fm.owner) == D) {
+                        continue;
+                    }
+                    holdsClassMember = true;
+                    break;
+                }
+                if (!holdsClassMember) continue;
+                std::vector<const Node*> hits;
+                collectMembersNamed(classMemberNodesOf(*D), name, hits);
+                if (hits.empty()) continue;
+                addClassMembers(pass, D, i, name, /*unified*/true, fam);
+                classJoined.insert(D);
+                grew = true;
+            }
             // (c) An interface extends a family interface (transitively) with
             // a same-name member.
             for (const InterfaceDeclaration* I : decls.interfaces) {
