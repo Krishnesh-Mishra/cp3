@@ -334,6 +334,70 @@ function fixesForDiagnostic(
     return suggestions;
 }
 
+/** Names bound in a simple import line, or [] for non-imports. */
+function boundNamesFromImportLine(text: string): string[] {
+    const match = /^(\s*)import\s+([^;]+?)\s+from\s+["']([^"']+)["']\s*;?\s*$/.exec(text);
+    if (!match) return [];
+    const clause = match[2].trim();
+    const names: string[] = [];
+    if (clause.startsWith("{")) {
+        for (const part of clause.replace(/^\{|\}$/g, "").split(",")) {
+            const alias = part.trim().split(/\s+as\s+/).pop()?.trim();
+            if (alias && /^[A-Za-z_$][\w$]*$/.test(alias)) names.push(alias);
+        }
+        return names;
+    }
+    const star = clause.match(/^\*\s+as\s+([A-Za-z_$][\w$]*)/);
+    if (star) { names.push(star[1]); return names; }
+    const defaultPart = clause.split(",", 1)[0].trim();
+    if (/^[A-Za-z_$][\w$]*$/.test(defaultPart)) names.push(defaultPart);
+    const namedMatch = clause.match(/\{([^}]*)\}/);
+    if (namedMatch) {
+        for (const part of namedMatch[1].split(",")) {
+            const alias = part.trim().split(/\s+as\s+/).pop()?.trim();
+            if (alias && /^[A-Za-z_$][\w$]*$/.test(alias)) names.push(alias);
+        }
+    }
+    return names;
+}
+
+/** True if `name` is referenced anywhere in `text` outside its own import
+ * line and outside comments and strings. */
+function identifierReferencedOutside(text: string, name: string, exceptLine: number): boolean {
+    const pattern = new RegExp(`(?<![A-Za-z0-9_$])${name.replace(/[$]/g, "\\$")}(?![A-Za-z0-9_$])`, "g");
+    for (const match of text.matchAll(pattern)) {
+        const before = text.slice(0, match.index);
+        const line = before.split("\n").length;
+        if (line === exceptLine + 1) continue;
+        if (isCommentOrStringAt(text, match.index)) continue;
+        return true;
+    }
+    return false;
+}
+
+/** Unused import suggestions inside the cursor line range: one action per
+ * fully-unused import statement covering the whole line. */
+function unusedImportActions(document: vscode.TextDocument, range: vscode.Range | vscode.Selection): vscode.CodeAction[] {
+    const text = document.getText();
+    const actions: vscode.CodeAction[] = [];
+    const startLine = range.start.line;
+    const endLine = range.end.line;
+    for (let line = 0; line < document.lineCount; line++) {
+        if (line < startLine || line > endLine) continue;
+        const lineText = document.lineAt(line).text;
+        if (!/^\s*import\s+/.test(lineText)) continue;
+        const names = boundNamesFromImportLine(lineText);
+        if (names.length === 0) continue;
+        const unused = names.filter((name) => !identifierReferencedOutside(text, name, line));
+        if (unused.length !== names.length) continue;
+        const action = new vscode.CodeAction(`remove unused import`, vscode.CodeActionKind.QuickFix);
+        action.edit = new vscode.WorkspaceEdit();
+        action.edit.delete(document.uri, new vscode.Range(line, 0, line + 1, 0));
+        actions.push(action);
+    }
+    return actions;
+}
+
 function importLineAtTop(document: vscode.TextDocument): vscode.Position {
     return importInsertion(document);
 }
@@ -370,6 +434,9 @@ class Cp3QuickFixProvider implements vscode.CodeActionProvider {
                 actions.push(action);
             }
         }
+        // Unused imports: always offer to remove them (the compiler is silent
+        // about them, so the fix is provided directly off the text).
+        actions.push(...unusedImportActions(document, range));
         return actions;
     }
 }
