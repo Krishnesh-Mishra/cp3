@@ -15,6 +15,7 @@
 
 #include "cp3/core/analysis.hpp"
 #include "cp3/core/ast.hpp"
+#include "cp3/host/options.hpp"  // TypeSystem
 #include "detail/class/class_model.h"
 
 namespace cp3 {
@@ -22,8 +23,10 @@ namespace detail {
 
 // Registers every class declared inside `s` (a statement of a body, not the
 // module root) and the object shapes its member bodies use. `local` marks the
-// classes it finds (a class inside a function body).
-void walkClassesForModels(const Stmt& s, bool local, const SemaResult& sema);
+// classes it finds (a class inside a function body). `typeSystem` resolves
+// the project's plain Rust/C++ value-type names in member annotations.
+void walkClassesForModels(const Stmt& s, bool local, const SemaResult& sema,
+                          TypeSystem typeSystem = TypeSystem::TypeScript);
 
 // Registers the object/interface shapes reachable from a statement / a whole
 // body: object-literal labels and `{ ... }` annotation types, including inside
@@ -35,8 +38,10 @@ void walkClassesForModels(const Stmt& s, bool local, const SemaResult& sema);
 // namespace-scope struct. The walk registers the class declarations it meets,
 // so a class inside an arrow-function body - which no statement walk reaches -
 // still gets its model before the emit walk.
-void walkStmtModels(const Stmt& s, const SemaResult& sema, bool local);
-void walkExprModels(const Expr* e, const SemaResult& sema);
+void walkStmtModels(const Stmt& s, const SemaResult& sema, bool local,
+                    TypeSystem typeSystem = TypeSystem::TypeScript);
+void walkExprModels(const Expr* e, const SemaResult& sema,
+                    TypeSystem typeSystem = TypeSystem::TypeScript);
 
 // The model fields of an object literal, in property order, with the
 // sema-widened value types: the label contract shared by the model walker and

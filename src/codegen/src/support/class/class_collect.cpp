@@ -67,7 +67,7 @@ void Generator::collectClassNames(const Stmt& s) {
     // hold a class declaration register a namespace-scope struct; everything
     // else has nothing to register. Nested walks (declarations inside a
     // function / block / if-statement) receive `true` from callers below.
-    walkClassesForModels(s, /*local=*/false, sema_);
+    walkClassesForModels(s, /*local=*/false, sema_, options_.typeSystem);
 }
 
 void Generator::collectInterfaces(const Program& program) {
@@ -104,7 +104,7 @@ void Generator::registerInterface(const InterfaceDeclaration& i) {
     // registered, spells the self-reference as the interface's own object
     // type: the stored members must classify for the wrapper and the
     // literal struct, and the label keeps its finite, sema-matching spelling.
-    auto collectFields = [&i]() {
+    auto collectFields = [&i, this]() {
         struct Collected {
             std::vector<ObjectFieldModel> fields;
             bool hasIndex = false;
@@ -118,7 +118,9 @@ void Generator::registerInterface(const InterfaceDeclaration& i) {
                 // model so a typed EventEmitter's dynamic event name can
                 // resolve its payload type through the Events map.
                 const auto& is = static_cast<const IndexSignature&>(*mp);
-                out.indexType = is.valueType ? modelTypeFromTypeNode(*is.valueType)
+                out.indexType = is.valueType ? modelTypeFromTypeNode(
+                                                   *is.valueType,
+                                                   options_.typeSystem)
                                              : Type::unknown();
                 out.hasIndex = true;
                 continue;
@@ -127,7 +129,7 @@ void Generator::registerInterface(const InterfaceDeclaration& i) {
                 const auto& ps = static_cast<const PropertySignature&>(*mp);
                 f.name = keyNameOf(ps.key.get());
                 f.optional = ps.optional;
-                if (ps.type) f.type = modelTypeFromTypeNode(*ps.type);
+                if (ps.type) f.type = modelTypeFromTypeNode(*ps.type, options_.typeSystem);
             } else if (mp->kind == NodeKind::MethodSignature) {
                 const auto& ms = static_cast<const MethodSignature&>(*mp);
                 f.name = keyNameOf(ms.key.get());
@@ -135,11 +137,14 @@ void Generator::registerInterface(const InterfaceDeclaration& i) {
                 std::vector<Type> params;
                 for (const auto& p : ms.params) {
                     if (!p) continue;
-                    params.push_back(p->type ? modelTypeFromTypeNode(*p->type)
+                    params.push_back(p->type ? modelTypeFromTypeNode(
+                                                   *p->type,
+                                                   options_.typeSystem)
                                              : Type::unknown());
                 }
                 const Type ret = ms.returnType
-                                     ? modelTypeFromTypeNode(*ms.returnType)
+                                     ? modelTypeFromTypeNode(*ms.returnType,
+                                                             options_.typeSystem)
                                      : Type::unknown();
                 f.type = Type::function(std::move(params), ret);
                 f.isFunction = true;
@@ -170,7 +175,9 @@ void Generator::registerInterface(const InterfaceDeclaration& i) {
         om.indexType = std::move(second.indexType);
     }
 }
-void Generator::collectBodyModels(const Stmt& s) { walkStmtModels(s, sema_, false); }
+void Generator::collectBodyModels(const Stmt& s) {
+    walkStmtModels(s, sema_, false, options_.typeSystem);
+}
 
 void Generator::collectClassMemberModels(ClassModel& cm) {
     if (cm.membersCollected) return;
@@ -194,7 +201,7 @@ void Generator::collectClassMemberModels(ClassModel& cm) {
             m.hasInitializer = p.initializer != nullptr;
             m.field = &p;
             if (p.type) {
-                m.type = modelTypeFromTypeNode(*p.type);
+                m.type = modelTypeFromTypeNode(*p.type, options_.typeSystem);
             } else if (p.initializer) {
                 m.type = widenType(effectiveType(*p.initializer));
             } else {
@@ -227,7 +234,7 @@ void Generator::collectClassMemberModels(ClassModel& cm) {
                 field.hasInitializer = true;
                 field.parameterProperty = p.get();
                 if (p->type) {
-                    field.type = modelTypeFromTypeNode(*p->type);
+                    field.type = modelTypeFromTypeNode(*p->type, options_.typeSystem);
                 } else if (p->defaultValue) {
                     field.type = widenType(effectiveType(*p->defaultValue));
                 } else {
@@ -308,10 +315,12 @@ void Generator::collectClassMethodModel(ClassModel& cm,
     std::vector<Type> params;
     for (const auto& p : md.params) {
         if (!p) continue;
-        params.push_back(p->type ? modelTypeFromTypeNode(*p->type)
+        params.push_back(p->type ? modelTypeFromTypeNode(*p->type,
+                                               options_.typeSystem)
                                  : Type::unknown());
     }
-    const Type ret = md.returnType ? modelTypeFromTypeNode(*md.returnType)
+    const Type ret = md.returnType ? modelTypeFromTypeNode(*md.returnType,
+                                                options_.typeSystem)
                                    : Type::unknown();
     m.type = Type::function(std::move(params), ret);
     rewriteTypeParams(m.type, cm.typeParams);
@@ -343,11 +352,13 @@ void Generator::collectClassAccessorModel(ClassModel& cm, const ClassMember& mp)
     m.accessor = &ad;
     m.isGetter = ad.accessor == AccessorKind::Get;
     if (m.isGetter) {
-        m.type = ad.returnType ? modelTypeFromTypeNode(*ad.returnType)
+        m.type = ad.returnType ? modelTypeFromTypeNode(*ad.returnType,
+                                           options_.typeSystem)
                                : Type::unknown();
     } else if (!ad.params.empty() && ad.params.front() &&
                ad.params.front()->type) {
-        m.type = modelTypeFromTypeNode(*ad.params.front()->type);
+        m.type = modelTypeFromTypeNode(*ad.params.front()->type,
+                                options_.typeSystem);
     } else {
         m.type = Type::unknown();
     }

@@ -101,7 +101,8 @@ Type promiseValue(const Type& t) {
     return t.parts.front();
 }
 
-std::optional<Type> instantiateGenericInterface(const TypeNode& tn) {
+std::optional<Type> instantiateGenericInterface(const TypeNode& tn,
+                                                TypeSystem typeSystem) {
     if (tn.kind != NodeKind::NamedType) return std::nullopt;
     const auto& nt = static_cast<const NamedType&>(tn);
     ModelRegistry& reg = ModelRegistry::get();
@@ -114,19 +115,20 @@ std::optional<Type> instantiateGenericInterface(const TypeNode& tn) {
     if (generic->decl) {
         for (const TypePtr& ta : nt.typeArgs) {
             if (!ta) continue;
-            args.push_back(modelTypeFromTypeNode(*ta));
+            args.push_back(modelTypeFromTypeNode(*ta, typeSystem));
         }
         for (std::size_t i = args.size(); i < generic->decl->typeParams.size();
              ++i) {
             const auto& tp = generic->decl->typeParams[i];
             if (tp && tp->defaultType) {
-                args.push_back(modelTypeFromTypeNode(*tp->defaultType));
+                args.push_back(
+                    modelTypeFromTypeNode(*tp->defaultType, typeSystem));
             }
         }
     } else {
         for (const TypePtr& ta : nt.typeArgs) {
             if (!ta) continue;
-            args.push_back(modelTypeFromTypeNode(*ta));
+            args.push_back(modelTypeFromTypeNode(*ta, typeSystem));
         }
     }
     // The interface's members, with the type arguments substituted in.
@@ -138,7 +140,7 @@ std::optional<Type> instantiateGenericInterface(const TypeNode& tn) {
             const auto& ps = static_cast<const PropertySignature&>(*mp);
             f.name = keyNameOf(ps.key.get());
             f.optional = ps.optional;
-            if (ps.type) f.type = modelTypeFromTypeNode(*ps.type);
+            if (ps.type) f.type = modelTypeFromTypeNode(*ps.type, typeSystem);
         } else if (mp->kind == NodeKind::MethodSignature) {
             const auto& ms = static_cast<const MethodSignature&>(*mp);
             f.name = keyNameOf(ms.key.get());
@@ -146,11 +148,13 @@ std::optional<Type> instantiateGenericInterface(const TypeNode& tn) {
             std::vector<Type> params;
             for (const auto& p : ms.params) {
                 if (!p) continue;
-                params.push_back(p->type ? modelTypeFromTypeNode(*p->type)
-                                         : Type::unknown());
+                params.push_back(p->type
+                                     ? modelTypeFromTypeNode(*p->type, typeSystem)
+                                     : Type::unknown());
             }
-            const Type ret = ms.returnType ? modelTypeFromTypeNode(*ms.returnType)
-                                           : Type::unknown();
+            const Type ret =
+                ms.returnType ? modelTypeFromTypeNode(*ms.returnType, typeSystem)
+                              : Type::unknown();
             f.type = Type::function(std::move(params), ret);
             f.isFunction = true;
             f.isMethod = true;
@@ -216,7 +220,8 @@ std::optional<Type> typeFromTypeNode(const TypeNode& tn, TypeSystem typeSystem) 
             // A generic interface (D26): the type arguments are substituted
             // into the interface's members, and the instantiated shape is
             // registered as an interface model.
-            if (std::optional<Type> generic = instantiateGenericInterface(nt)) {
+            if (std::optional<Type> generic =
+                    instantiateGenericInterface(nt, typeSystem)) {
                 return generic;
             }
             // An interface that names itself in a member annotation resolves to
@@ -328,13 +333,13 @@ std::optional<Type> typeFromTypeNode(const TypeNode& tn, TypeSystem typeSystem) 
             // `unknown`; the return type is required for a useful shape.
             const auto& ft = static_cast<const FunctionType&>(tn);
             if (!ft.returnType) return std::nullopt;
-            auto ret = typeFromTypeNode(*ft.returnType);
+            auto ret = typeFromTypeNode(*ft.returnType, typeSystem);
             if (!ret) return std::nullopt;
             std::vector<Type> params;
             for (const auto& part : ft.params) {
                 if (!part) return std::nullopt;
                 if (part->type) {
-                    auto param = typeFromTypeNode(*part->type);
+                    auto param = typeFromTypeNode(*part->type, typeSystem);
                     if (!param) return std::nullopt;
                     params.push_back(*param);
                 } else {

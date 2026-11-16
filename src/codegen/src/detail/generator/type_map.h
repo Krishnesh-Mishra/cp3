@@ -204,21 +204,29 @@ bool classifyRegex(const Type& t, CppInfo& info);
 bool classifyByteBuffer(const Type& t, CppInfo& info);
 
 // Structural fallback: a type annotation -> a cp3 Type (when sema is absent).
-// `typeSystem` enables the project's plain Rust/C++ value-type names.
+// `typeSystem` enables the project's plain Rust/C++ value-type names. The
+// default keeps the historical TypeScript-only vocabulary for the free
+// functions that have no project options in hand.
 std::optional<Type> typeFromTypeNode(const TypeNode& tn,
                                      TypeSystem typeSystem =
                                          TypeSystem::TypeScript);
 
 // The annotation's cp3 type, or `unknown` when it has no mapping; the model
 // pass (support/class_walk.cpp) uses this where an annotation must always
-// yield a Type value.
-Type modelTypeFromTypeNode(const TypeNode& tn);
+// yield a Type value. `typeSystem` matches `typeFromTypeNode`; the default
+// keeps the historical TypeScript-only vocabulary for the free functions
+// that have no project options in hand.
+Type modelTypeFromTypeNode(const TypeNode& tn,
+                           TypeSystem typeSystem = TypeSystem::TypeScript);
 
 // The instantiated shape of a generic interface (D26): the type arguments of
 // the named type are substituted into the interface's members and the shape is
 // registered as an interface model (the wrapper is what makes the structural
 // typing work). nullopt when the annotation does not name a generic interface.
-std::optional<Type> instantiateGenericInterface(const TypeNode& tn);
+// `typeSystem` resolves the project's plain Rust/C++ value-type names.
+std::optional<Type> instantiateGenericInterface(const TypeNode& tn,
+                                                TypeSystem typeSystem =
+                                                    TypeSystem::TypeScript);
 
 bool isNullishLiteral(const Expr& e);
 

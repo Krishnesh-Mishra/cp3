@@ -66,10 +66,10 @@ const CallExpr* superCtorCall(const Stmt* body) {
 // The cp3 type of one constructor parameter: the same computation the
 // parameter's own C++ spelling uses (emit/class_decl.cpp's methodParamText).
 Type ctorParamType(const SemaResult& sema, const Parameter& p,
-                   const ClassModel& cm) {
+                   const ClassModel& cm, TypeSystem typeSystem) {
     Type t = Type::unknown();
     if (p.type) {
-        t = modelTypeFromTypeNode(*p.type);
+        t = modelTypeFromTypeNode(*p.type, typeSystem);
     } else if (p.name) {
         if (const Type* st = sema.typeOf(p.name->nodeId)) t = *st;
     }
@@ -128,7 +128,7 @@ std::string Generator::newSpreadText(const ClassModel& cm,
     if (ctor != nullptr && ctor->ctor != nullptr) {
         for (const auto& p : ctor->ctor->params) {
             if (!p) continue;
-            ptypes.push_back(ctorParamType(sema_, *p, decl));
+            ptypes.push_back(ctorParamType(sema_, *p, decl, options_.typeSystem));
             if (!p->optional && p->defaultValue == nullptr) ++required;
         }
     }

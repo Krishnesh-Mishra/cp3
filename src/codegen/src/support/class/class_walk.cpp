@@ -24,7 +24,8 @@ namespace {
 
 // An arrow function: its signature annotations and its body (an expression or
 // a block, whose local classes and object shapes must be registered too).
-void walkArrowModels(const ArrowFunction& a, const SemaResult& sema);
+void walkArrowModels(const ArrowFunction& a, const SemaResult& sema,
+                     TypeSystem typeSystem);
 
 // Registers one class declaration (generic classes become C++ templates).
 void addClassModel(const ClassDeclaration& c, bool local,
@@ -57,78 +58,88 @@ void addClassModel(const ClassDeclaration& c, bool local,
     }
 }
 
-void walkExprPtr(const ExprPtr& e, const SemaResult& sema) {
-    walkExprModels(e.get(), sema);
+void walkExprPtr(const ExprPtr& e, const SemaResult& sema,
+                   TypeSystem typeSystem) {
+    walkExprModels(e.get(), sema, typeSystem);
 }
 
-void walkExprPair(const ExprPtr& a, const ExprPtr& b, const SemaResult& sema) {
-    walkExprPtr(a, sema);
-    walkExprPtr(b, sema);
+void walkExprPair(const ExprPtr& a, const ExprPtr& b, const SemaResult& sema,
+                    TypeSystem typeSystem) {
+    walkExprPtr(a, sema, typeSystem);
+    walkExprPtr(b, sema, typeSystem);
 }
 
-void walkExprList(const ExprList& list, const SemaResult& sema) {
+void walkExprList(const ExprList& list, const SemaResult& sema,
+                    TypeSystem typeSystem) {
     for (const auto& child : list) {
-        walkExprModels(child.get(), sema);
+        walkExprModels(child.get(), sema, typeSystem);
     }
 }
 
 void walkStmtList(const std::vector<StmtPtr>& body, const SemaResult& sema,
-                   bool local) {
+                    bool local, TypeSystem typeSystem) {
     for (const auto& child : body) {
-        if (child) walkStmtModels(*child, sema, local);
+        if (child) walkStmtModels(*child, sema, local, typeSystem);
     }
 }
 
-void walkBodyStmt(const StmtPtr& body, bool local, const SemaResult& sema) {
-    if (body) walkStmtModels(*body, sema, local);
+void walkBodyStmt(const StmtPtr& body, bool local, const SemaResult& sema,
+                    TypeSystem typeSystem) {
+    if (body) walkStmtModels(*body, sema, local, typeSystem);
 }
 
-void walkClassesInBody(const StmtPtr& body, const SemaResult& sema) {
-    if (body) walkClassesForModels(*body, true, sema);
+void walkClassesInBody(const StmtPtr& body, const SemaResult& sema,
+                         TypeSystem typeSystem) {
+    if (body) walkClassesForModels(*body, true, sema, typeSystem);
 }
 
-void walkParams(const ParamList& params, const SemaResult& sema) {
+void walkParams(const ParamList& params, const SemaResult& sema,
+                   TypeSystem typeSystem) {
     for (const auto& p : params) {
-        if (p && p->type) (void)modelTypeFromTypeNode(*p->type);
+        if (p && p->type) (void)modelTypeFromTypeNode(*p->type, typeSystem);
     }
     (void)sema;
 }
 
 // The body + signature of one function-shaped class member.
 void walkFunctionModels(const ParamList& params, const TypePtr& returnType,
-                        const StmtPtr& body, const SemaResult& sema) {
-    walkParams(params, sema);
-    if (returnType) (void)modelTypeFromTypeNode(*returnType);
-    walkBodyStmt(body, true, sema);
+                           const StmtPtr& body, const SemaResult& sema,
+                           TypeSystem typeSystem) {
+    walkParams(params, sema, typeSystem);
+    if (returnType) (void)modelTypeFromTypeNode(*returnType, typeSystem);
+    walkBodyStmt(body, true, sema, typeSystem);
 }
 
 // Every member of a class: field types + initializers, method/constructor
 // signatures + bodies, accessor signatures + bodies.
 void walkClassMembers(const std::vector<ClassMemberPtr>& members,
-                      const SemaResult& sema) {
+                       const SemaResult& sema, TypeSystem typeSystem) {
     for (const auto& mp : members) {
         if (!mp) continue;
         switch (mp->kind) {
             case NodeKind::PropertyDeclaration: {
                 const auto& p = static_cast<const PropertyDeclaration&>(*mp);
-                if (p.type) (void)modelTypeFromTypeNode(*p.type);
-                walkExprPtr(p.initializer, sema);
+                if (p.type) (void)modelTypeFromTypeNode(*p.type, typeSystem);
+                walkExprPtr(p.initializer, sema, typeSystem);
                 break;
             }
             case NodeKind::MethodDeclaration: {
                 const auto& md = static_cast<const MethodDeclaration&>(*mp);
-                walkFunctionModels(md.params, md.returnType, md.body, sema);
+                walkFunctionModels(md.params, md.returnType, md.body, sema,
+                                 typeSystem);
                 break;
             }
             case NodeKind::ConstructorDeclaration: {
                 const auto& cd =
                     static_cast<const ConstructorDeclaration&>(*mp);
-                walkFunctionModels(cd.params, TypePtr(), cd.body, sema);
+                walkFunctionModels(cd.params, TypePtr(), cd.body, sema,
+                                 typeSystem);
                 break;
             }
             case NodeKind::AccessorDeclaration: {
                 const auto& ad = static_cast<const AccessorDeclaration&>(*mp);
-                walkFunctionModels(ad.params, ad.returnType, ad.body, sema);
+                walkFunctionModels(ad.params, ad.returnType, ad.body, sema,
+                                 typeSystem);
                 break;
             }
             default:
@@ -139,12 +150,12 @@ void walkClassMembers(const std::vector<ClassMemberPtr>& members,
 
 // Registers one class (and everything its member bodies declare).
 void registerClassTree(const ClassDeclaration& c, bool local,
-                       const SemaResult& sema) {
+                        const SemaResult& sema, TypeSystem typeSystem) {
     addClassModel(c, local, sema);
     for (const auto& t : c.implementsTypes) {
-        if (t) (void)modelTypeFromTypeNode(*t);
+        if (t) (void)modelTypeFromTypeNode(*t, typeSystem);
     }
-    walkClassMembers(c.members, sema);
+    walkClassMembers(c.members, sema, typeSystem);
 }
 
 // Registers the plain object model of a literal, keyed by the sema label.
@@ -190,69 +201,79 @@ std::vector<ObjectFieldModel> literalFields(const ObjectLiteral& lit,
 
 // ---- the class walker --------------------------------------------------------
 
-void walkClassesForModels(const Stmt& s, bool local, const SemaResult& sema) {
+void walkClassesForModels(const Stmt& s, bool local, const SemaResult& sema,
+                          TypeSystem typeSystem) {
     switch (s.kind) {
         case NodeKind::ClassDeclaration:
             registerClassTree(static_cast<const ClassDeclaration&>(s), local,
-                              sema);
+                              sema, typeSystem);
             return;
         case NodeKind::ExportDeclaration: {
             const auto& ed = static_cast<const ExportDeclaration&>(s);
             if (ed.declaration) {
-                walkClassesForModels(*ed.declaration, local, sema);
+                walkClassesForModels(*ed.declaration, local, sema, typeSystem);
             }
             return;
         }
         case NodeKind::BlockStatement:
             for (const auto& child : static_cast<const BlockStatement&>(s).body) {
-                if (child) walkClassesForModels(*child, true, sema);
+                if (child) walkClassesForModels(*child, true, sema,
+                                                      typeSystem);
             }
             return;
         case NodeKind::IfStatement: {
             const auto& is = static_cast<const IfStatement&>(s);
-            if (is.thenBranch) walkClassesForModels(*is.thenBranch, true, sema);
-            if (is.elseBranch) walkClassesForModels(*is.elseBranch, true, sema);
+            if (is.thenBranch)
+                walkClassesForModels(*is.thenBranch, true, sema, typeSystem);
+            if (is.elseBranch)
+                walkClassesForModels(*is.elseBranch, true, sema, typeSystem);
             return;
         }
         case NodeKind::WhileStatement:
-            walkClassesInBody(static_cast<const WhileStatement&>(s).body, sema);
+            walkClassesInBody(static_cast<const WhileStatement&>(s).body, sema,
+                              typeSystem);
             return;
         case NodeKind::DoWhileStatement:
             walkClassesInBody(static_cast<const DoWhileStatement&>(s).body,
-                              sema);
+                              sema, typeSystem);
             return;
         case NodeKind::ForStatement:
-            walkClassesInBody(static_cast<const ForStatement&>(s).body, sema);
+            walkClassesInBody(static_cast<const ForStatement&>(s).body, sema,
+                              typeSystem);
             return;
         case NodeKind::ForOfStatement:
-            walkClassesInBody(static_cast<const ForOfStatement&>(s).body, sema);
+            walkClassesInBody(static_cast<const ForOfStatement&>(s).body, sema,
+                              typeSystem);
             return;
         case NodeKind::ForInStatement:
-            walkClassesInBody(static_cast<const ForInStatement&>(s).body, sema);
+            walkClassesInBody(static_cast<const ForInStatement&>(s).body, sema,
+                              typeSystem);
             return;
         case NodeKind::FunctionDeclaration:
             walkClassesInBody(static_cast<const FunctionDeclaration&>(s).body,
-                              sema);
+                              sema, typeSystem);
             return;
         case NodeKind::TryStatement: {
             const auto& ts = static_cast<const TryStatement&>(s);
-            walkClassesInBody(ts.tryBlock, sema);
-            if (ts.handler) walkClassesInBody(ts.handler->body, sema);
-            walkClassesInBody(ts.finallyBlock, sema);
+            walkClassesInBody(ts.tryBlock, sema, typeSystem);
+            if (ts.handler)
+                walkClassesInBody(ts.handler->body, sema, typeSystem);
+            walkClassesInBody(ts.finallyBlock, sema, typeSystem);
             return;
         }
         case NodeKind::SwitchStatement: {
             for (const auto& c : static_cast<const SwitchStatement&>(s).cases) {
                 if (c == nullptr) continue;
                 for (const auto& child : c->statements) {
-                    if (child) walkClassesForModels(*child, true, sema);
+                    if (child) walkClassesForModels(*child, true, sema,
+                                                      typeSystem);
                 }
             }
             return;
         }
         case NodeKind::LabeledStatement:
             walkClassesInBody(static_cast<const LabeledStatement&>(s).body,
-                              sema);
+                              sema, typeSystem);
             return;
         default:
             return;
@@ -263,124 +284,142 @@ void walkClassesForModels(const Stmt& s, bool local, const SemaResult& sema) {
 
 namespace {
 
-void walkForModels(const ForStatement& f, const SemaResult& sema) {
+void walkForModels(const ForStatement& f, const SemaResult& sema,
+                    TypeSystem typeSystem) {
     if (f.init) {
         if (f.init->kind == NodeKind::VariableDeclaration) {
-            walkStmtModels(static_cast<const Stmt&>(*f.init), sema, true);
+            walkStmtModels(static_cast<const Stmt&>(*f.init), sema, true,
+                         typeSystem);
         } else {
-            walkExprModels(dynamic_cast<const Expr*>(f.init.get()), sema);
+            walkExprModels(dynamic_cast<const Expr*>(f.init.get()), sema,
+                         typeSystem);
         }
     }
-    walkExprPtr(f.condition, sema);
-    walkExprPtr(f.update, sema);
-    walkBodyStmt(f.body, true, sema);
+    walkExprPtr(f.condition, sema, typeSystem);
+    walkExprPtr(f.update, sema, typeSystem);
+    walkBodyStmt(f.body, true, sema, typeSystem);
 }
 
-void walkSwitchModels(const SwitchStatement& sw, const SemaResult& sema) {
-    walkExprPtr(sw.discriminant, sema);
+void walkSwitchModels(const SwitchStatement& sw, const SemaResult& sema,
+                       TypeSystem typeSystem) {
+    walkExprPtr(sw.discriminant, sema, typeSystem);
     for (const auto& c : sw.cases) {
         if (c == nullptr) continue;
-        walkExprPtr(c->test, sema);
-        walkStmtList(c->statements, sema, true);
+        walkExprPtr(c->test, sema, typeSystem);
+        walkStmtList(c->statements, sema, true, typeSystem);
     }
 }
 
 // One `var`/`let`/`const` statement: every declarator's annotation and its
 // initializer.
 void walkVariableDeclModels(const VariableDeclaration& vd,
-                            const SemaResult& sema) {
+                              const SemaResult& sema, TypeSystem typeSystem) {
     for (const auto& d : vd.declarations) {
         if (!d) continue;
-        if (d->type) (void)modelTypeFromTypeNode(*d->type);
-        walkExprPtr(d->init, sema);
+        if (d->type) (void)modelTypeFromTypeNode(*d->type, typeSystem);
+        walkExprPtr(d->init, sema, typeSystem);
     }
 }
 
 // An `if`: the condition and both branches' bodies.
-void walkIfModels(const IfStatement& is, const SemaResult& sema) {
-    walkExprPtr(is.condition, sema);
-    walkBodyStmt(is.thenBranch, true, sema);
-    walkBodyStmt(is.elseBranch, true, sema);
+void walkIfModels(const IfStatement& is, const SemaResult& sema,
+                   TypeSystem typeSystem) {
+    walkExprPtr(is.condition, sema, typeSystem);
+    walkBodyStmt(is.thenBranch, true, sema, typeSystem);
+    walkBodyStmt(is.elseBranch, true, sema, typeSystem);
 }
 
 // A `try`: the three blocks, the handler body included.
-void walkTryModels(const TryStatement& ts, const SemaResult& sema) {
-    walkBodyStmt(ts.tryBlock, true, sema);
-    if (ts.handler) walkBodyStmt(ts.handler->body, true, sema);
-    walkBodyStmt(ts.finallyBlock, true, sema);
+void walkTryModels(const TryStatement& ts, const SemaResult& sema,
+                    TypeSystem typeSystem) {
+    walkBodyStmt(ts.tryBlock, true, sema, typeSystem);
+    if (ts.handler)
+        walkBodyStmt(ts.handler->body, true, sema, typeSystem);
+    walkBodyStmt(ts.finallyBlock, true, sema, typeSystem);
 }
 
 // An object literal: walk the property values, then register the shape.
-void walkObjectLiteralModels(const ObjectLiteral& lit, const SemaResult& sema) {
+void walkObjectLiteralModels(const ObjectLiteral& lit,
+                              const SemaResult& sema, TypeSystem typeSystem) {
     for (const auto& p : lit.properties) {
-        if (p) walkExprPtr(p->value, sema);
+        if (p) walkExprPtr(p->value, sema, typeSystem);
     }
     registerLiteralModel(lit, sema);
 }
 
 }  // namespace
 
-void walkStmtModels(const Stmt& s, const SemaResult& sema, bool local) {
+void walkStmtModels(const Stmt& s, const SemaResult& sema, bool local,
+                    TypeSystem typeSystem) {
     switch (s.kind) {
         case NodeKind::BlockStatement:
-            walkStmtList(static_cast<const BlockStatement&>(s).body, sema, true);
+            walkStmtList(static_cast<const BlockStatement&>(s).body, sema,
+                         true, typeSystem);
             return;
         case NodeKind::expressionstatement:
             walkExprPtr(static_cast<const expressionstatement&>(s).expression,
-                        sema);
+                        sema, typeSystem);
             return;
         case NodeKind::VariableDeclaration:
             walkVariableDeclModels(static_cast<const VariableDeclaration&>(s),
-                                   sema);
+                                   sema, typeSystem);
             return;
         case NodeKind::IfStatement:
-            walkIfModels(static_cast<const IfStatement&>(s), sema);
+            walkIfModels(static_cast<const IfStatement&>(s), sema,
+                         typeSystem);
             return;
         case NodeKind::WhileStatement: {
             const auto& ws = static_cast<const WhileStatement&>(s);
-            walkExprPtr(ws.condition, sema);
-            walkBodyStmt(ws.body, true, sema);
+            walkExprPtr(ws.condition, sema, typeSystem);
+            walkBodyStmt(ws.body, true, sema, typeSystem);
             return;
         }
         case NodeKind::DoWhileStatement: {
             const auto& dw = static_cast<const DoWhileStatement&>(s);
-            walkBodyStmt(dw.body, true, sema);
-            walkExprPtr(dw.condition, sema);
+            walkBodyStmt(dw.body, true, sema, typeSystem);
+            walkExprPtr(dw.condition, sema, typeSystem);
             return;
         }
         case NodeKind::ForStatement:
-            walkForModels(static_cast<const ForStatement&>(s), sema);
+            walkForModels(static_cast<const ForStatement&>(s), sema,
+                         typeSystem);
             return;
         case NodeKind::ForOfStatement: {
             const auto& f = static_cast<const ForOfStatement&>(s);
-            walkExprPtr(f.right, sema);
-            walkBodyStmt(f.body, true, sema);
+            walkExprPtr(f.right, sema, typeSystem);
+            walkBodyStmt(f.body, true, sema, typeSystem);
             return;
         }
         case NodeKind::ForInStatement: {
             const auto& f = static_cast<const ForInStatement&>(s);
-            walkExprPtr(f.right, sema);
-            walkBodyStmt(f.body, true, sema);
+            walkExprPtr(f.right, sema, typeSystem);
+            walkBodyStmt(f.body, true, sema, typeSystem);
             return;
         }
         case NodeKind::ReturnStatement:
-            walkExprPtr(static_cast<const ReturnStatement&>(s).argument, sema);
+            walkExprPtr(static_cast<const ReturnStatement&>(s).argument, sema,
+                         typeSystem);
             return;
         case NodeKind::ThrowStatement:
-            walkExprPtr(static_cast<const ThrowStatement&>(s).argument, sema);
+            walkExprPtr(static_cast<const ThrowStatement&>(s).argument, sema,
+                         typeSystem);
             return;
         case NodeKind::TryStatement:
-            walkTryModels(static_cast<const TryStatement&>(s), sema);
+            walkTryModels(static_cast<const TryStatement&>(s), sema,
+                          typeSystem);
             return;
         case NodeKind::SwitchStatement:
-            walkSwitchModels(static_cast<const SwitchStatement&>(s), sema);
+            walkSwitchModels(static_cast<const SwitchStatement&>(s), sema,
+                            typeSystem);
             return;
         case NodeKind::LabeledStatement:
-            walkBodyStmt(static_cast<const LabeledStatement&>(s).body, true, sema);
+            walkBodyStmt(static_cast<const LabeledStatement&>(s).body, true, sema,
+                         typeSystem);
             return;
         case NodeKind::FunctionDeclaration: {
             const auto& fd = static_cast<const FunctionDeclaration&>(s);
-            walkFunctionModels(fd.params, fd.returnType, fd.body, sema);
+            walkFunctionModels(fd.params, fd.returnType, fd.body, sema,
+                              typeSystem);
             return;
         }
         case NodeKind::ClassDeclaration:
@@ -388,12 +427,12 @@ void walkStmtModels(const Stmt& s, const SemaResult& sema, bool local) {
             // function-local (its struct is emitted inline in that body), a
             // class at the unit's root is a namespace-scope struct.
             registerClassTree(static_cast<const ClassDeclaration&>(s), local,
-                              sema);
+                              sema, typeSystem);
             return;
         case NodeKind::ExportDeclaration: {
             const auto& ed = static_cast<const ExportDeclaration&>(s);
-            walkBodyStmt(ed.declaration, local, sema);;
-            walkExprPtr(ed.defaultExpr, sema);
+            walkBodyStmt(ed.declaration, local, sema, typeSystem);
+            walkExprPtr(ed.defaultExpr, sema, typeSystem);
             return;
         }
         default:
@@ -403,81 +442,92 @@ void walkStmtModels(const Stmt& s, const SemaResult& sema, bool local) {
 
 // ---- the expression walker ---------------------------------------------------
 
-void walkExprModels(const Expr* e, const SemaResult& sema) {
+void walkExprModels(const Expr* e, const SemaResult& sema,
+                    TypeSystem typeSystem) {
     if (e == nullptr) return;
     switch (e->kind) {
         case NodeKind::TemplateLiteral:
-            walkExprList(static_cast<const TemplateLiteral&>(*e).expressions, sema);
+            walkExprList(static_cast<const TemplateLiteral&>(*e).expressions,
+                         sema, typeSystem);
             return;
         case NodeKind::ArrayLiteral:
-            walkExprList(static_cast<const ArrayLiteral&>(*e).elements, sema);
+            walkExprList(static_cast<const ArrayLiteral&>(*e).elements, sema,
+                         typeSystem);
             return;
         case NodeKind::ObjectLiteral:
-            walkObjectLiteralModels(static_cast<const ObjectLiteral&>(*e), sema);
+            walkObjectLiteralModels(static_cast<const ObjectLiteral&>(*e), sema,
+                                   typeSystem);
             return;
         case NodeKind::MemberExpr:
-            walkExprPtr(static_cast<const MemberExpr&>(*e).object, sema);
+            walkExprPtr(static_cast<const MemberExpr&>(*e).object, sema,
+                         typeSystem);
             return;
         case NodeKind::IndexExpr: {
             const auto& ix = static_cast<const IndexExpr&>(*e);
-            walkExprPair(ix.object, ix.index, sema);
+            walkExprPair(ix.object, ix.index, sema, typeSystem);
             return;
         }
         case NodeKind::CallExpr: {
             const auto& c = static_cast<const CallExpr&>(*e);
-            walkExprPtr(c.callee, sema);
-            walkExprList(c.arguments, sema);
+            walkExprPtr(c.callee, sema, typeSystem);
+            walkExprList(c.arguments, sema, typeSystem);
             return;
         }
         case NodeKind::NewExpr: {
             const auto& n = static_cast<const NewExpr&>(*e);
-            walkExprPtr(n.callee, sema);
-            walkExprList(n.arguments, sema);
+            walkExprPtr(n.callee, sema, typeSystem);
+            walkExprList(n.arguments, sema, typeSystem);
             return;
         }
         case NodeKind::UnaryExpr:
-            walkExprPtr(static_cast<const UnaryExpr&>(*e).operand, sema);
+            walkExprPtr(static_cast<const UnaryExpr&>(*e).operand, sema,
+                         typeSystem);
             return;
         case NodeKind::UpdateExpr:
-            walkExprPtr(static_cast<const UpdateExpr&>(*e).operand, sema);
+            walkExprPtr(static_cast<const UpdateExpr&>(*e).operand, sema,
+                         typeSystem);
             return;
         case NodeKind::AwaitExpr:
-            walkExprPtr(static_cast<const AwaitExpr&>(*e).argument, sema);
+            walkExprPtr(static_cast<const AwaitExpr&>(*e).argument, sema,
+                         typeSystem);
             return;
         case NodeKind::SpreadElement:
-            walkExprPtr(static_cast<const SpreadElement&>(*e).argument, sema);
+            walkExprPtr(static_cast<const SpreadElement&>(*e).argument, sema,
+                         typeSystem);
             return;
         case NodeKind::WeakExpr:
-            walkExprPtr(static_cast<const WeakExpr&>(*e).value, sema);
+            walkExprPtr(static_cast<const WeakExpr&>(*e).value, sema,
+                         typeSystem);
             return;
         case NodeKind::BinaryExpr: {
             const auto& b = static_cast<const BinaryExpr&>(*e);
-            walkExprPair(b.left, b.right, sema);
+            walkExprPair(b.left, b.right, sema, typeSystem);
             return;
         }
         case NodeKind::LogicalExpr: {
             const auto& l = static_cast<const LogicalExpr&>(*e);
-            walkExprPair(l.left, l.right, sema);
+            walkExprPair(l.left, l.right, sema, typeSystem);
             return;
         }
         case NodeKind::ConditionalExpr: {
             const auto& c = static_cast<const ConditionalExpr&>(*e);
-            walkExprPtr(c.condition, sema);
-            walkExprPair(c.whenTrue, c.whenFalse, sema);
+            walkExprPtr(c.condition, sema, typeSystem);
+            walkExprPair(c.whenTrue, c.whenFalse, sema, typeSystem);
             return;
         }
         case NodeKind::AssignmentExpr: {
             const auto& a = static_cast<const AssignmentExpr&>(*e);
-            walkExprPair(a.target, a.value, sema);
+            walkExprPair(a.target, a.value, sema, typeSystem);
             return;
         }
         case NodeKind::RangeExpr: {
             const auto& r = static_cast<const RangeExpr&>(*e);
-            walkExprPair(r.start, r.end, sema);
+            walkExprPair(r.start, r.end, sema, typeSystem);
             return;
         }
         case NodeKind::ArrowFunction:
-            walkArrowModels(static_cast<const ArrowFunction&>(*e), sema);
+            walkArrowModels(static_cast<const ArrowFunction&>(*e), sema,
+                          typeSystem);
             return;
         default:
             return;
@@ -486,14 +536,17 @@ void walkExprModels(const Expr* e, const SemaResult& sema) {
 
 namespace {
 
-void walkArrowModels(const ArrowFunction& a, const SemaResult& sema) {
-    walkParams(a.params, sema);
-    if (a.returnType) (void)modelTypeFromTypeNode(*a.returnType);
+void walkArrowModels(const ArrowFunction& a, const SemaResult& sema,
+                     TypeSystem typeSystem) {
+    walkParams(a.params, sema, typeSystem);
+    if (a.returnType) (void)modelTypeFromTypeNode(*a.returnType, typeSystem);
     if (a.body == nullptr) return;
     if (a.expressionBody) {
-        walkExprModels(dynamic_cast<const Expr*>(a.body.get()), sema);
+        walkExprModels(dynamic_cast<const Expr*>(a.body.get()), sema,
+                       typeSystem);
     } else {
-        walkStmtModels(static_cast<const Stmt&>(*a.body), sema, true);
+        walkStmtModels(static_cast<const Stmt&>(*a.body), sema, true,
+                       typeSystem);
     }
 }
 

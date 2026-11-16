@@ -402,7 +402,7 @@ std::optional<Type> Generator::typeOfNode(const TypeNode& tn) const {
     // the shape (and its wrapper) is registered even when sema's published
     // type is the one that answers the annotation.
     if (tn.kind == NodeKind::NamedType) {
-        (void)detail::instantiateGenericInterface(tn);
+        (void)detail::instantiateGenericInterface(tn, options_.typeSystem);
     }
     std::optional<Type> mapped;
     if (const Type* published = sema_.typeOf(tn.nodeId)) {

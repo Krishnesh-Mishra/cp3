@@ -1,0 +1,28 @@
+import console from "std/console";
+
+// The same native-returning interface method dispatched through an array of
+// interface values: every element calls its wrapper thunk, and the native
+// results sum without a number round-trip.
+interface Drawn {
+    area(): i64;
+}
+
+class Square implements Drawn {
+    area(): i64 { return 42; }
+}
+
+class Small implements Drawn {
+    area(): i64 { return 8; }
+}
+
+// One loop over the interface array; the accumulator stays a native i64.
+function drawAll(a: Drawn[]): i64 {
+    let total: i64 = 0;
+    for (const shape of a) {
+        total = total + shape.area();
+    }
+    return total;
+}
+
+const shapes: Drawn[] = [new Square(), new Small(), new Square()];
+console.log(`${drawAll(shapes)}`);

@@ -1,0 +1,17 @@
+import console from "std/console";
+
+// An interface method may return a native value: the function-pointer thunk
+// carries `std::int64_t` end to end instead of round-tripping through a
+// double, and the dispatch call site reports nothing.
+interface Drawn {
+    area(): i64;
+}
+
+class Square implements Drawn {
+    area(): i64 { return 42; }
+}
+
+// The call goes through the interface wrapper's function pointer, the same
+// dispatch a C++ virtual table performs.
+const first: Drawn = new Square();
+console.log(`${first.area()}`);

@@ -100,8 +100,8 @@ CppInfo classifyObjectModel(const Type& t) {
     return info;
 }
 
-Type modelTypeFromTypeNode(const TypeNode& tn) {
-    if (auto t = typeFromTypeNode(tn)) return *t;
+Type modelTypeFromTypeNode(const TypeNode& tn, TypeSystem typeSystem) {
+    if (auto t = typeFromTypeNode(tn, typeSystem)) return *t;
     return Type::unknown();
 }
 

@@ -274,7 +274,8 @@ std::string Generator::emitModelNew(const NewExpr& n) {
     std::vector<Type> instArgs;
     if (cm->decl) {
         for (const auto& ta : n.typeArgs) {
-            if (ta) instArgs.push_back(modelTypeFromTypeNode(*ta));
+            if (ta) instArgs.push_back(modelTypeFromTypeNode(*ta,
+                                                         options_.typeSystem));
         }
         // A bare `new Box(...)` fills from the declared parameter defaults
         // (`<T = U>`), so the struct spelling is stable instead of rejected.
@@ -284,14 +285,16 @@ std::string Generator::emitModelNew(const NewExpr& n) {
              ++i) {
             const auto& tp = cm->decl->typeParams[i];
             if (tp && tp->defaultType) {
-                instArgs.push_back(modelTypeFromTypeNode(*tp->defaultType));
+                instArgs.push_back(modelTypeFromTypeNode(*tp->defaultType,
+                                                  options_.typeSystem));
             } else {
                 instArgs.push_back(Type::undefined());
             }
         }
     } else {
         for (const auto& ta : n.typeArgs) {
-            if (ta) instArgs.push_back(modelTypeFromTypeNode(*ta));
+            if (ta) instArgs.push_back(modelTypeFromTypeNode(*ta,
+                                                         options_.typeSystem));
         }
     }
     std::string error;

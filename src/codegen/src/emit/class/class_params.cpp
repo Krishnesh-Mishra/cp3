@@ -44,7 +44,7 @@ std::vector<std::string> Generator::classRestArgs(
     if (restAt >= params->size()) return args;
     const Parameter* rp = (*params)[restAt].get();
     if (rp == nullptr || !rp->type) return args;
-    const Type t = modelTypeFromTypeNode(*rp->type);
+    const Type t = modelTypeFromTypeNode(*rp->type, options_.typeSystem);
     if (t.kind != TypeKind::Array || t.parts.empty()) return args;
     const CppInfo ec = classify(t.parts.front());
     if (!ec.representable || ec.shape == Shape::Void) return args;
