@@ -950,6 +950,37 @@ void Analyzer::checkClassHierarchy(const ClassDeclaration& c,
                        "' cannot override a member of a different kind");
         }
     }
+    // A redeclared member must have a type compatible with the inherited
+    // declaration - the member is the same slot the base class names, so a
+    // `size: number` base member is not satisfied by a derived `size: string`.
+    for (const ClassMemberInfo& m : ci.members) {
+        if (m.type.isUnknown() || isAmbientType(m.type)) continue;
+        const ClassMemberInfo* inherited = nullptr;
+        {
+            const ClassInfo* k = base;
+            int guard = 0;
+            while (k && guard++ < 64) {
+                const ClassMemberInfo* found = findClassMember(*k, m.name);
+                if (found != nullptr) {
+                    inherited = found;
+                    break;
+                }
+                k = k->baseName.empty() ? nullptr : findClass(k->baseName);
+            }
+        }
+        if (inherited == nullptr || inherited->type.isUnknown() ||
+            isAmbientType(inherited->type) || inherited->isMethod != m.isMethod) {
+            continue;
+        }
+        if (!wouldAccept(m.type, inherited->type, false)) {
+            report(diagcode::kTypeMismatch, m.span,
+                   "type mismatch: member '" + m.name + "' of class '" +
+                       ci.name + "' has type '" + pretty(m.type) +
+                       "' but the inherited member of base class '" +
+                       (base != nullptr ? base->name : std::string()) +
+                       "' has type '" + pretty(inherited->type) + "'");
+        }
+    }
 }
 
 void Analyzer::checkClassBodies(ClassDeclaration& c) {
@@ -1212,6 +1243,29 @@ Type Analyzer::classMemberType(const ClassMemberInfo& m) const {
     // at the call site (the marker the variadic array mutators use, scopes.h).
     if (m.sig.rest) t.name = kVariadicOptionalTailLabel;
     return t;
+}
+
+bool Analyzer::staticLikeReceiver(const Type& cls, const Expr& receiver) {
+    if (cls.kind != TypeKind::Class) return false;
+    if (receiver.kind == NodeKind::ThisExpr) return false;
+    if (receiver.kind != NodeKind::Identifier) return false;
+    const auto& id = static_cast<const Identifier&>(receiver);
+    if (id.name == "super") return true;
+    const ClassInfo* ci = findClass(cls.name);
+    if (ci == nullptr) return false;
+    Binding b;
+    if (!lookup(id.name, b)) return false;
+    return b.declNodeId == ci->declNodeId;
+}
+
+// True when `name` is a static member of `className` (any unresolved class
+// reports false).
+bool Analyzer::classStaticMember(const std::string& className,
+                                 const std::string& name) const {
+    const ClassInfo* ci = findClass(className);
+    if (ci == nullptr) return false;
+    const ClassMemberInfo* m = findClassMemberChain(*ci, name, nullptr);
+    return m != nullptr && m->isStatic;
 }
 
 Type Analyzer::userClassMember(const Type& cls, const std::string& prop,

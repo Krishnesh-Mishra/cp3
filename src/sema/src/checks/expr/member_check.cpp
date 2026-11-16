@@ -37,6 +37,18 @@ Type Analyzer::inferMember(MemberExpr& m) {
         }
     }
     Type ot = m.object ? inferExpr(*m.object) : Type::unknown();
+    // A static member is the class's own member; reaching it through an
+    // instance receiver is not allowed (`m.staticM` is rejected, `M.staticM`
+    // is the class reference access).
+    if (m.object && ot.kind == TypeKind::Class &&
+        classStaticMember(ot.name, m.property) &&
+        !staticLikeReceiver(ot, *m.object)) {
+        report(diagcode::kMemberNotFound, m.span,
+               "property '" + m.property + "' of class '" + ot.name +
+                   "' is static; access it as '" + ot.name + "." +
+                   m.property + "'");
+        return Type::unknown();
+    }
     // spec 11: reading a member through a weak field that has not been
     // narrowed is a possible-undefined use (`c.parent.name` where `parent` is
     // weak). Keyed on node identity, so a read through a local

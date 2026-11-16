@@ -1,0 +1,7 @@
+export function basename(name: string): string {
+    return name;
+}
+
+export function joinPath(a: string, b: string): string {
+    return a + "/" + b;
+}

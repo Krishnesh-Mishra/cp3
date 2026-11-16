@@ -1,0 +1,6 @@
+import console from "std/console";
+
+interface Twin { a: number; }
+interface Twin { b: number; }
+
+console.log("done");

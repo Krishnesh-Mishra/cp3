@@ -1,10 +1,10 @@
-# =============================================================================
+﻿# =============================================================================
 # cp3_sema - AST -> diagnostics / resolved semantics.
 #
 # OWNERSHIP: sema owner. Keep the frozen `SemanticAnalyzer` boundary declared in
 # `include/cp3/sema.hpp`.
 #
-# ADDING A SOURCE FILE: append one line to `cp3_sema_sources` below (STYLE.md §8
+# ADDING A SOURCE FILE: append one line to `cp3_sema_sources` below (STYLE.md Â§8
 # lists the target decomposition: semantic_analyzer.cpp plus checks/*.cpp and
 # support/*.cpp; private headers live under src/detail/). Since D72 the std
 # family slices live under ../std/<family>/ and keep their phase names
@@ -30,6 +30,7 @@ set(cp3_sema_sources
     src/checks/call/generic_check.cpp
     src/checks/expr/ops_check.cpp
     src/checks/type/native_types.cpp
+    src/checks/stmt/unused_import_check.cpp
     src/checks/type/native_check.cpp
     src/checks/stmt/stmt_check.cpp
     src/checks/expr/flow_check.cpp

@@ -127,6 +127,7 @@ void Analyzer::run(Program& program) {
     computeCycleComponents();
     computeCycleCapable();
     checkInterfaceConformance();
+    checkUnusedImports(program);
 }
 
 // =============================================================================

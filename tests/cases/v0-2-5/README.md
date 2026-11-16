@@ -73,6 +73,10 @@ pass; kept here so the history stays readable.
 | `object_to_alias_array_cast` | a cast with no C++ conversion is diagnosed by the checker instead of failing in the C++ step | fixed in 10067bbc |
 | `typeof_mixed_scalar_nullish` | `typeof v === "string"` narrows `number \| string \| undefined` | fixed in 0dd511ac |
 | imported_unknown_member | a member the imported class does not declare is reported (the imported class is not opaque) | ok |
+| unused_import | an unused named import is reported at its specifier's span | fixed in b39f9192 |
+| extends_class_member_type_mismatch | a subclass redeclares a member with an incompatible type (string for base's number) | fixed in b39f9192 |
+| static_member_via_instance | a static member is rejected through an instance receiver | fixed in b39f9192 |
+| duplicate_interface_declaration | the same interface name twice in one file is CP3303 | fixed in b39f9192 |
 | implements_class_member_type_mismatch | a class implementing an interface declares a member of the wrong type | fixed in b39f9192 |
 | implements_class_member_missing | a class implementing an interface lacks a member the interface requires | fixed in b39f9192 |
 | generic_call_constraint_violation | an INFERRED type binding violates the declared extends bound at a call site | fixed in b39f9192 |

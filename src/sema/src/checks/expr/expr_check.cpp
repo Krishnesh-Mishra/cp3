@@ -109,6 +109,7 @@ Type Analyzer::inferTemplate(TemplateLiteral& tl) {
 }
 
 Type Analyzer::inferIdentifier(Identifier& id) {
+    usedNames_.insert(id.name);
     if (id.name == "arguments") {
         reportBannedArguments(id.span);
         return withType(id, ambient());

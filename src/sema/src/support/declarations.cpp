@@ -468,6 +468,27 @@ std::string Analyzer::importedName(const std::string& local) const {
 }
 
 void Analyzer::registerInterface(InterfaceDeclaration& i) {
+    // A second interface declaration reusing the same name in one file is a
+    // duplicate declaration. Registration happens both through `hoistType`
+    // and through `visitInterfaceDecl`; distinguish re-registration of one
+    // AST node from two declarations by using (file, nodeId) as the key.
+    const std::string declKey =
+        std::to_string(i.nodeId) + ":" +
+        (i.span.file ? i.span.file->path : std::string());
+    if (!registeredInterfaceDecls_.insert(declKey).second) {
+        return;  // re-registration of one declaration (not a duplicate)
+    }
+    {
+        const std::string nameKey =
+            (i.span.file ? i.span.file->path : std::string());
+        const auto found = interfaceDeclsByName_.find(i.name);
+        if (found != interfaceDeclsByName_.end() && found->second == nameKey) {
+            report(diagcode::kDuplicateDeclaration, i.span,
+                   "duplicate declaration of '" + i.name + "'");
+            return;
+        }
+        interfaceDeclsByName_[i.name] = nameKey;
+    }
     std::vector<Field> fields;
     bool open = false;
     Type indexType;
@@ -649,7 +670,7 @@ Type Analyzer::substituteTypeParams(const Type& t,
 }
 
 void Analyzer::visitInterfaceDecl(InterfaceDeclaration& i) {
-    if (declaredTypes_.count(i.nodeId) == 0) registerInterface(i);
+    if (declaredTypes_.insert(i.nodeId).second) registerInterface(i);
 }
 
 void Analyzer::visitExport(ExportDeclaration& e) {

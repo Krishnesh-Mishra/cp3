@@ -49,7 +49,13 @@ void Analyzer::popScope() {
     if (!scopeRestoresFlow_.empty()) scopeRestoresFlow_.pop_back();
 }
 
-bool Analyzer::lookup(const std::string& name, Binding& out) const {
+// The `countAsUse` rule: every read-position use of a binding counts as a
+// use, but the pre-declaration lookups in `declareBinding` do not. The use
+// count feeds unused-import reporting (a name that is never read anywhere
+// in the unit's body is an unused import).
+bool Analyzer::lookup(const std::string& name, Binding& out,
+                      bool countAsUse) const {
+    if (countAsUse) usedNames_.insert(name);
     for (auto it = scopes_.rbegin(); it != scopes_.rend(); ++it) {
         const auto found = it->find(name);
         if (found != it->end()) {
@@ -296,8 +302,10 @@ void Analyzer::preRegisterImportTypes() {
                              /*publishBinding=*/false);
             }
         } else if (const auto* iface = binding.interfaceDecl) {
-            registerInterface(
-                *const_cast<InterfaceDeclaration*>(iface));
+            if (declaredTypes_.insert(iface->nodeId).second) {
+                registerInterface(
+                    *const_cast<InterfaceDeclaration*>(iface));
+            }
         } else if (const auto* alias = binding.aliasDecl) {
             if (declaredTypes_.insert(alias->nodeId).second) {
                 declareTypeAlias(*const_cast<TypeAliasDeclaration*>(
@@ -375,7 +383,7 @@ void Analyzer::overrideBinding(const std::string& name, const Type& type,
     // (and constness) so assignment targets are checked against what was
     // declared, not the narrowed view.
     Binding existing;
-    const bool had = lookup(name, existing);
+    const bool had = lookup(name, existing, /*countAsUse=*/false);
     Binding b;
     b.name = name;
     b.type = type;

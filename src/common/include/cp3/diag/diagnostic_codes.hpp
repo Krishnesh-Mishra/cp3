@@ -50,6 +50,12 @@ inline constexpr const char* kJsonParseMissingTypeArgument = "CP3208";
 inline constexpr const char* kUndefinedIdentifier = "CP3301";
 inline constexpr const char* kUndefinedType     = "CP3302";
 inline constexpr const char* kDuplicateDeclaration = "CP3303";
+// A module-level import that is never used anywhere in the module body.
+// Reported at the specifier's span when the binding name is never read
+// anywhere in the body (name-based, like the TS rule). CP3307 is the first
+// code of the names family reserved for this; the older codes (3301..3306)
+// stay as they are.
+inline constexpr const char* kUnusedImport = "CP3307";
 inline constexpr const char* kUnresolvedImport  = "CP3304";
 inline constexpr const char* kMemberNotFound    = "CP3305";
 inline constexpr const char* kUndefinedLabel    = "CP3306";

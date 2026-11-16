@@ -86,6 +86,9 @@ public:
     // Stage 1.5: a class that implements an interface must declare every
     // member the interface requires, with a type the interface accepts.
     void checkInterfaceConformance();
+    // Stage 1.7: report unused imports (CP3307) - a module's imports that
+    // were never referenced anywhere in the module body.
+    void checkUnusedImports(Program& program);
     // The whole-program reference graph behind the automatic cycle
     // collector (detail/cycle_analysis.h): the strongly connected components
     // and the cycle-capable verdict per class.
@@ -149,7 +152,8 @@ private:
     // them.
     void pushScope(bool restoreFlow = false);
     void popScope();
-    bool lookup(const std::string& name, Binding& out) const;
+    bool lookup(const std::string& name, Binding& out,
+                bool countAsUse = true) const;
     // Declares a binding in the current scope; reports CP3303 on a duplicate.
     void declareBinding(const std::string& name, const Type& type,
                         const SourceSpan& span, const BindingSpec& spec = {});
@@ -249,6 +253,14 @@ private:
         const ClassInfo& ci, const std::string& name, const ClassInfo** owner) const;
     bool classIsOrDerivesFrom(const ClassInfo& ci, const std::string& base) const;
     bool classAccessAllowed(const ClassInfo& owner, const ClassMemberInfo& m) const;
+    // True when `name` is a static member of `className` (an unresolved or
+    // unknown class reports false). Used to reject static access through an
+    // instance receiver.
+    bool classStaticMember(const std::string& className, const std::string& name) const;
+    // True when `receiver` names the class itself (the class reference),
+    // false when it's an instance or some other value. Used to gate static
+    // access through a receiver to the class's own table.
+    bool staticLikeReceiver(const Type& cls, const Expr& receiver);
     bool memberImplementedInClass(const ClassInfo& ci,
                                   const std::string& name) const;
     Type classMemberType(const ClassMemberInfo& m) const;
@@ -829,6 +841,15 @@ private:
     // User classes: member tables, declaration guard, class stack, weak reads;
     // `weakFieldHit_` is set by userClassMember and consumed by inferMember.
     std::unordered_map<std::string, ClassInfo> classes_;
+    // The union of every name the body inspected at a reference position,
+    // for unused-import reporting. Fed by lookup. Mutable so `lookup` (a
+    // const observer of the scope table) can record usages as it probes.
+    mutable std::unordered_set<std::string> usedNames_;
+    // For duplicate-interface detection: the set of declarations already
+    // registered (skip them on re-registration) and the first file that
+    // surfaced each interface name (flag a second registration in that file).
+    std::unordered_set<std::string> registeredInterfaceDecls_;
+    std::unordered_map<std::string, std::string> interfaceDeclsByName_;
     std::unordered_set<std::uint32_t> classResolved_;
     std::vector<std::string> classStack_;
     std::unordered_set<std::uint32_t> weakReads_;

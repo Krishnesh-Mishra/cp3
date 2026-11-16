@@ -523,6 +523,7 @@ Type Analyzer::resolveGenericInterface(const std::string& name,
 }
 
 Type Analyzer::resolveNamedType(NamedType& nt) {
+    if (!nt.name.empty()) usedNames_.insert(nt.name);
     // Type arguments are resolved eagerly (both for their own diagnostics and
     // for the generic types M1 does model: `Promise<T>`, the concurrency
     // channel types and user classes).

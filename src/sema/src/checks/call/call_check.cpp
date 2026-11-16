@@ -32,6 +32,7 @@ Type Analyzer::inferCall(CallExpr& call) {
     if (call.callee && call.callee->kind == NodeKind::Identifier) {
         auto& id = static_cast<Identifier&>(*call.callee);
         if (id.name == "super") return inferSuperCall(call, id);
+        usedNames_.insert(id.name);
         Binding b;
         if (!lookup(id.name, b)) {
             reportUndefinedCall(call, id);
