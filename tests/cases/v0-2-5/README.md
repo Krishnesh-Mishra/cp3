@@ -72,7 +72,11 @@ pass; kept here so the history stays readable.
 | `resolver_assignment_to_member` | the `Promise.withResolvers<T>()` resolver is assignable to a `(value: T) => undefined` member | fixed in 4ddb0b13 |
 | `object_to_alias_array_cast` | a cast with no C++ conversion is diagnosed by the checker instead of failing in the C++ step | fixed in 10067bbc |
 | `typeof_mixed_scalar_nullish` | `typeof v === "string"` narrows `number \| string \| undefined` | fixed in 0dd511ac |
-| `imported_unknown_member` | a member the imported class does not declare is reported (the imported class is not opaque) | ok |
+| imported_unknown_member | a member the imported class does not declare is reported (the imported class is not opaque) | ok |
+| implements_class_member_type_mismatch | a class implementing an interface declares a member of the wrong type | fixed in b39f9192 |
+| implements_class_member_missing | a class implementing an interface lacks a member the interface requires | fixed in b39f9192 |
+| generic_call_constraint_violation | an INFERRED type binding violates the declared extends bound at a call site | fixed in b39f9192 |
+| duplicate_function_declaration | the same function parameter signature twice is a duplicate (spec §17 overload sets with different parameters stay legal) | fixed in b39f9192 |
 
 ## Notes for whoever fixes these
 
