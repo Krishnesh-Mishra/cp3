@@ -659,6 +659,49 @@ void appendImportedTypeCandidates(
     }
 }
 
+// The innermost block statement that encloses `offset`, or nullptr. A nested
+// block is always smaller than the block it sits in, so the minimum-size one
+// is the innermost.
+const BlockStatement* innermostBlockAt(const AnalyzedDocument& document,
+                                       std::uint32_t offset) {
+    if (document.entry == nullptr || document.entry->ast == nullptr) {
+        return nullptr;
+    }
+    const BlockStatement* best = nullptr;
+    forEachNode(*document.entry->ast, [&](const Node& node) {
+        if (node.kind != NodeKind::BlockStatement) return;
+        if (!node.span.valid() || node.span.file != document.file) return;
+        if (offset < node.span.begin.offset || offset > node.span.end.offset) {
+            return;
+        }
+        const auto& block = static_cast<const BlockStatement&>(node);
+        if (best == nullptr || block.span.length() < best->span.length()) {
+            best = &block;
+        }
+    });
+    return best;
+}
+
+// True when the innermost block around the cursor is the body of a `try`
+// statement (not a nested block inside it, not a catch clause): the statement
+// being typed sits in the try's body, where the try's `catch`/`finally`
+// clauses are the way out of it.
+bool directlyInsideTryBlock(const AnalyzedDocument& document,
+                            std::uint32_t offset) {
+    const BlockStatement* block = innermostBlockAt(document, offset);
+    if (block == nullptr) return false;
+    bool found = false;
+    forEachNode(*document.entry->ast, [&](const Node& node) {
+        if (found || node.kind != NodeKind::TryStatement) return;
+        const auto& statement = static_cast<const TryStatement&>(node);
+        if (statement.tryBlock != nullptr &&
+            statement.tryBlock->nodeId == block->nodeId) {
+            found = true;
+        }
+    });
+    return found;
+}
+
 const SymbolInfo* completionSymbol(const AnalyzedDocument& document,
                                   const std::string& name,
                                   std::uint32_t offset) {
@@ -730,6 +773,14 @@ bool keywordMatchesExpectedType(const std::string& keyword,
                expected.isError();
     }
     return true;
+}
+
+// A function-typed value stays in an argument slot of scalar type: passing a
+// bare function reference is not the checker's idea of a fit, but the popup's
+// job is to witness the names in scope - a call argument typed `number` still
+// wants to offer the enclosing function for recursion (`rec(__CURSOR__)`).
+bool isFunctionValued(const Type& type) {
+    return type.kind == TypeKind::Function;
 }
 
 bool candidateFitsExpectedType(const Type& source, const Type& expected) {
@@ -1023,6 +1074,7 @@ std::vector<lsp::CompletionCandidate> generalCandidates(
                                    document, candidate.label, offset);
                                if (const std::optional<Type> builtin =
                                        builtinResultType(candidate.label)) {
+                                   if (isFunctionValued(*builtin)) return false;
                                    return !candidateFitsExpectedType(*builtin,
                                                                      expected);
                                }
@@ -1030,6 +1082,7 @@ std::vector<lsp::CompletionCandidate> generalCandidates(
                                    symbol->type.isError()) {
                                    return false;
                                }
+                               if (isFunctionValued(symbol->type)) return false;
                                return !candidateFitsExpectedType(symbol->type,
                                                                  expected);
                            }),
@@ -1047,9 +1100,24 @@ std::vector<lsp::CompletionCandidate> generalCandidates(
                       "declare an interface");
     }
     // 6. The keywords that may legally appear here, last.
-    for (const std::string& keyword :
-         legalKeywords(position, context.awaitAllowed)) {
-        if (!contextualKeywordAllowed(document, offset, keyword)) continue;
+    std::vector<std::string> keywords =
+        legalKeywords(position, context.awaitAllowed);
+    // A statement boundary directly inside a `try` body may attach the try's
+    // cleanup clauses: the user goes there to finish the last statement and
+    // then reaches for `catch`/`finally`. The post-brace attachment form is
+    // the TryBlock position handled by legalKeywords.
+    const bool directTryBody =
+        position == CompletionPosition::StatementStart &&
+        directlyInsideTryBlock(document, offset);
+    if (directTryBody) {
+        keywords.push_back("catch");
+        keywords.push_back("finally");
+    }
+    for (const std::string& keyword : keywords) {
+        if (!contextualKeywordAllowed(document, offset, keyword) &&
+            !(directTryBody && (keyword == "catch" || keyword == "finally"))) {
+            continue;
+        }
         if (context.expectedType != nullptr &&
             !keywordMatchesExpectedType(keyword, *context.expectedType,
                                         context.awaitAllowed)) {
