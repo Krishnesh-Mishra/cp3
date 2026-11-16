@@ -9,9 +9,12 @@
 // unit; `Generator::emitProgramUnit` copies the per-unit import map into that
 // unit's generator, where an imported name is looked up before anything else.
 //
-// Only `ModuleResolution::Local` imports are linked: std/package/native/cpp
+// `ModuleResolution::Local` and `ModuleResolution::Package` imports are
+// linked: the latter are the installed package's authored sources, which
+// lower to ordinary C++ namespaces exactly like local modules (the package
+// manager already resolved the specifier to a concrete file). std/native/cpp
 // specifiers keep their current lowering (a lowered intrinsic, or a use-site
-// error when no lowering exists). A local form this milestone cannot lower to
+// error when no lowering exists). A module form this milestone cannot lower to
 // a C++ name (a namespace import, a namespace re-export, an anonymous default
 // export, a type-only export) gets an empty `cpp` plus a `miss` reason: the
 // name itself stays quiet until it is actually used, then reports an
@@ -70,8 +73,8 @@ struct ProgramLink {
 
 // Builds the link table for `graph`: every unit listed in `units` gets a
 // surface (recursing through `export * from` / `export { x } from` chains,
-// cycles yielding partial surfaces) and every local import of every unit is
-// resolved against the surface of the unit it points to.
+// cycles yielding partial surfaces) and every local or package import of
+// every unit is resolved against the surface of the unit it points to.
 ProgramLink buildProgramLink(const ModuleGraph& graph,
                              const std::vector<CheckedModuleUnit>& units);
 
