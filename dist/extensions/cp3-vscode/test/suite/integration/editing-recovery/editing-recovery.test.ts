@@ -1,10 +1,17 @@
 // Integration / editing: diagnostics appear then clear as the file is fixed
 import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
-import { cleanupFixtures, ensureCompilerConfigured, writeWorkspaceCase } from "../../harness";
+import { cleanupFixtures, ensureCompilerConfigured, ensureServerStarted, writeWorkspaceCase } from "../../harness";
 
 suite("Integration: editing + diagnostics recovery", () => {
     suiteTeardown(() => cleanupFixtures());
+    // The shared drivers warm the server before their first fixture; this
+    // suite opens its fixtures directly, so it has to do the same or the
+    // first case pays server activation inside its 30s diagnostic budget.
+    suiteSetup(async function () {
+        this.timeout(90_000);
+        await ensureServerStarted();
+    });
 
     const cases = [
         { name: "fixing a const rebinding clears its diagnostic", broken: "const stable = 1;\nstable = 2;\n", fixed: "const stable = 1;\nconst after = stable + 1;\n" },
