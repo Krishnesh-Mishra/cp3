@@ -26,6 +26,7 @@
 //     behavior, so the pinned signature cases pass unchanged.
 // =============================================================================
 #include "detail/analyzer.h"
+#include "detail/std_tables.hpp"
 
 #include <optional>
 #include <string>
@@ -199,6 +200,28 @@ StdMemberDoc stdNamespaceMemberDoc(const std::string& ns,
     return StdMemberDoc{};
 }
 
+// The boolean builtin value surface (TS/JS parity: bool.toString()).
+// Boolean is the root Boolean primitive in cp3; its value type names are
+// `bool`/`boolean`. Kept deliberately small — boolean receivers have no
+// other members.
+namespace {
+const DocRow kBooleanMemberRows[] = {
+    {"toString", "toString(): string",
+     "Returns the string form of the boolean (`true` or `false`)."},
+};
+}  // namespace
+std::vector<std::string> stdBooleanMemberNames() {
+    return {"toString"};
+}
+StdMemberDoc stdBooleanMemberDoc(const std::string& member) {
+    for (const DocRow& row : kBooleanMemberRows) {
+        if (member == row.name) {
+            return StdMemberDoc{row.signature, row.body};
+        }
+    }
+    return StdMemberDoc{};
+}
+
 std::vector<std::string> stdNamespaceMemberArgumentValues(
     const std::string& ns, const std::string& member,
     std::size_t argumentIndex) {
@@ -216,6 +239,7 @@ StdMemberDoc stdInstanceMemberDoc(const std::string& family,
     if (family == "Date") return dateInstanceMemberDoc(member);
     if (family == "Stopwatch") return timeInstanceMemberDoc(member);
     if (family == "Number") return numberMemberDoc(member);
+    if (family == "Boolean") return stdBooleanMemberDoc(member);
     if (family == "Map") return collectionsMemberDoc("Map", member);
     if (family == "Set") return collectionsMemberDoc("Set", member);
     if (family == "LRUCache") return collectionsMemberDoc("LRUCache", member);
@@ -243,6 +267,7 @@ std::vector<std::string> stdInstanceMemberNames(const std::string& family) {
     if (family == "Date") return dateInstanceMemberNames();
     if (family == "Stopwatch") return timeInstanceMemberNames();
     if (family == "Number") return numberMemberNames();
+    if (family == "Boolean") return stdBooleanMemberNames();
     if (family == "Map") return collectionsMemberNames("Map");
     if (family == "Set") return collectionsMemberNames("Set");
     if (family == "LRUCache") return collectionsMemberNames("LRUCache");

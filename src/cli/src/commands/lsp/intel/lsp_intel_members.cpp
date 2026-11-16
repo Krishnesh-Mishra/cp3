@@ -256,6 +256,12 @@ std::vector<lsp::CompletionCandidate> knownReceiverCandidates(
             for (const std::string& name : stdInstanceMemberNames("Number")) {
                 appendUnique(names, name);
             }
+        } else if (receiverType->kind == TypeKind::Boolean) {
+            // `boolean` has a closed std surface (toString), mirroring
+            // number/string.
+            for (const std::string& name : stdInstanceMemberNames("Boolean")) {
+                appendUnique(names, name);
+            }
         } else if (receiverType->kind == TypeKind::Class) {
             for (const std::string& name :
                  stdInstanceMemberNames(receiverType->name)) {
@@ -293,6 +299,9 @@ std::vector<lsp::CompletionCandidate> knownReceiverCandidates(
         } else if (receiverType != nullptr &&
                    receiverType->kind == TypeKind::Number) {
             signature = stdInstanceMemberDoc("Number", name).signature;
+        } else if (receiverType != nullptr &&
+                   receiverType->kind == TypeKind::Boolean) {
+            signature = stdInstanceMemberDoc("Boolean", name).signature;
         } else if (receiverType != nullptr &&
                    receiverType->kind == TypeKind::Array) {
             signature = stdArrayMemberDoc(name).signature;
@@ -349,6 +358,11 @@ std::vector<std::string> candidateNames(const AnalyzedDocument& document,
     // receiver whose type the checker could not resolve).
     if (receiverType != nullptr && receiverType->kind == TypeKind::Number) {
         for (const std::string& name : stdInstanceMemberNames("Number")) {
+            appendUnique(names, name);
+        }
+    } else if (receiverType != nullptr &&
+               receiverType->kind == TypeKind::Boolean) {
+        for (const std::string& name : stdInstanceMemberNames("Boolean")) {
             appendUnique(names, name);
         }
     } else if (receiverType != nullptr && receiverType->kind == TypeKind::Array) {
@@ -459,7 +473,8 @@ std::vector<lsp::CompletionCandidate> memberCandidates(
     if (sourceReceiverType != nullptr &&
         (sourceReceiverType->kind == TypeKind::Array ||
          sourceReceiverType->kind == TypeKind::String ||
-         sourceReceiverType->kind == TypeKind::Number)) {
+         sourceReceiverType->kind == TypeKind::Number ||
+         sourceReceiverType->kind == TypeKind::Boolean)) {
         return knownReceiverCandidates(document, receiver, sourceReceiverType);
     }
     std::string probe = text;    probe.replace(context.receiverBegin, offset - context.receiverBegin,

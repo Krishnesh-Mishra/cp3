@@ -69,6 +69,10 @@ StdMemberDoc stdInstanceMemberDoc(const std::string& family,
 // The member names of the std VALUE surfaces (a Date instance, a Map, a Set).
 // A member that is listed here but has no documentation is a visible gap, not
 // a member that does not exist.
+// The Boolean instance surface (TS/JS parity: bool.toString()).
+std::vector<std::string> stdBooleanMemberNames();
+StdMemberDoc stdBooleanMemberDoc(const std::string& member);
+
 std::vector<std::string> stdInstanceMemberNames(const std::string& family);
 
 // The documentation of the array method surface (`length`, `push`, `map`, ...).
