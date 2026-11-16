@@ -34,7 +34,7 @@ diagnosticCases("Diagnostics: undefined variables", [
     },
     {
         name: "undefined variable in a function argument is an error",
-        source: "function bump(n: number): void {}\nbump(nope);\n",
+        source: "function bump(n: number): undefined {}\nbump(nope);\n",
         expect: [{ severity: "error", line: 2 }],
     },
     {
@@ -53,3 +53,4 @@ diagnosticCases("Diagnostics: undefined variables", [
         expect: [{ severity: "error" }],
     },
 ]);
+

@@ -61,3 +61,4 @@ typeHierarchyCases("Type hierarchy: class inheritance", [
         supertypesContains: ["Mammal"],
     },
 ]);
+

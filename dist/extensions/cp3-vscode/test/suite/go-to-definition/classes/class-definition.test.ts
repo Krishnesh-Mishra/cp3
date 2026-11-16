@@ -9,7 +9,7 @@ definitionCases("Go to definition: classes", [
     },
     {
         name: "a type annotation position jumps to the class declaration",
-        source: "class Widget {}\nfunction attach(w: __CURSOR__Widget): void {}\n",
+        source: "class Widget {}\nfunction attach(w: __CURSOR__Widget): undefined {}\n",
         expectLines: [0],
     },
     {
@@ -24,7 +24,7 @@ definitionCases("Go to definition: classes", [
     },
     {
         name: "a class method call jumps to the method declaration",
-        source: "class Machine {\n  start(): void {}\n}\nconst m = new Machine();\nm.__CURSOR__start();\n",
+        source: "class Machine {\n  start(): undefined {}\n}\nconst m = new Machine();\nm.__CURSOR__start();\n",
         expectLines: [1],
     },
     {
@@ -45,13 +45,14 @@ definitionCases("Go to definition: classes", [
     {
         name: "a class used across two files jumps into the defining file",
         source: "import { Widget } from \"./util.cp3\";\nconst w = new __CURSOR__Widget();\n",
-        modules: [["util.cp3", "export class Widget {\n  render(): void {}\n}\n"]],
+        modules: [["util.cp3", "export class Widget {\n  render(): undefined {}\n}\n"]],
         expectLines: [0],
     },
     {
         name: "a default exported class jumps to its declaration",
         source: "import Gadget from \"./util.cp3\";\nconst g = new __CURSOR__Gadget();\n",
-        modules: [["util.cp3", "export default class Gadget {\n  fire(): void {}\n}\n"]],
+        modules: [["util.cp3", "export default class Gadget {\n  fire(): undefined {}\n}\n"]],
         expectLines: [0],
     },
 ]);
+

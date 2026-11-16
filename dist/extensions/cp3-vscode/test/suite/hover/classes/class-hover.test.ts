@@ -24,17 +24,17 @@ hoverCases("Hover: classes and interfaces", [
     },
     {
         name: "an interface hover in a parameter annotation shows the interface",
-        source: "interface Config {\n  retries: number;\n}\nfunction load(c: __CURSOR__Config): void {}\n",
+        source: "interface Config {\n  retries: number;\n}\nfunction load(c: __CURSOR__Config): undefined {}\n",
         contains: ["Config"],
     },
     {
         name: "a method hover shows its signature",
-        source: "class Machine {\n  start(): void {}\n}\nconst m = new Machine();\nm.__CURSOR__start();\n",
+        source: "class Machine {\n  start(): undefined {}\n}\nconst m = new Machine();\nm.__CURSOR__start();\n",
         contains: ["start"],
     },
     {
         name: "a static method hover shows its signature",
-        source: "class Machine {\n  static build(): void {}\n}\nMachine.__CURSOR__build();\n",
+        source: "class Machine {\n  static build(): undefined {}\n}\nMachine.__CURSOR__build();\n",
         contains: ["build"],
     },
     {
@@ -53,3 +53,4 @@ hoverCases("Hover: classes and interfaces", [
         contains: ["speed"],
     },
 ]);
+

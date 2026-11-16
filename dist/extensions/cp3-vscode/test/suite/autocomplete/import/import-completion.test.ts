@@ -31,7 +31,7 @@ completionCases("Autocomplete: import completion", [
     {
         name: "imported local class is offered in value position",
         source: "import { Widget } from \"./util.cp3\";\nconst w = new __CURSOR__();\n",
-        modules: [["util.cp3", "export class Widget {\n  render(): void {}\n}\n"]],
+        modules: [["util.cp3", "export class Widget {\n  render(): undefined {}\n}\n"]],
         expectPresent: ["Widget"],
     },
     {
@@ -87,3 +87,4 @@ completionCases("Autocomplete: import completion", [
         expectPresent: ["Mode"],
     },
 ]);
+

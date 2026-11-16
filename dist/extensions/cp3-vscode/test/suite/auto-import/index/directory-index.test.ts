@@ -78,3 +78,4 @@ autoImportCases("Auto-import: directory index resolution", [
         expectImportInserted: "mathx.cp3",
     },
 ]);
+

@@ -29,3 +29,4 @@ diagnosticCases("Diagnostics: async and Promise errors", [
         expectNoDiagnostics: true,
     },
 ]);
+

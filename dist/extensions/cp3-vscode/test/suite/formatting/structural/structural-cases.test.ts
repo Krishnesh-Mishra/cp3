@@ -14,13 +14,13 @@ formattingCases("Document formatting: structural cases", [
     },
     {
         name: "default parameter lists are left alone",
-        source: "function connect(host: string, port: number = 8080): void {\n}\n",
-        expectText: "function connect(host: string, port: number = 8080): void {\n}\n",
+        source: "function connect(host: string, port: number = 8080): undefined {\n}\n",
+        expectText: "function connect(host: string, port: number = 8080): undefined {\n}\n",
     },
     {
         name: "an empty function body does not gain content",
-        source: "function noop(): void {\n}\n",
-        expectText: "function noop(): void {\n}\n",
+        source: "function noop(): undefined {\n}\n",
+        expectText: "function noop(): undefined {\n}\n",
     },
     {
         name: "multiline call arguments are not re-indented",
@@ -53,3 +53,4 @@ formattingCases("Document formatting: structural cases", [
         expectText: "const rs = [3, 1, 2].map((n) => n * 2).filter((n) => n > 2);\n",
     },
 ]);
+

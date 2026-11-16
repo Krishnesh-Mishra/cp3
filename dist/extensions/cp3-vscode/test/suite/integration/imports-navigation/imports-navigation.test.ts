@@ -20,7 +20,7 @@ function chain(
     offered: string,
     defLine: number,
     referenceLines: readonly number[],
-): void {
+): undefined {
     caseCounter += 1;
     const caseId = caseCounter;
     const mainName = `integration-${caseId}.cp3`;
@@ -73,7 +73,7 @@ function chain(
 
 const util = "export function combine(a: string, b: string): string {\n  return a + b;\n}\n";
 const utilTwo = "export function one(): number {\n  return 1;\n}\nexport function two(): number {\n  return 2;\n}\n";
-const utilClass = "export class Widget {\n  render(): void {}\n}\n";
+const utilClass = "export class Widget {\n  render(): undefined {}\n}\n";
 const utilIFace = "export interface Sized {\n  size(): number;\n}\n";
 const utilEnum = "export enum Mode { Fast, Slow }\n";
 const utilAlias = "export type Radians = number;\n";
@@ -100,7 +100,7 @@ chain("imported class at a type annotation",
 
 chain("imported interface at a parameter",
     [["util.cp3", utilIFace]],
-    "import { Sized } from \"./util.cp3\";\nfunction f(s: Sized): void {}\nf;\n",
+    "import { Sized } from \"./util.cp3\";\nfunction f(s: Sized): undefined {}\nf;\n",
     1, "function f(s: ".length, "Sized", 0, [0, 1]);
 
 chain("imported enum at a value position",
@@ -149,13 +149,13 @@ chain("module also exported from a second file does not confuse the jump",
     1, "const v = ".length, "combine", 0, [0, 1]);
 
 chain("class default export construction chain",
-    [["util.cp3", "export default class Gadget {\n  fire(): void {}\n}\n"]],
+    [["util.cp3", "export default class Gadget {\n  fire(): undefined {}\n}\n"]],
     "import Gadget from \"./util.cp3\";\nconst g = new Gadget();\n",
     1, "const g = new ".length, "Gadget", 0, [0, 1]);
 
 chain("a deep nested companion with a named type",
     [["lib/nested/shape.cp3", utilIFace]],
-    "import { Sized } from \"./lib/nested/shape.cp3\";\nfunction f(s: Sized): void {}\n",
+    "import { Sized } from \"./lib/nested/shape.cp3\";\nfunction f(s: Sized): undefined {}\n",
     1, "function f(s: ".length, "Sized", 0, [0, 1]);
 
 chain("a function called through its local alias twice",
@@ -175,7 +175,7 @@ chain("chain through a relative path with underscores",
 
 chain("an interface re-exported through a barrel at a use site",
     [["barrel.cp3", "export * from \"./base.cp3\";\n"], ["base.cp3", utilIFace]],
-    "import { Sized } from \"./barrel.cp3\";\nfunction f(s: Sized): void {}\n",
+    "import { Sized } from \"./barrel.cp3\";\nfunction f(s: Sized): undefined {}\n",
     1, "function f(s: ".length, "Sized", 0, [0, 1]);
 
 chain("a class from a folder index at a use site",
@@ -207,3 +207,5 @@ chain("a module with a same-name export in two different files picks the importe
     [["lib/util.cp3", util], ["lib/other/util.cp3", "export function combine(z: number): number {\n  return z + 1;\n}\n"]],
     "import { combine } from \"./lib/util.cp3\";\nconst v = combine(\"a\", \"b\");\n",
     1, "const v = ".length, "combine", 0, [0, 1]);
+
+

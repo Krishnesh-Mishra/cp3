@@ -70,3 +70,4 @@ referencesCases("Find references: local symbols", [
         includeDeclaration: false,
     },
 ]);
+

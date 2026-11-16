@@ -4,7 +4,7 @@ import { foldingRangeCases } from "../../harness";
 foldingRangeCases("Folding ranges: declarations and blocks", [
     {
         name: "a class folds its member block",
-        source: "class Machine {\n  speed: number = 0;\n  start(): void {}\n}\n",
+        source: "class Machine {\n  speed: number = 0;\n  start(): undefined {}\n}\n",
         expectAtLeast: 1,
     },
     {
@@ -24,7 +24,7 @@ foldingRangeCases("Folding ranges: declarations and blocks", [
     },
     {
         name: "a nested function folds both bodies",
-        source: "function outer(): void {\n  function inner(): void {\n    const x = 1;\n  }\n  inner();\n}\n",
+        source: "function outer(): undefined {\n  function inner(): undefined {\n    const x = 1;\n  }\n  inner();\n}\n",
         expectAtLeast: 2,
     },
     {
@@ -44,7 +44,7 @@ foldingRangeCases("Folding ranges: declarations and blocks", [
     },
     {
         name: "a try block folds inside a function",
-        source: "function f(): void {\n  try {\n    risky();\n  } catch (e) {\n    print(\"caught\");\n  } finally {\n    print(\"done\");\n  }\n}\n",
+        source: "function f(): undefined {\n  try {\n    risky();\n  } catch (e) {\n    print(\"caught\");\n  } finally {\n    print(\"done\");\n  }\n}\n",
         expectAtLeast: 1,
     },
     {
@@ -59,7 +59,7 @@ foldingRangeCases("Folding ranges: declarations and blocks", [
     },
     {
         name: "a default exported class folds its body",
-        source: "export default class Widget {\n  value: number = 0;\n  render(): void {}\n}\n",
+        source: "export default class Widget {\n  value: number = 0;\n  render(): undefined {}\n}\n",
         expectAtLeast: 1,
     },
     {
@@ -83,3 +83,4 @@ foldingRangeCases("Folding ranges: declarations and blocks", [
         expectAtLeast: 1,
     },
 ]);
+

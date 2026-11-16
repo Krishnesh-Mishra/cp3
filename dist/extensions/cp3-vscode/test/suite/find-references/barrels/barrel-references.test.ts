@@ -40,7 +40,7 @@ referencesCases("Find references: barrels and re-exports", [
     {
         name: "an exported class referenced across the barrel is found in the barrel consumer",
         source: "import { Widget } from \"./barrel.cp3\";\nconst w = new __CURSOR__Widget();\n",
-        modules: [["barrel.cp3", "export * from \"./base.cp3\";\n"], ["base.cp3", "export class Widget {\n  render(): void {}\n}\n"]],
+        modules: [["barrel.cp3", "export * from \"./base.cp3\";\n"], ["base.cp3", "export class Widget {\n  render(): undefined {}\n}\n"]],
         expectSomeLines: [0, 1],
         includeDeclaration: true,
     },
@@ -60,7 +60,7 @@ referencesCases("Find references: barrels and re-exports", [
     },
     {
         name: "an interface re-exported through a barrel is found at the use site",
-        source: "import { Sized } from \"./barrel.cp3\";\nfunction f(s: __CURSOR__Sized): void {}\n",
+        source: "import { Sized } from \"./barrel.cp3\";\nfunction f(s: __CURSOR__Sized): undefined {}\n",
         modules: [["barrel.cp3", "export * from \"./base.cp3\";\n"], ["base.cp3", "export interface Sized {\n  size: number;\n}\n"]],
         expectSomeLines: [0, 1],
         includeDeclaration: true,
@@ -73,3 +73,4 @@ referencesCases("Find references: barrels and re-exports", [
         includeDeclaration: true,
     },
 ]);
+

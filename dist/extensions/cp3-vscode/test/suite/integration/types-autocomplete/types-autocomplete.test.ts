@@ -16,8 +16,8 @@ completionCases("Integration: types + autocomplete", [
     { name: "a typed number variable does not offer array methods", source: "const n: number = 42;\nn.__CURSOR__\n", expectAbsent: ["push", "join", "toUpperCase"] },
     { name: "a typed array variable offers array members", source: "const xs: number[] = [1];\nxs.__CURSOR__\n", expectPresent: ["join"] },
     { name: "a string array variable offers string members on its elements", source: "const names: string[] = [\"a\"];\nnames[0].__CURSOR__\n", expectPresent: ["toLowerCase"] },
-    { name: "a function parameter typed string offers string members", source: "function f(name: string): void {\n  name.__CURSOR__\n}\n", expectPresent: ["toUpperCase"] },
-    { name: "a number-typed parameter does not offer array methods", source: "function f(n: number): void {\n  n.__CURSOR__\n}\n", expectAbsent: ["push", "join", "toUpperCase"] },
+    { name: "a function parameter typed string offers string members", source: "function f(name: string): undefined {\n  name.__CURSOR__\n}\n", expectPresent: ["toUpperCase"] },
+    { name: "a number-typed parameter does not offer array methods", source: "function f(n: number): undefined {\n  n.__CURSOR__\n}\n", expectAbsent: ["push", "join", "toUpperCase"] },
     { name: "a const from a string method offers string members", source: "const up = \"hi\".toUpperCase();\nup.__CURSOR__\n", expectPresent: ["toLowerCase"] },
     { name: "a numeric const does not offer array methods", source: "const half = 84 / 2;\nhalf.__CURSOR__\n", expectAbsent: ["push", "join", "toUpperCase"] },
     { name: "an if-branch narrowed const offers its narrow type members", source: "const s = \"hi\";\nif (s.length > 0) {\n  s.__CURSOR__\n}\n", expectPresent: ["toUpperCase"] },
@@ -30,9 +30,9 @@ completionCases("Integration: types + autocomplete", [
     { name: "a string enum member offers string members", source: "enum S { A = \"a\" }\nconst s = S.A;\ns.__CURSOR__\n", expectPresent: ["toUpperCase"] },
     { name: "an array accessed via index offers element members", source: "const xs = [\"a\", \"b\"];\nconst el = xs[0];\nel.__CURSOR__\n", expectPresent: ["toLowerCase"] },
     { name: "an array of numbers offers array methods on the array", source: "const xs = [1, 2];\nxs.__CURSOR__\n", expectPresent: ["sort"] },
-    { name: "an interface-typed parameter offers its member properties", source: "interface Config { retries: number }\nfunction f(c: Config): void {\n  c.__CURSOR__\n}\n", expectPresent: ["retries"] },
-    { name: "an interface-typed parameter does not offer absent members", source: "interface Config { retries: number }\nfunction f(c: Config): void {\n  c.__CURSOR__\n}\n", expectAbsent: ["timeout"] },
-    { name: "a class instance from a generic array offers its members", source: "class Widget {\n  render(): void {}\n}\nconst widgets: Widget[] = [new Widget()];\nwidgets[0].__CURSOR__\n", expectPresent: ["render"] },
+    { name: "an interface-typed parameter offers its member properties", source: "interface Config { retries: number }\nfunction f(c: Config): undefined {\n  c.__CURSOR__\n}\n", expectPresent: ["retries"] },
+    { name: "an interface-typed parameter does not offer absent members", source: "interface Config { retries: number }\nfunction f(c: Config): undefined {\n  c.__CURSOR__\n}\n", expectAbsent: ["timeout"] },
+    { name: "a class instance from a generic array offers its members", source: "class Widget {\n  render(): undefined {}\n}\nconst widgets: Widget[] = [new Widget()];\nwidgets[0].__CURSOR__\n", expectPresent: ["render"] },
     { name: "a string in a template placeholder offers string members", source: "const s = \"hi\";\nconst t = `${s.__CURSOR__}`;\n", expectPresent: ["toUpperCase"] },
     { name: "a long chain of string calls stays string-typed", source: "const s = \"hello\".trim().toLowerCase();\ns.__CURSOR__\n", expectPresent: ["toUpperCase"] },
     { name: "parseInt result does not offer array methods", source: "const n = parseInt(\"42\");\nn.__CURSOR__\n", expectAbsent: ["push", "join", "toUpperCase"] },
@@ -43,3 +43,4 @@ completionCases("Integration: types + autocomplete", [
     { name: "a generic array element keeps element type members", source: "const xs = [\"a\"];\nconst doubled = xs.map((s) => s + s);\ndoubled[0].__CURSOR__\n", expectPresent: ["toUpperCase"] },
     { name: "a spread of strings into array keeps element types", source: "const a = [\"x\"];\nconst b = [...a];\nb[0].__CURSOR__\n", expectPresent: ["toUpperCase"] },
 ]);
+

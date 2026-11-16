@@ -1,8 +1,8 @@
-{
+﻿{
   "CP3 function": {
     "prefix": "fn",
     "body": [
-      "function ${1:name}(${2}): ${3:void} {",
+      "function ${1:name}(${2}): ${3:undefined} {",
       "  ${0}",
       "}"
     ],
@@ -16,7 +16,7 @@
       " * @param ${2:name} ${3:Describe this parameter.}",
       " * @returns ${4:Describe the returned value.}",
       " */",
-      "function ${5:name}(${2}: ${6:string}): ${7:void} {",
+      "function ${5:name}(${2}: ${6:string}): ${7:undefined} {",
       "  ${0}",
       "}"
     ],
@@ -30,7 +30,7 @@
   "CP3 async function": {
     "prefix": "asyncfn",
     "body": [
-      "async function ${1:name}(${2}): Promise<${3:void}> {",
+      "async function ${1:name}(${2}): Promise<${3:undefined}> {",
       "  ${0}",
       "}"
     ],
@@ -72,11 +72,11 @@
   },
   "CP3 constant": {"prefix":"const","body":"const ${1:name}: ${2:string} = ${3:\"\"};$0","description":"Declare a typed constant"},
   "CP3 mutable binding": {"prefix":"let","body":"let ${1:name}: ${2:number} = ${3:0};$0","description":"Declare a typed mutable binding"},
-  "CP3 exported function": {"prefix":"exportfn","body":["export function ${1:name}(${2}): ${3:void} {","  ${0}","}"],"description":"Export a function from this module"},
+  "CP3 exported function": {"prefix":"exportfn","body":["export function ${1:name}(${2}): ${3:undefined} {","  ${0}","}"],"description":"Export a function from this module"},
   "CP3 async arrow": {"prefix":"asyncarrow","body":["async (${1}) => {","  ${0}","}"],"description":"Create an asynchronous arrow function"},
   "CP3 getter": {"prefix":"get","body":["get ${1:value}(): ${2:string} {","  return this.${3:_value};","}"],"description":"Declare a class getter"},
   "CP3 setter": {"prefix":"set","body":["set ${1:value}(value: ${2:string}) {","  this.${3:_value} = value;","}"],"description":"Declare a class setter"},
-  "CP3 class method": {"prefix":"method","body":["${1:public} function ${2:name}(${3}): ${4:void} {","  ${0}","}"],"description":"Add a CP3 class method (CP3 methods use the function keyword)"},
+  "CP3 class method": {"prefix":"method","body":["${1:public} function ${2:name}(${3}): ${4:undefined} {","  ${0}","}"],"description":"Add a CP3 class method (CP3 methods use the function keyword)"},
   "CP3 constructor": {"prefix":"ctor","body":["constructor(${1}) {","  ${0}","}"],"description":"Add a class constructor"},
   "CP3 class field": {"prefix":"field","body":"${1:private} ${2:name}: ${3:string} = ${4:\"\"};$0","description":"Add a typed class field"},
   "CP3 generic function": {"prefix":"genericfn","body":["function ${1:identity}<T>(${2:value}: T): T {","  return ${2};","}"],"description":"Declare a generic function"},
@@ -107,8 +107,8 @@
   "CP3 array reduce": {"prefix":"reduce","body":"${1:items}.reduce((${2:sum}, ${3:item}) => ${4:sum + item}, ${5:0});$0","description":"Reduce an array to one value"},
   "CP3 array find": {"prefix":"find","body":"${1:items}.find((${2:item}) => ${0:true});","description":"Find the first element accepted by a predicate"},
   "CP3 promise then": {"prefix":"then","body":["${1:promise}.then((${2:value}) => {","  ${0}","});"],"description":"Handle a fulfilled promise"},
-  "CP3 async main": {"prefix":"asyncmain","body":["async function main(): Promise<void> {","  ${0}","}","","main().catch((error) => console.error(error));"],"description":"Create an async entry point"},
-  "CP3 timeout": {"prefix":"timeout","body":"await new Promise<void>((resolve) => setTimeout(() => resolve(), ${1:1000}));$0","description":"Wait for a timeout"},
+  "CP3 async main": {"prefix":"asyncmain","body":["async function main(): Promise<undefined> {","  ${0}","}","","main().catch((error) => console.error(error));"],"description":"Create an async entry point"},
+  "CP3 timeout": {"prefix":"timeout","body":"await new Promise<undefined>((resolve) => setTimeout(() => resolve(), ${1:1000}));$0","description":"Wait for a timeout"},
   "CP3 JSON parse": {"prefix":"jsonparse","body":"const ${1:value} = JSON.parse<${2:MyType}>(${3:text});$0","description":"Parse JSON into a declared type"},
   "CP3 JSON stringify": {"prefix":"jsonstringify","body":"const ${1:text} = JSON.stringify(${2:value}, ${3:2});$0","description":"Serialize a value as JSON"},
   "CP3 typed array": {"prefix":"typedarray","body":"const ${1:values} = new Float64Array(${2:length});$0","description":"Create a typed numeric array"},
@@ -127,8 +127,8 @@
   "CP3 expression arrow": {"prefix":"arrowexpr","body":"(${1:value}) => ${0:value}","description":"Create a concise arrow callback returning an expression"},
   "CP3 typed arrow": {"prefix":"arrowtyped","body":"(${1:value}: ${2:string}): ${3:number} => ${0:value.length}","description":"Create an arrow function with typed parameter and result"},
   "CP3 async expression arrow": {"prefix":"asyncarrowexpr","body":"async (${1:value}) => ${0:value}","description":"Create an async arrow callback returning an expression"},
-  "CP3 callback parameter": {"prefix":"callback","body":"(${1:error}: ${2:Error} | null, ${3:value}: ${4:unknown}) => {\n\t${0}\n}","description":"Create a typed Node-style callback function"},
-  "CP3 void callback": {"prefix":"voidarrow","body":"(${1:value}) => {\n\t${0}\n}","description":"Create an arrow callback with a statement body"},
+  "CP3 callback parameter": {"prefix":"callback","body":"(${1:error}: ${2:Error} | null, ${3:value}: ${4:object}) => {\n\t${0}\n}","description":"Create a typed Node-style callback function"},
+  "CP3 undefined callback": {"prefix":"voidarrow","body":"(${1:value}) => {\n\t${0}\n}","description":"Create an arrow callback with a statement body"},
   "CP3 guard clause": {"prefix":"guard","body":["if (${1:invalidCondition}) {","  return ${2};","}","$0"],"description":"Exit early when a precondition is not met"},
   "CP3 ternary expression": {"prefix":"ternary","body":"${1:condition} ? ${2:whenTrue} : ${0:whenFalse}","description":"Insert a conditional expression"},
   "CP3 nullish fallback": {"prefix":"nullish","body":"${1:value} ?? ${0:fallback}","description":"Use a fallback only when a value is null or undefined"},
@@ -160,22 +160,22 @@
   "CP3 Promise race": {"prefix":"promiserace","body":"const ${1:firstResult} = await Promise.race([${2:firstPromise}, ${3:secondPromise}]);$0","description":"Use the result of the first promise to settle (async context)"},
   "CP3 Promise catch": {"prefix":"promiseCatch","body":["${1:promise}.catch((error) => {","  ${0:console.error(error);}","});"],"description":"Handle a rejected promise"},
   "CP3 Promise finally": {"prefix":"promiseFinally","body":["${1:promise}.finally(() => {","  ${0:cleanup();}","});"],"description":"Run cleanup after a promise settles"},
-  "CP3 async try/catch": {"prefix":"asynctry","body":["async function ${1:loadData}(): Promise<${2:void}> {","  try {","    ${3:await work();}","  } catch (${4:error}) {","    ${0:console.error(error);}","  }","}"],"description":"Handle a rejected async operation inside an async function"},
+  "CP3 async try/catch": {"prefix":"asynctry","body":["async function ${1:loadData}(): Promise<${2:undefined}> {","  try {","    ${3:await work();}","  } catch (${4:error}) {","    ${0:console.error(error);}","  }","}"],"description":"Handle a rejected async operation inside an async function"},
   "CP3 for await loop": {"prefix":"forawait","body":["for await (const ${1:item} of ${2:source}) {","  ${0}","}"],"description":"Consume an async iterable from an async function"},
   "CP3 timeout callback": {"prefix":"timeoutcb","body":["const ${1:timer} = setTimeout(() => {","  ${0}","}, ${2:1000});"],"description":"Schedule a callback after a delay"},
   "CP3 interval callback": {"prefix":"interval","body":["const ${1:timer} = setInterval(() => {","  ${0}","}, ${2:1000});"],"description":"Schedule a callback repeatedly until cleared"},
   "CP3 clear interval": {"prefix":"clearinterval","body":"clearInterval(${0:timer});","description":"Cancel a repeating timer"},
-  "CP3 Promise wrapper": {"prefix":"newpromise","body":["const ${1:promise} = new Promise<${2:void}>((resolve, reject) => {","  ${0}","});"],"description":"Create a promise from resolve and reject callbacks"},
-  "CP3 class extends": {"prefix":"classextends","body":["class ${1:Child} extends ${2:Base} {","  constructor(${3}) {","    super(${4});","    ${0}","  }","","  function ${5:method}(): ${6:void} {","  }","}"],"description":"Declare a derived class with a constructor and CP3 method"},
+  "CP3 Promise wrapper": {"prefix":"newpromise","body":["const ${1:promise} = new Promise<${2:undefined}>((resolve, reject) => {","  ${0}","});"],"description":"Create a promise from resolve and reject callbacks"},
+  "CP3 class extends": {"prefix":"classextends","body":["class ${1:Child} extends ${2:Base} {","  constructor(${3}) {","    super(${4});","    ${0}","  }","","  function ${5:method}(): ${6:undefined} {","  }","}"],"description":"Declare a derived class with a constructor and CP3 method"},
   "CP3 static method": {"prefix":"staticmethod","body":["static function ${1:create}(${2}): ${3:Result} {","  ${0}","}"],"description":"Add a static method inside a CP3 class"},
-  "CP3 interface method": {"prefix":"ifunction","body":"function ${1:run}(${2}): ${3:void};$0","description":"Declare a method signature inside an interface"},
+  "CP3 interface method": {"prefix":"ifunction","body":"function ${1:run}(${2}): ${3:undefined};$0","description":"Declare a method signature inside an interface"},
   "CP3 error class": {"prefix":"errorclass","body":["class ${1:ValidationError} extends Error {","  constructor(message: string) {","    super(message);","  }","}"],"description":"Define a named error class"},
   "CP3 union type guard": {"prefix":"typeofguard","body":["if (typeof ${1:value} === \"${2:string}\") {","  ${0}","}"],"description":"Narrow a union value with a typeof check"},
   "CP3 null check": {"prefix":"nullcheck","body":["if (${1:value} === null || ${1} === undefined) {","  ${2:return;}","}","$0"],"description":"Handle null and undefined before using a value"},
   "CP3 switch case": {"prefix":"caseblock","body":["case ${1:value}: {","  ${2}","  break;","}","$0"],"description":"Add a scoped case branch to a switch statement"},
-  "CP3 main function": {"prefix":"mainfn","body":["function main(): void {","  ${0}","}","","main();"],"description":"Create a synchronous program entry point"},
+  "CP3 main function": {"prefix":"mainfn","body":["function main(): undefined {","  ${0}","}","","main();"],"description":"Create a synchronous program entry point"},
   "CP3 console import": {"prefix":"importconsole","body":"import console from \"std/console\";$0","description":"Import CP3's standard console module"},
-  "CP3 JSON parse with error handling": {"prefix":"jsontry","body":["let ${1:value}: ${2:unknown};","try {","  ${1} = JSON.parse<${2}>(${3:text});","} catch (${4:error}) {","  ${0:console.error(error);}","}"],"description":"Parse JSON and handle malformed input"},
+  "CP3 JSON parse with error handling": {"prefix":"jsontry","body":["let ${1:value}: ${2:object};","try {","  ${1} = JSON.parse<${2}>(${3:text});","} catch (${4:error}) {","  ${0:console.error(error);}","}"],"description":"Parse JSON and handle malformed input"},
   "CP3 HTTP PUT": {"prefix":"httpput","body":["app.put(\"${1:/items/:id}\", async (req, res) => {","  const ${2:payload} = await req.json<${3:Payload}>();","  ${0:res.json(payload);}","});"],"description":"Register an async JSON update route"},
   "CP3 HTTP DELETE": {"prefix":"httpdelete","body":["app.delete(\"${1:/items/:id}\", (req, res) => {","  ${0:res.status(204).send();}","});"],"description":"Register a delete route"},
   "CP3 HTTP not found": {"prefix":"http404","body":["app.use((req, res, next) => {","  res.status(404).json({ error: \"not found\", path: req.path });","});$0"],"description":"Add a final middleware that returns a 404 response"},
@@ -185,3 +185,4 @@
   "CP3 date ISO string": {"prefix":"dateiso","body":"const ${1:timestamp} = new Date().toISOString();$0","description":"Format the current date as an ISO timestamp"},
   "CP3 console warning": {"prefix":"cwarn","body":"console.warn(${0:message});","description":"Write a warning to standard error"}
 }
+

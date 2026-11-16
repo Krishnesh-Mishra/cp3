@@ -43,8 +43,8 @@ diagnosticCases("Diagnostics: type mismatches", [
         expect: [{ severity: "error" }],
     },
     {
-        name: "void function cannot return a value",
-        source: "function f(): void {\n  return 42;\n}\n",
+        name: "undefined function cannot return a value",
+        source: "function f(): undefined {\n  return 42;\n}\n",
         expect: [{ severity: "error" }],
     },
     {
@@ -54,12 +54,12 @@ diagnosticCases("Diagnostics: type mismatches", [
     },
     {
         name: "number argument passed where string is expected is rejected",
-        source: "function greet(name: string): void {}\ngreet(42);\n",
+        source: "function greet(name: string): undefined {}\ngreet(42);\n",
         expect: [{ severity: "error" }],
     },
     {
         name: "string argument passed where number is expected is rejected",
-        source: "function bump(n: number): void {}\nbump(\"one\");\n",
+        source: "function bump(n: number): undefined {}\nbump(\"one\");\n",
         expect: [{ severity: "error" }],
     },
     {
@@ -103,3 +103,4 @@ diagnosticCases("Diagnostics: type mismatches", [
         expect: [{ severity: "error" }],
     },
 ]);
+

@@ -27,7 +27,7 @@ function writeProject(name: string, count: number): string {
     return root;
 }
 
-function perfCleanup(): void {
+function perfCleanup(): undefined {
     try {
         fs.rmSync(perfRoot(), { recursive: true, force: true, maxRetries: 6, retryDelay: 150 });
     } catch {
@@ -196,3 +196,4 @@ suite("Performance: small and large projects", () => {
         assert.ok(list !== undefined);
     });
 });
+

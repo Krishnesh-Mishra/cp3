@@ -4,12 +4,12 @@ import { completionCases } from "../../harness";
 completionCases("Autocomplete: context-aware suggestions", [
     {
         name: "inside a try block offers catch and finally",
-        source: "function main(): void {\n  try {\n    risky();\n    __CURSOR__\n  } catch (e) {\n  }\n}\n",
+        source: "function main(): undefined {\n  try {\n    risky();\n    __CURSOR__\n  } catch (e) {\n  }\n}\n",
         expectPresent: ["catch", "finally"],
     },
     {
         name: "outside a try block does not offer catch or finally",
-        source: "function main(): void {\n  if (true) {\n    __CURSOR__\n  }\n}\n",
+        source: "function main(): undefined {\n  if (true) {\n    __CURSOR__\n  }\n}\n",
         expectAbsent: ["catch", "finally"],
     },
     {
@@ -24,7 +24,7 @@ completionCases("Autocomplete: context-aware suggestions", [
     },
     {
         name: "parameter list offers ref and no statement keyword",
-        source: "function bump(__CURSOR__x: number): void {}\n",
+        source: "function bump(__CURSOR__x: number): undefined {}\n",
         expectPresent: ["ref"],
         expectAbsent: ["return", "const", "if", "finally", "catch"],
     },
@@ -72,7 +72,7 @@ completionCases("Autocomplete: context-aware suggestions", [
     },
     {
         name: "callback argument position offers surrounding names",
-        source: "function each(items: number[], cb: (item: number) => void): void {}\neach([1], (item) => {\n  const inner = item + 1;\n  each([inner], (next) => {\n    print(__CURSOR__);\n  });\n});\n",
+        source: "function each(items: number[], cb: (item: number) => undefined): undefined {}\neach([1], (item) => {\n  const inner = item + 1;\n  each([inner], (next) => {\n    print(__CURSOR__);\n  });\n});\n",
         expectPresent: ["inner", "next"],
     },
     {
@@ -82,3 +82,4 @@ completionCases("Autocomplete: context-aware suggestions", [
         expectAbsent: ["catch", "finally"],
     },
 ]);
+

@@ -39,7 +39,7 @@ hoverCases("Hover: variable types", [
     },
     {
         name: "a boolean parameter hover reports boolean",
-        source: "function f(active: boolean): void {\n  const copy = __CURSOR__active;\n}\n",
+        source: "function f(active: boolean): undefined {\n  const copy = __CURSOR__active;\n}\n",
         contains: ["boolean"],
     },
     {
@@ -53,3 +53,4 @@ hoverCases("Hover: variable types", [
         contains: ["string"],
     },
 ]);
+

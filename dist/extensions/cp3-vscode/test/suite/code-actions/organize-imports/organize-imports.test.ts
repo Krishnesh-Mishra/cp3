@@ -112,3 +112,4 @@ suite("Code actions: contributed command", () => {
         }
     });
 });
+

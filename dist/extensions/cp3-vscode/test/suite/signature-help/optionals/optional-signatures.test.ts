@@ -32,23 +32,23 @@ signatureHelpCases("Signature help: optionals and generics", [
     },
     {
         name: "a default-valued parameter is shown in the signature",
-        source: "function connect(host: string, port: number = 8080): void {}\nconnect(\"local\", __CURSOR__3000);\n",
+        source: "function connect(host: string, port: number = 8080): undefined {}\nconnect(\"local\", __CURSOR__3000);\n",
         contains: ["port"],
     },
     {
         name: "a default-valued parameter omitted still shows the signature",
-        source: "function connect(host: string, port: number = 8080): void {}\nconnect(__CURSOR__\"local\");\n",
+        source: "function connect(host: string, port: number = 8080): undefined {}\nconnect(__CURSOR__\"local\");\n",
         expectActiveParameter: 0,
         contains: ["host"],
     },
     {
         name: "an overload-style call of a variadic shows the variadic list",
-        source: "function logAll(...items: string[]): void {}\nlogAll(__CURSOR__\"a\");\n",
+        source: "function logAll(...items: string[]): undefined {}\nlogAll(__CURSOR__\"a\");\n",
         contains: ["items"],
     },
     {
         name: "a variadic call tracks the rest parameter",
-        source: "function logAll(...items: string[]): void {}\nlogAll(\"a\", __CURSOR__\"b\", \"c\");\n",
+        source: "function logAll(...items: string[]): undefined {}\nlogAll(\"a\", __CURSOR__\"b\", \"c\");\n",
         contains: ["items"],
     },
     {
@@ -58,3 +58,4 @@ signatureHelpCases("Signature help: optionals and generics", [
         contains: ["add"],
     },
 ]);
+

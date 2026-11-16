@@ -29,3 +29,4 @@ completionCases("Autocomplete: completion ranking", [
         expectPresent: ["floorCount"],
     },
 ]);
+

@@ -1,4 +1,4 @@
-// dist/extensions/cp3-vscode/scripts/grammar-smoke.mjs
+﻿// dist/extensions/cp3-vscode/scripts/grammar-smoke.mjs
 //
 // Loads syntaxes/cp3.tmLanguage.json through the real TextMate engine
 // (vscode-textmate + vscode-oniguruma, the same pair VS Code uses) and asserts
@@ -72,13 +72,13 @@ const SAMPLE = [
     "import console from \"std/console\";",
     "",
     "interface Logger {",
-    "  function log(str: string): void;",
+    "  function log(str: string): undefined;",
     "}",
     "",
     "class Counter extends Base implements Sized {",
     "  private count: number = 0;",
     "  weak parent: Counter;",
-    "  static function increment(): void { Counter.count = Counter.count + 1; }",
+    "  static function increment(): undefined { Counter.count = Counter.count + 1; }",
     "  get value(): number { return this.count; }",
     "}",
     "",
@@ -89,7 +89,7 @@ const SAMPLE = [
     "  x = x + 10;",
     "}",
     "",
-    "async function countdown(from: number): Promise<void> {",
+    "async function countdown(from: number): Promise<undefined> {",
     "  let n = from;",
     "  while (n > 0) {",
     "    console.log(`tick ${n} at ${`inner ${n}`}`);",
@@ -128,7 +128,7 @@ const EXPECTATIONS = [
     ["interface", "storage.type.interface.cp3"],
     ["function", "storage.type.function.cp3"],
     ["string", "support.type.primitive.cp3"],
-    ["void", "support.type.primitive.cp3"],
+    ["undefined", "support.type.primitive.cp3"],
     ["class", "storage.type.class.cp3"],
     ["extends", "storage.modifier.extends.cp3"],
     ["implements", "storage.modifier.extends.cp3"],
@@ -254,3 +254,4 @@ console.log(
 // (win/async.c: !(handle->flags & UV_HANDLE_CLOSING)) once the WASM
 // oniguruma instance is alive.
 process.exitCode = failures === 0 ? 0 : 1;
+

@@ -54,3 +54,4 @@ diagnosticCases("Diagnostics: null and undefined errors", [
         expect: [{ severity: "error" }],
     },
 ]);
+

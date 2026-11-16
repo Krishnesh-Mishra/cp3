@@ -78,3 +78,4 @@ documentSymbolCases("Document symbols: declarations", [
         contains: ["dbl"],
     },
 ]);
+

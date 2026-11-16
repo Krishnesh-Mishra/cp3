@@ -4,7 +4,7 @@ import { autoImportCases } from "../../harness";
 const defaultCombiner =
     "export default function combineWith(a: string, b: string): string {\n  return a + b;\n}\n";
 const defaultClass =
-    "export default class Widget {\n  render(): void {}\n}\n";
+    "export default class Widget {\n  render(): undefined {}\n}\n";
 const defaultConstArrow =
     "const handler = (value: number): number => value + 1;\nexport default handler;\n";
 const defaultObject =
@@ -82,3 +82,4 @@ autoImportCases("Auto-import: default imports", [
         expectImportInserted: "Widget",
     },
 ]);
+

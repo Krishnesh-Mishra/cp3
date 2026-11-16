@@ -11,7 +11,7 @@ workspaceSymbolCases("Workspace symbols: cross-file", [
     },
     {
         name: "a uniquely named interface export in another module is found",
-        source: "import { ZqxChiModuleIfaceTwo } from \"./lib.cp3\";\nfunction f(s: ZqxChiModuleIfaceTwo): void {}\n",
+        source: "import { ZqxChiModuleIfaceTwo } from \"./lib.cp3\";\nfunction f(s: ZqxChiModuleIfaceTwo): undefined {}\n",
         modules: [["lib.cp3", "export interface ZqxChiModuleIfaceTwo {\n  size(): number;\n}\n"]],
         query: "ZqxChiModuleIfaceTwo",
         contains: ["ZqxChiModuleIfaceTwo"],
@@ -33,7 +33,7 @@ workspaceSymbolCases("Workspace symbols: cross-file", [
     {
         name: "a uniquely named barrel-re-exported class is found",
         source: "import { ZqxAlphaBarrelClassFive } from \"./barrel.cp3\";\nconst value = new ZqxAlphaBarrelClassFive();\n",
-        modules: [["barrel.cp3", "export * from \"./base.cp3\";\n"], ["base.cp3", "export class ZqxAlphaBarrelClassFive {\n  render(): void {}\n}\n"]],
+        modules: [["barrel.cp3", "export * from \"./base.cp3\";\n"], ["base.cp3", "export class ZqxAlphaBarrelClassFive {\n  render(): undefined {}\n}\n"]],
         query: "ZqxAlphaBarrelClassFive",
         contains: ["ZqxAlphaBarrelClassFive"],
     },
@@ -67,8 +67,9 @@ workspaceSymbolCases("Workspace symbols: cross-file", [
     },
     {
         name: "a uniquely named class member surfaces in the workspace search for the class",
-        source: "class ZqxZetaBoxedClassTen {\n  ZqxZetaMemberTen(): void {}\n}\n",
+        source: "class ZqxZetaBoxedClassTen {\n  ZqxZetaMemberTen(): undefined {}\n}\n",
         query: "ZqxZetaClass",
         contains: ["ZqxZetaBoxedClassTen"],
     },
 ]);
+

@@ -61,3 +61,4 @@ renameCases("Rename symbol: variables", [
         expectEditCount: 3,
     },
 ]);
+

@@ -9,7 +9,7 @@ selectionRangeCases("Selection ranges: nesting", [
     },
     {
         name: "selection inside a function argument nests the argument",
-        source: "function bump(n: number): void {}\nbump(__CURSOR__value);\n",
+        source: "function bump(n: number): undefined {}\nbump(__CURSOR__value);\n",
         expectRanges: 2,
     },
     {
@@ -53,3 +53,4 @@ selectionRangeCases("Selection ranges: nesting", [
         expectRanges: 2,
     },
 ]);
+

@@ -15,13 +15,13 @@ callHierarchyCases("Call hierarchy: functions", [
     },
     {
         name: "the outgoing call from a function names the std member it calls",
-        source: "import console from \"std/console\";\nfunction outer(): void {\n  console.log(\"hi\");\n}\nconst value = __CURSOR__outer();\n",
+        source: "import console from \"std/console\";\nfunction outer(): undefined {\n  console.log(\"hi\");\n}\nconst value = __CURSOR__outer();\n",
         prepareContains: ["outer"],
         outgoingContains: ["log"],
     },
     {
         name: "an empty function makes no outgoing calls",
-        source: "function empty(): void {\n}\nconst value = __CURSOR__empty();\n",
+        source: "function empty(): undefined {\n}\nconst value = __CURSOR__empty();\n",
         prepareContains: ["empty"],
         outgoingContains: [],
     },
@@ -57,7 +57,8 @@ callHierarchyCases("Call hierarchy: functions", [
     },
     {
         name: "a callback invocation reports the callee it passes",
-        source: "function render(item: number): void {\n}\nfunction each(items: number[], cb: (item: number) => void): void {\n  for (const item of items) {\n    cb(item);\n  }\n}\neach([1, 2], __CURSOR__render);\n",
+        source: "function render(item: number): undefined {\n}\nfunction each(items: number[], cb: (item: number) => undefined): undefined {\n  for (const item of items) {\n    cb(item);\n  }\n}\neach([1, 2], __CURSOR__render);\n",
         prepareContains: ["render"],
     },
 ]);
+

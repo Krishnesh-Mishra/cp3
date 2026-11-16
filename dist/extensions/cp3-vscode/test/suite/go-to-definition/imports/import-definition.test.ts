@@ -62,3 +62,4 @@ definitionCases("Go to definition: imports", [
         expectLines: [0],
     },
 ]);
+

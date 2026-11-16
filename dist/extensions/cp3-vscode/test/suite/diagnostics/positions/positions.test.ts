@@ -53,3 +53,4 @@ diagnosticCases("Diagnostics: positions and ranges", [
         expect: [{ severity: "error", line: 5 }],
     },
 ]);
+

@@ -77,3 +77,4 @@ autoImportCases("Auto-import: relative paths", [
         expectImportInserted: 'from "./near.cp3"',
     },
 ]);
+

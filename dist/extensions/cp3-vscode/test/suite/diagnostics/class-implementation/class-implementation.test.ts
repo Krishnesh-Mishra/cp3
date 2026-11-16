@@ -20,7 +20,7 @@ diagnosticCases("Diagnostics: class implementation errors", [
     },
     {
         name: "abstract class instantiation error reports on the new expression",
-        source: "abstract class Widget {\n  abstract render(): void;\n}\nconst w = new Widget();\n",
+        source: "abstract class Widget {\n  abstract render(): undefined;\n}\nconst w = new Widget();\n",
         expect: [{ severity: "error" }],
     },
     {
@@ -54,3 +54,4 @@ diagnosticCases("Diagnostics: class implementation errors", [
         expect: [{ severity: "error" }],
     },
 ]);
+

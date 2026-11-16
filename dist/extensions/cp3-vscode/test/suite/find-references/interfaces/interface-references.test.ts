@@ -18,14 +18,14 @@ referencesCases("Find references: interfaces", [
     },
     {
         name: "an interface referenced in two implements clauses is found at both",
-        source: "interface Twin {\n  run(): void;\n}\nclass A implements Twin {\n  run(): void {}\n}\nclass B implements __CURSOR__Twin {\n  run(): void {}\n}\n",
+        source: "interface Twin {\n  run(): undefined;\n}\nclass A implements Twin {\n  run(): undefined {}\n}\nclass B implements __CURSOR__Twin {\n  run(): undefined {}\n}\n",
         expectCount: 3,
         includeDeclaration: true,
         expectSomeLines: [0, 3, 6],
     },
     {
         name: "a type alias referenced twice in annotations is found at both sites",
-        source: "type Radians = number;\nfunction a(r: __CURSOR__Radians): void {}\nfunction b(r: Radians): void {}\n",
+        source: "type Radians = number;\nfunction a(r: __CURSOR__Radians): undefined {}\nfunction b(r: Radians): undefined {}\n",
         expectCount: 3,
         includeDeclaration: true,
         expectSomeLines: [0, 1, 2],
@@ -39,7 +39,7 @@ referencesCases("Find references: interfaces", [
     },
     {
         name: "an enum used in two annotations is found at both sites",
-        source: "enum Mode { Fast, Slow }\nfunction a(m: Mode): void {}\nfunction b(m: __CURSOR__Mode): void {}\n",
+        source: "enum Mode { Fast, Slow }\nfunction a(m: Mode): undefined {}\nfunction b(m: __CURSOR__Mode): undefined {}\n",
         expectCount: 3,
         includeDeclaration: true,
         expectSomeLines: [0, 1, 2],
@@ -73,3 +73,4 @@ referencesCases("Find references: interfaces", [
         expectSomeLines: [0, 1],
     },
 ]);
+

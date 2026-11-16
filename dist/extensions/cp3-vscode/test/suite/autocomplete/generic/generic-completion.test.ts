@@ -4,12 +4,12 @@ import { completionCases } from "../../harness";
 completionCases("Autocomplete: generic completion", [
     {
         name: "generic class name is offered in type position argument list",
-        source: "class Box<T> {\n  value: T = 0 as T;\n}\nfunction unwrap(box: Box<__CURSOR__>): void {}\n",
+        source: "class Box<T> {\n  value: T = 0 as T;\n}\nfunction unwrap(box: Box<__CURSOR__>): undefined {}\n",
         expectPresent: ["number", "string"],
     },
     {
         name: "generic interface offers its name in type position",
-        source: "interface Pair<A, B> {\n  first: A;\n  second: B;\n}\nfunction inspect(p: __CURSOR__): void {}\n",
+        source: "interface Pair<A, B> {\n  first: A;\n  second: B;\n}\nfunction inspect(p: __CURSOR__): undefined {}\n",
         expectPresent: ["Pair"],
     },
     {
@@ -53,3 +53,4 @@ completionCases("Autocomplete: generic completion", [
         expectPresent: ["current", "toUpperCase"],
     },
 ]);
+

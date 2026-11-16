@@ -19,17 +19,17 @@ completionCases("Autocomplete: function completion", [
     },
     {
         name: "function declaration followed by call position offers the name",
-        source: "function greet(): void {}\n__CURSOR__\n",
+        source: "function greet(): undefined {}\n__CURSOR__\n",
         expectPresent: ["greet"],
     },
     {
         name: "multiple functions are all offered",
-        source: "function ping(): void {}\nfunction pong(): void {}\nconst fn = __CURSOR__;\n",
+        source: "function ping(): undefined {}\nfunction pong(): undefined {}\nconst fn = __CURSOR__;\n",
         expectPresent: ["ping", "pong"],
     },
     {
         name: "nested function is offered inside its enclosing function",
-        source: "function outer(): void {\n  function inner(): void {}\n  const callee = __CURSOR__;\n}\n",
+        source: "function outer(): undefined {\n  function inner(): undefined {}\n  const callee = __CURSOR__;\n}\n",
         expectPresent: ["inner"],
     },
     {
@@ -58,3 +58,4 @@ completionCases("Autocomplete: function completion", [
         expectPresent: ["rec"],
     },
 ]);
+

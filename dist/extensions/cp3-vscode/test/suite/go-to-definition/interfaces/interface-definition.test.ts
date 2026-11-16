@@ -9,7 +9,7 @@ definitionCases("Go to definition: interfaces", [
     },
     {
         name: "an interface-typed parameter jumps to the interface",
-        source: "interface Config {\n  retries: number;\n}\nfunction load(c: __CURSOR__Config): void {}\n",
+        source: "interface Config {\n  retries: number;\n}\nfunction load(c: __CURSOR__Config): undefined {}\n",
         expectLines: [0],
     },
     {
@@ -19,13 +19,13 @@ definitionCases("Go to definition: interfaces", [
     },
     {
         name: "an interface used across files jumps into the defining module",
-        source: "import { Widget } from \"./util.cp3\";\nfunction render(w: __CURSOR__Widget): void {}\n",
-        modules: [["util.cp3", "export interface Widget {\n  render(): void;\n}\n"]],
+        source: "import { Widget } from \"./util.cp3\";\nfunction render(w: __CURSOR__Widget): undefined {}\n",
+        modules: [["util.cp3", "export interface Widget {\n  render(): undefined;\n}\n"]],
         expectLines: [0],
     },
     {
         name: "a second interface implementation still jumps to the same declaration",
-        source: "interface Base {\n  run(): void;\n}\nclass A implements Base {\n  run(): void {}\n}\nclass B implements __CURSOR__Base {\n  run(): void {}\n}\n",
+        source: "interface Base {\n  run(): undefined;\n}\nclass A implements Base {\n  run(): undefined {}\n}\nclass B implements __CURSOR__Base {\n  run(): undefined {}\n}\n",
         expectLines: [0],
     },
     {
@@ -40,18 +40,19 @@ definitionCases("Go to definition: interfaces", [
     },
     {
         name: "an interface method in an implements list jumps to the member",
-        source: "interface Runner {\n  run(): void;\n}\nclass Circle implements Runner {\n  run(): void {}\n}\nconst r = new Circle();\nr.__CURSOR__run();\n",
+        source: "interface Runner {\n  run(): undefined;\n}\nclass Circle implements Runner {\n  run(): undefined {}\n}\nconst r = new Circle();\nr.__CURSOR__run();\n",
         expectLines: [1],
     },
     {
         name: "a member call resolves the implementing class member",
-        source: "interface End {\n  halt(): void;\n}\nclass A implements End {\n  halt(): void {}\n}\nconst a = new A();\na.__CURSOR__halt();\n",
+        source: "interface End {\n  halt(): undefined;\n}\nclass A implements End {\n  halt(): undefined {}\n}\nconst a = new A();\na.__CURSOR__halt();\n",
         expectLines: [4],
     },
     {
         name: "a default-exported interface jumps to its declaration from another file",
-        source: "import Handler from \"./util.cp3\";\nfunction attach(h: __CURSOR__Handler): void {}\n",
-        modules: [["util.cp3", "export default interface Handler {\n  fire(): void;\n}\n"]],
+        source: "import Handler from \"./util.cp3\";\nfunction attach(h: __CURSOR__Handler): undefined {}\n",
+        modules: [["util.cp3", "export default interface Handler {\n  fire(): undefined;\n}\n"]],
         expectLines: [0],
     },
 ]);
+

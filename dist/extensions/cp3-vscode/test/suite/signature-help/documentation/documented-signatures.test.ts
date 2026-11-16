@@ -46,7 +46,7 @@ signatureHelpCases("Signature help: documentation", [
     },
     {
         name: "a documented method shows the method docs",
-        source: "class Counter {\n  /** Increments the counter by one. */\n  increment(): void {}\n}\nconst c = new Counter();\nc.__CURSOR__increment();\n",
+        source: "class Counter {\n  /** Increments the counter by one. */\n  increment(): undefined {}\n}\nconst c = new Counter();\nc.__CURSOR__increment();\n",
         contains: ["ncrement"],
     },
     {
@@ -56,3 +56,4 @@ signatureHelpCases("Signature help: documentation", [
         contains: ["second"],
     },
 ]);
+

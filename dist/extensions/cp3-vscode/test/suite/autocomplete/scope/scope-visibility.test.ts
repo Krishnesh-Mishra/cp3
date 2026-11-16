@@ -39,7 +39,7 @@ completionCases("Autocomplete: scope and visibility", [
     },
     {
         name: "parameter name is offered inside nested arrow",
-        source: "function run(seed: number): void {\n  const inner = () => {\n    print(__CURSOR__);\n  };\n  inner();\n}\n",
+        source: "function run(seed: number): undefined {\n  const inner = () => {\n    print(__CURSOR__);\n  };\n  inner();\n}\n",
         expectPresent: ["seed"],
     },
     {
@@ -54,12 +54,12 @@ completionCases("Autocomplete: scope and visibility", [
     },
     {
         name: "sibling function parameter is not offered inside another parameter list",
-        source: "function pair(left: number, right: number): void {\n  const sum = left + right;\n  print(__CURSOR__);\n}\n",
+        source: "function pair(left: number, right: number): undefined {\n  const sum = left + right;\n  print(__CURSOR__);\n}\n",
         expectPresent: ["sum", "left", "right"],
     },
     {
         name: "local const with generic type keeps its own scope visibility",
-        source: "function main(): void {\n  const values: number[] = [1, 2];\n  print(__CURSOR__);\n}\n",
+        source: "function main(): undefined {\n  const values: number[] = [1, 2];\n  print(__CURSOR__);\n}\n",
         expectPresent: ["values"],
     },
     {
@@ -74,7 +74,8 @@ completionCases("Autocomplete: scope and visibility", [
     },
     {
         name: "destructured parameter is offered in the body",
-        source: "function open({ path }: { path: string }): void {\n  print(__CURSOR__);\n}\n",
+        source: "function open({ path }: { path: string }): undefined {\n  print(__CURSOR__);\n}\n",
         expectPresent: ["path"],
     },
 ]);
+

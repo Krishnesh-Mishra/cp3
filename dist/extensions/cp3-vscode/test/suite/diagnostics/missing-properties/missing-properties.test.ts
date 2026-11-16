@@ -39,12 +39,12 @@ diagnosticCases("Diagnostics: missing properties", [
     },
     {
         name: "missing method of an interface-typed parameter is an error",
-        source: "interface Storage {\n  load(): string;\n  save(s: string): void;\n}\nconst s: Storage = { load(): string { return \"x\"; } };\n",
+        source: "interface Storage {\n  load(): string;\n  save(s: string): undefined;\n}\nconst s: Storage = { load(): string { return \"x\"; } };\n",
         expect: [{ severity: "error" }],
     },
     {
         name: "missing property passed as an object argument is an error",
-        source: "interface Config {\n  retries: number;\n  timeout: number;\n}\nfunction run(c: Config): void {}\nrun({ retries: 1 });\n",
+        source: "interface Config {\n  retries: number;\n  timeout: number;\n}\nfunction run(c: Config): undefined {}\nrun({ retries: 1 });\n",
         expect: [{ severity: "error" }],
     },
     {
@@ -54,3 +54,4 @@ diagnosticCases("Diagnostics: missing properties", [
         expectNoDiagnostics: true,
     },
 ]);
+

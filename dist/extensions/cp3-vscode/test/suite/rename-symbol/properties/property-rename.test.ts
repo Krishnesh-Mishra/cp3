@@ -59,3 +59,4 @@ renameCases("Rename symbol: properties and interfaces", [
         expectEditCount: 3,
     },
 ]);
+

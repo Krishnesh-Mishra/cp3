@@ -57,3 +57,4 @@ completionCases("Autocomplete: partial identifier filtering", [
         expectPresent: ["score", "speed", "stamina"],
     },
 ]);
+

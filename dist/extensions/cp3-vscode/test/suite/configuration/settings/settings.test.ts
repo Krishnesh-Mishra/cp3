@@ -24,7 +24,7 @@ suite("Configuration: contributed surface", () => {
     // suite may or may not have done by the time this suite runs - so the
     // suite activates the extension itself instead of depending on the run
     // order.
-    const activateExtension = async (): Promise<void> => {
+    const activateExtension = async (): Promise<undefined> => {
         const extension = vscode.extensions.getExtension("cp3.cp3-vscode");
         assert.ok(extension, "extension is present in the registry");
         await extension.activate();
@@ -137,3 +137,4 @@ suite("Configuration: contributed surface", () => {
         assert.ok(manifest.contributes.debuggers.some((debugger_) => debugger_.type === "cp3"));
     });
 });
+

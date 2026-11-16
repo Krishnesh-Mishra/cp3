@@ -4,17 +4,17 @@ import { renameCases } from "../../harness";
 renameCases("Rename symbol: methods and classes", [
     {
         name: "a method is renamed at its declaration and call site",
-        source: "class Machine {\n  __CURSOR__start(): void {}\n}\nconst m = new Machine();\nm.start();\n",
+        source: "class Machine {\n  __CURSOR__start(): undefined {}\n}\nconst m = new Machine();\nm.start();\n",
         newName: "boot",
     },
     {
         name: "a static method is renamed at its declaration and use",
-        source: "class Machine {\n  static __CURSOR__reset(): void {}\n}\nMachine.reset();\n",
+        source: "class Machine {\n  static __CURSOR__reset(): undefined {}\n}\nMachine.reset();\n",
         newName: "restart",
     },
     {
         name: "an instance method used twice renames at both call sites",
-        source: "class Machine {\n  start(): void {}\n}\nconst m = new Machine();\nm.start();\nm.__CURSOR__start();\n",
+        source: "class Machine {\n  start(): undefined {}\n}\nconst m = new Machine();\nm.start();\nm.__CURSOR__start();\n",
         newName: "boot",
         expectEditCount: 3,
     },
@@ -37,7 +37,7 @@ renameCases("Rename symbol: methods and classes", [
     },
     {
         name: "a class referenced in a type annotation is renamed there too",
-        source: "class Widget {}\nfunction attach(w: Widget): void {}\nconst w = new __CURSOR__Widget();\n",
+        source: "class Widget {}\nfunction attach(w: Widget): undefined {}\nconst w = new __CURSOR__Widget();\n",
         newName: "Panel",
         expectEditCount: 3,
     },
@@ -49,7 +49,7 @@ renameCases("Rename symbol: methods and classes", [
     },
     {
         name: "a method used inside another method of the same class is renamed",
-        source: "class Worker {\n  helper(): void {}\n  run(): void {\n    helper();\n  }\n}\nconst w = new Worker();\nw.__CURSOR__helper();\n",
+        source: "class Worker {\n  helper(): undefined {}\n  run(): undefined {\n    helper();\n  }\n}\nconst w = new Worker();\nw.__CURSOR__helper();\n",
         newName: "assist",
         expectEditCount: 3,
     },
@@ -60,3 +60,4 @@ renameCases("Rename symbol: methods and classes", [
         expectEditCount: 3,
     },
 ]);
+

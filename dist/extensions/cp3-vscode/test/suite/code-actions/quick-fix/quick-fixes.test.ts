@@ -102,12 +102,12 @@ codeActionCases("Code actions: quick fixes", [
     },
     {
         name: "an unknown member of a class instance offers no fix it cannot compute",
-        source: "class Machine {\n  start(): void {}\n}\nconst m = new Machine();\nm.__CURSOR__stat();\n",
+        source: "class Machine {\n  start(): undefined {}\n}\nconst m = new Machine();\nm.__CURSOR__stat();\n",
         expectTitle: ["start"],
     },
     {
         name: "an unknown member of an interface-typed value offers a fix",
-        source: "interface Sized { size(): number }\nfunction f(s: Sized): void {\n  s.__CURSOR__siz();\n}\n",
+        source: "interface Sized { size(): number }\nfunction f(s: Sized): undefined {\n  s.__CURSOR__siz();\n}\n",
         expectTitle: ["size"],
     },
     {
@@ -116,3 +116,4 @@ codeActionCases("Code actions: quick fixes", [
         expectTitle: ["remove"],
     },
 ]);
+

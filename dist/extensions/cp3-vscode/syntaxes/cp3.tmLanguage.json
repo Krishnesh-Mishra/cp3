@@ -541,7 +541,7 @@
       "patterns": [
         {
           "name": "support.type.primitive.cp3",
-          "match": "\\b(?:number|string|boolean|void|unknown)\\b"
+          "match": "\\b(?:number|string|boolean|undefined|null|object)\\b"
         },
         {
           "name": "support.type.prefixed.cp3",

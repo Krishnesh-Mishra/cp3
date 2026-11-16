@@ -40,3 +40,4 @@ autoImportCases("Auto-import: extension resolution", [
         expectImportInserted: "util.cp3",
     },
 ]);
+

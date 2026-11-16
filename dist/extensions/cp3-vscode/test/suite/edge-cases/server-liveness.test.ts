@@ -1,4 +1,4 @@
-// Regression: language server must start from a cold activation.
+﻿// Regression: language server must start from a cold activation.
 // The extension activates lazily on `onLanguage:cp3` - the document-open
 // event that triggers activation fires BEFORE `activate()` registers the
 // lazy-start handler, which previously left the server permanently
@@ -43,3 +43,4 @@ suite("Language server: cold-activation regression", () => {
         assert.ok(labels.includes("age"), `expected "age" in completions; got: ${labels.join(", ")}`);
     });
 });
+

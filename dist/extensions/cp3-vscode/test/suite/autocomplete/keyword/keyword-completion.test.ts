@@ -4,12 +4,12 @@ import { completionCases } from "../../harness";
 completionCases("Autocomplete: keyword completion", [
     {
         name: "statement position offers let and const",
-        source: "function main(): void {\n  __CURSOR__\n}\n",
+        source: "function main(): undefined {\n  __CURSOR__\n}\n",
         expectPresent: ["let", "const"],
     },
     {
         name: "statement position offers control flow",
-        source: "function main(): void {\n  __CURSOR__\n}\n",
+        source: "function main(): undefined {\n  __CURSOR__\n}\n",
         expectPresent: ["if", "for", "while", "return"],
     },
     {
@@ -24,7 +24,7 @@ completionCases("Autocomplete: keyword completion", [
     },
     {
         name: "inside a try block offers catch and finally",
-        source: "function main(): void {\n  try {\n    risky();\n    __CURSOR__\n  } catch (e) {\n  }\n}\n",
+        source: "function main(): undefined {\n  try {\n    risky();\n    __CURSOR__\n  } catch (e) {\n  }\n}\n",
         expectPresent: ["catch", "finally"],
     },
     {
@@ -34,12 +34,12 @@ completionCases("Autocomplete: keyword completion", [
     },
     {
         name: "async function body offers await",
-        source: "async function main(): Promise<void> {\n  __CURSOR__\n}\n",
+        source: "async function main(): Promise<undefined> {\n  __CURSOR__\n}\n",
         expectPresent: ["await"],
     },
     {
         name: "parameter list offers ref",
-        source: "function bump(__CURSOR__x: number): void {}\n",
+        source: "function bump(__CURSOR__x: number): undefined {}\n",
         expectPresent: ["ref"],
     },
     {
@@ -54,3 +54,4 @@ completionCases("Autocomplete: keyword completion", [
         expectAbsent: ["finally", "catch", "implements", "private", "abstract"],
     },
 ]);
+

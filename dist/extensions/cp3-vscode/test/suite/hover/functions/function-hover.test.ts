@@ -48,10 +48,12 @@ hoverCases("Hover: functions and signatures", [
         contains: ["number"],
     },
     {
-        // cp3 rejects the `void` annotation (CP3420) and resolves it to
-        // `undefined`, so the hover shows the resolved return type.
-        name: "hovering a void function shows void in the signature",
-        source: "function greet(): void {}\n__CURSOR__greet();\n",
+        // cp3 has no `void`; a function annotated `undefined` is rejected
+        // (CP3420/CP3421-style) at the annotation and resolved to the
+        // `undefined` type the hover prints.
+        name: "hovering an undefined function shows undefined in the signature",
+        source: "function greet(): undefined {}\n__CURSOR__greet();\n",
         contains: ["undefined"],
     },
 ]);
+

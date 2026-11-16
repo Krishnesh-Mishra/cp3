@@ -19,12 +19,12 @@ completionCases("Autocomplete: class and interface completion", [
     },
     {
         name: "class static function is offered on the class name",
-        source: "class Counter {\n  static increment(): void {}\n}\nCounter.__CURSOR__\n",
+        source: "class Counter {\n  static increment(): undefined {}\n}\nCounter.__CURSOR__\n",
         expectPresent: ["increment"],
     },
     {
         name: "class instance offers both property and method",
-        source: "class Player {\n  score: number = 0;\n  reset(): void {}\n}\nconst p = new Player();\np.__CURSOR__\n",
+        source: "class Player {\n  score: number = 0;\n  reset(): undefined {}\n}\nconst p = new Player();\np.__CURSOR__\n",
         expectPresent: ["score", "reset"],
     },
     {
@@ -39,12 +39,12 @@ completionCases("Autocomplete: class and interface completion", [
     },
     {
         name: "abstract class is offered in type position",
-        source: "abstract class Shape { abstract area(): number; }\nconst mover = (s: __CURSOR__): void => {};\n",
+        source: "abstract class Shape { abstract area(): number; }\nconst mover = (s: __CURSOR__): undefined => {};\n",
         expectPresent: ["Shape"],
     },
     {
         name: "interface method completion is offered on the value",
-        source: "interface Logger {\n  log(message: string): void;\n}\nfunction emit(logger: Logger): void {\n  logger.__CURSOR__\n}\n",
+        source: "interface Logger {\n  log(message: string): undefined;\n}\nfunction emit(logger: Logger): undefined {\n  logger.__CURSOR__\n}\n",
         expectPresent: ["log"],
     },
     {
@@ -54,7 +54,7 @@ completionCases("Autocomplete: class and interface completion", [
     },
     {
         name: "enum is offered in type position",
-        source: "enum Direction { North, South, East, West }\nfunction travel(d: __CURSOR__): void {}\n",
+        source: "enum Direction { North, South, East, West }\nfunction travel(d: __CURSOR__): undefined {}\n",
         expectPresent: ["Direction"],
     },
     {
@@ -78,3 +78,4 @@ completionCases("Autocomplete: class and interface completion", [
         expectPresent: ["name", "age"],
     },
 ]);
+

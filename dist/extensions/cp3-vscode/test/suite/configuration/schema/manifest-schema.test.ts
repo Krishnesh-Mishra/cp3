@@ -1,4 +1,4 @@
-// Configuration / the cp3 manifest schema association flow
+﻿// Configuration / the cp3 manifest schema association flow
 import * as assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -125,3 +125,4 @@ suite("Configuration: manifest schema association", () => {
         assert.equal(parsed.typeSystem, "rust");
     });
 });
+

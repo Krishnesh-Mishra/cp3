@@ -3,12 +3,12 @@ import { semanticTokenCases } from "../../harness";
 
 const SAMPLE = [
     "interface Logger {",
-    "  function log(str: string): void;",
+    "  function log(str: string): undefined;",
     "}",
     "class Counter extends Base implements Sized {",
     "  private count: number = 0;",
     "  weak parent: Counter;",
-    "  static function increment(): void { Counter.count = Counter.count + 1; }",
+    "  static function increment(): undefined { Counter.count = Counter.count + 1; }",
     "  get value(): number { return this.count; }",
     "}",
     "enum Color { Red, Green, Blue }",
@@ -16,7 +16,7 @@ const SAMPLE = [
     "function addTen(ref x: number) {",
     "  x = x + 10;",
     "}",
-    "async function countdown(from: number): Promise<void> {",
+    "async function countdown(from: number): Promise<undefined> {",
     "  let n = from;",
     "  while (n > 0) {",
     "    await sleep(100);",
@@ -56,7 +56,7 @@ semanticTokenCases("Semantic tokens: declarations and types", [
     { name: "Name scopes as a type alias", source: SAMPLE, expectScopes: [["Name", "entity.name.type.alias.cp3"]] },
     { name: "number primitive scopes as a primitive type", source: SAMPLE, expectScopes: [["number", "support.type.primitive.cp3"]] },
     { name: "string primitive scopes as a primitive type", source: SAMPLE, expectScopes: [["string", "support.type.primitive.cp3"]] },
-    { name: "void scopes as a primitive type", source: SAMPLE, expectScopes: [["void", "support.type.primitive.cp3"]] },
+    { name: "undefined scopes as a primitive type", source: SAMPLE, expectScopes: [["undefined", "support.type.primitive.cp3"]] },
     { name: "while scopes as control flow", source: SAMPLE, expectScopes: [["while", "keyword.control.cp3"]] },
     { name: "try scopes as control flow", source: SAMPLE, expectScopes: [["try", "keyword.control.cp3"]] },
     { name: "catch scopes as control flow", source: SAMPLE, expectScopes: [["catch", "keyword.control.cp3"]] },
@@ -77,3 +77,4 @@ semanticTokenCases("Semantic tokens: declarations and types", [
     { name: "Promise scopes as a type", source: SAMPLE, expectScopes: [["Promise", "entity.name.type.cp3"]] },
     { name: "of in a for-of loop scopes as a keyword operator", source: SAMPLE, expectScopes: [["of", "keyword.operator.expression.of.cp3"]] },
 ]);
+

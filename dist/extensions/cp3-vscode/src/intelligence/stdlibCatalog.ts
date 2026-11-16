@@ -1,4 +1,4 @@
-// dist/extensions/cp3-vscode/src/intelligence/stdlibCatalog.ts
+﻿// dist/extensions/cp3-vscode/src/intelligence/stdlibCatalog.ts
 //
 // The closed cp3 standard-library surface, as documented in
 // docs/content/03-standard-library. The compiler diagnoses members outside
@@ -43,7 +43,7 @@ const constant = (name: string, doc: string): StdlibMember =>
 const property = (name: string, signature: string, doc: string): StdlibMember =>
     ({ name, signature, doc, kind: "property" });
 
-// std/math — docs: 07-math.md
+// std/math â€” docs: 07-math.md
 const mathMembers: readonly StdlibMember[] = [
     constant("PI", "Ratio of a circle's circumference to its diameter."),
     constant("E", "Euler's number, the base of natural logarithms."),
@@ -90,40 +90,40 @@ const mathMembers: readonly StdlibMember[] = [
     fn("sign", "sign(x: number): number", "-1, 0 or 1 according to the sign of x; NaN stays NaN."),
 ];
 
-// std/console — docs: 01-console.md
+// std/console â€” docs: 01-console.md
 const consoleMembers: readonly StdlibMember[] = [
-    fn("log", "log(...args): void", "Write to stdout with a newline."),
-    fn("info", "info(...args): void", "Write to stdout with a newline (naming convenience)."),
-    fn("warn", "warn(...args): void", "Write to stderr with a newline."),
-    fn("error", "error(...args): void", "Write to stderr with a newline."),
-    fn("assert", "assert(condition: unknown, ...args): void", "Write to stderr only when condition is falsy."),
-    fn("count", "count(label?: string): void", "Print `label: N` and increment the per-label counter (default `default`)."),
-    fn("countReset", "countReset(label?: string): void", "Reset the counter for `label` (default `default`)."),
-    fn("dir", "dir(value: unknown): void", "Print a value like log (objects in field order)."),
-    fn("trace", "trace(...args): void", "Print a `Trace:` line with the arguments (no stack trace)."),
-    fn("group", "group(...args): void", "Print the arguments, then indent following stdout lines by two spaces."),
-    fn("groupEnd", "groupEnd(): void", "Close the innermost open group (never below zero indent)."),
-    fn("table", "table(rows: unknown): void", "Print an (index) (value) listing for an array, or key value lines for an object literal."),
+    fn("log", "log(...args): undefined", "Write to stdout with a newline."),
+    fn("info", "info(...args): undefined", "Write to stdout with a newline (naming convenience)."),
+    fn("warn", "warn(...args): undefined", "Write to stderr with a newline."),
+    fn("error", "error(...args): undefined", "Write to stderr with a newline."),
+    fn("assert", "assert(condition: object, ...args): undefined", "Write to stderr only when condition is falsy."),
+    fn("count", "count(label?: string): undefined", "Print `label: N` and increment the per-label counter (default `default`)."),
+    fn("countReset", "countReset(label?: string): undefined", "Reset the counter for `label` (default `default`)."),
+    fn("dir", "dir(value: object): undefined", "Print a value like log (objects in field order)."),
+    fn("trace", "trace(...args): undefined", "Print a `Trace:` line with the arguments (no stack trace)."),
+    fn("group", "group(...args): undefined", "Print the arguments, then indent following stdout lines by two spaces."),
+    fn("groupEnd", "groupEnd(): undefined", "Close the innermost open group (never below zero indent)."),
+    fn("table", "table(rows: object): undefined", "Print an (index) (value) listing for an array, or key value lines for an object literal."),
     fn("input", "input(prompt?: string): Promise<string>", "Read one line from stdin; EOF resolves to an empty string."),
     fn("readKey", "readKey(): Promise<string>", "Read one keypress; raw mode while pending."),
-    fn("on", "on(event: \"keypress\" | \"line\" | \"close\", listener: (value: string) => void): void", "Register a stdin listener; stays until removed."),
-    fn("off", "off(event: \"keypress\" | \"line\" | \"close\", listener: (value: string) => void): void", "Remove the exact listener registered for the event."),
-    fn("clear", "clear(): void", "Clear the terminal screen."),
-    fn("hide", "hide(): void", "Hide the console window (Windows; no-op elsewhere)."),
-    fn("show", "show(): void", "Restore the console window (Windows; no-op elsewhere)."),
-    fn("time", "time(label?: string): void", "Record the start instant for `label` (default `default`)."),
-    fn("timeEnd", "timeEnd(label?: string): void", "Print `label: <ms>ms` and remove the timer (default `default`)."),
+    fn("on", "on(event: \"keypress\" | \"line\" | \"close\", listener: (value: string) => undefined): undefined", "Register a stdin listener; stays until removed."),
+    fn("off", "off(event: \"keypress\" | \"line\" | \"close\", listener: (value: string) => undefined): undefined", "Remove the exact listener registered for the event."),
+    fn("clear", "clear(): undefined", "Clear the terminal screen."),
+    fn("hide", "hide(): undefined", "Hide the console window (Windows; no-op elsewhere)."),
+    fn("show", "show(): undefined", "Restore the console window (Windows; no-op elsewhere)."),
+    fn("time", "time(label?: string): undefined", "Record the start instant for `label` (default `default`)."),
+    fn("timeEnd", "timeEnd(label?: string): undefined", "Print `label: <ms>ms` and remove the timer (default `default`)."),
 ];
 
-// std/process — docs: 03-process.md
+// std/process â€” docs: 03-process.md
 const processMembers: readonly StdlibMember[] = [
     property("argv", "argv: string[]", "Arguments passed to this program."),
     property("env", "env: Map<string, string>", "The program's in-memory environment map."),
-    fn("exit", "exit(code: number): void", "Flush stdout and terminate with a numeric exit code."),
+    fn("exit", "exit(code: number): undefined", "Flush stdout and terminate with a numeric exit code."),
     fn("exec", "exec(cmd: string, args: string[]): Promise<ExecResult>", "Run a child and collect stdout/stderr until it exits."),
     fn("spawn", "spawn(cmd: string, args: string[]): SpawnHandle", "Start a child and observe output/exit events while it runs."),
     fn("cwd", "cwd(): string", "Current working directory."),
-    fn("chdir", "chdir(path: string): void", "Change the working directory; throws on failure."),
+    fn("chdir", "chdir(path: string): undefined", "Change the working directory; throws on failure."),
     property("pid", "pid: number", "Process id of this process."),
     property("ppid", "ppid: number", "Process id of the parent process."),
     fn("uptime", "uptime(): number", "Seconds since the program started (monotonic)."),
@@ -133,37 +133,37 @@ const processMembers: readonly StdlibMember[] = [
     property("arch", "arch: string", "CPU architecture: \"x64\" or \"arm64\"."),
     property("version", "version: string", "The CP3 runtime version string."),
     property("exitCode", "exitCode: number", "Stored exit code (default 0); assignment does not exit."),
-    fn("nextTick", "nextTick(callback: () => void): void", "Queue callback before timers and promise continuations (FIFO)."),
+    fn("nextTick", "nextTick(callback: () => undefined): undefined", "Queue callback before timers and promise continuations (FIFO)."),
     property("stdout", "stdout: StdioStream", "Writable stream for stdout: .write(s) emits s with no newline, then flushes."),
     property("stderr", "stderr: StdioStream", "Writable stream for stderr; same shape as stdout."),
     property("stdin", "stdin: StdinStream", "Readable stream: readAll / readLines / readLine / on(\"line\" | \"close\") / close()."),
-    fn("on", "on(event: \"SIGINT\" | \"SIGTERM\" | \"exit\" | \"unhandledRejection\", listener: (value: unknown) => void): void", "Register a lifecycle listener."),
-    fn("onShutdown", "onShutdown(listener: () => void): void", "Sugar for on(\"exit\", ...); runs once before the process ends."),
+    fn("on", "on(event: \"SIGINT\" | \"SIGTERM\" | \"exit\" | \"unhandledRejection\", listener: (value: object) => undefined): undefined", "Register a lifecycle listener."),
+    fn("onShutdown", "onShutdown(listener: () => undefined): undefined", "Sugar for on(\"exit\", ...); runs once before the process ends."),
 ];
 
-// std/fs — docs: 04-fs.md
+// std/fs â€” docs: 04-fs.md
 const fsMembers: readonly StdlibMember[] = [
     fn("readFileSync", "readFileSync(path: string): string", "Read a file synchronously; contents are always returned as a string."),
     fn("readFile", "readFile(path: string): Promise<string>", "Read a file (promise); contents are always resolved as a string."),
-    fn("writeFileSync", "writeFileSync(path: string, data: string): void", "Write a file synchronously, truncating it."),
-    fn("writeFile", "writeFile(path: string, data: string): Promise<void>", "Write a file (promise), truncating it."),
-    fn("appendFileSync", "appendFileSync(path: string, data: string): void", "Append to a file synchronously."),
-    fn("appendFile", "appendFile(path: string, data: string): Promise<void>", "Append to a file (promise)."),
+    fn("writeFileSync", "writeFileSync(path: string, data: string): undefined", "Write a file synchronously, truncating it."),
+    fn("writeFile", "writeFile(path: string, data: string): Promise<undefined>", "Write a file (promise), truncating it."),
+    fn("appendFileSync", "appendFileSync(path: string, data: string): undefined", "Append to a file synchronously."),
+    fn("appendFile", "appendFile(path: string, data: string): Promise<undefined>", "Append to a file (promise)."),
     fn("existsSync", "existsSync(path: string): boolean", "Point-in-time check; another process can change it immediately."),
-    fn("mkdirSync", "mkdirSync(path: string): void", "Create a directory synchronously."),
-    fn("mkdir", "mkdir(path: string): Promise<void>", "Create a directory (promise)."),
+    fn("mkdirSync", "mkdirSync(path: string): undefined", "Create a directory synchronously."),
+    fn("mkdir", "mkdir(path: string): Promise<undefined>", "Create a directory (promise)."),
     fn("readdirSync", "readdirSync(path: string): string[]", "List directory entries synchronously."),
     fn("readdir", "readdir(path: string): Promise<string[]>", "List directory entries (promise)."),
     fn("statSync", "statSync(path: string): FileStats", "File metadata snapshot: size, isFile, isDirectory, modifiedAt."),
     fn("stat", "stat(path: string): Promise<FileStats>", "File metadata snapshot (promise): size, isFile, isDirectory, modifiedAt."),
-    fn("unlinkSync", "unlinkSync(path: string): void", "Remove a file synchronously; no directory variant exists."),
-    fn("unlink", "unlink(path: string): Promise<void>", "Remove a file (promise); no directory variant exists."),
+    fn("unlinkSync", "unlinkSync(path: string): undefined", "Remove a file synchronously; no directory variant exists."),
+    fn("unlink", "unlink(path: string): Promise<undefined>", "Remove a file (promise); no directory variant exists."),
     fn("readFileStream", "readFileStream(path: string, chunkSize?: number): ReadStream", "Yield Buffer chunks; see the ReadStream docs for on(\"data\" | \"end\" | \"error\")."),
     fn("writeFileStream", "writeFileStream(path: string): WriteStream", "WriteStream whose write accepts string | Buffer."),
-    fn("watch", "watch(path: string, callback: (eventType: string, filename: string) => void): FsWatcher", "Watch a file or directory; callback(eventType, filename); close() stops delivery."),
+    fn("watch", "watch(path: string, callback: (eventType: string, filename: string) => undefined): FsWatcher", "Watch a file or directory; callback(eventType, filename); close() stops delivery."),
 ];
 
-// std/path — docs: 05-path.md
+// std/path â€” docs: 05-path.md
 const pathMembers: readonly StdlibMember[] = [
     property("sep", "sep: string", "Platform path separator."),
     fn("join", "join(...parts: string[]): string", "Join path segments."),
@@ -175,7 +175,7 @@ const pathMembers: readonly StdlibMember[] = [
     fn("isAbsolute", "isAbsolute(path: string): boolean", "Whether the path is absolute on this platform."),
 ];
 
-// std/os — docs: 06-os.md
+// std/os â€” docs: 06-os.md
 const osMembers: readonly StdlibMember[] = [
     fn("platform", "platform(): string", "Platform name."),
     fn("hostname", "hostname(): string", "Machine host name."),
@@ -190,25 +190,25 @@ const osMembers: readonly StdlibMember[] = [
     fn("networkInterfaces", "networkInterfaces(): Array<[string, string, string, boolean]>", "One [name, address, family, internal] tuple per interface."),
 ];
 
-// std/date — docs: 08-date.md (namespace operations; instance members are Date's own)
+// std/date â€” docs: 08-date.md (namespace operations; instance members are Date's own)
 const dateMembers: readonly StdlibMember[] = [
     fn("now", "now(): i64", "Milliseconds since the epoch."),
     fn("fromISOString", "fromISOString(s: string): Date", "Parse an ISO-8601 string; treat untrusted input as untrusted."),
     fn("parse", "parse(s: string): i64", "Milliseconds since the epoch, or throws/returns an error-sentinel per vocabulary."),
 ];
 
-// std/json — docs: 09-json.md
+// std/json â€” docs: 09-json.md
 const jsonMembers: readonly StdlibMember[] = [
     fn("parse", "parse<T>(text: string): T", "Parse JSON; generic parameter expresses the runtime validation contract."),
     fn("parseFileSync", "parseFileSync<T>(path: string): T", "Read and parse a file exactly like JSON.parse<T>."),
     fn("parseFile", "parseFile<T>(path: string): Promise<T>", "Read and parse a file asynchronously."),
-    fn("stringify", "stringify(value: unknown, replacer?: (key: string, value: unknown) => unknown, space?: number | string): string", "Serialize to JSON; no reviver is exposed."),
-    fn("stringifyToFileSync", "stringifyToFileSync(path: string, value: unknown): void", "Serialize and overwrite a file with exactly what stringify would produce."),
-    fn("stringifyToFile", "stringifyToFile(path: string, value: unknown): Promise<void>", "Serialize and overwrite a file asynchronously."),
+    fn("stringify", "stringify(value: object, replacer?: (key: string, value: object) => object, space?: number | string): string", "Serialize to JSON; no reviver is exposed."),
+    fn("stringifyToFileSync", "stringifyToFileSync(path: string, value: object): undefined", "Serialize and overwrite a file with exactly what stringify would produce."),
+    fn("stringifyToFile", "stringifyToFile(path: string, value: object): Promise<undefined>", "Serialize and overwrite a file asynchronously."),
     fn("verify", "verify<T>(text: string): boolean", "True iff text parses as JSON of type T."),
 ];
 
-// std/crypto — docs: 10-crypto.md
+// std/crypto â€” docs: 10-crypto.md
 const cryptoMembers: readonly StdlibMember[] = [
     fn("randomUUID", "randomUUID(): string", "RFC 4122 version-4 UUID text."),
     fn("randomBytes", "randomBytes(length: number): Buffer", "Cryptographically random bytes; size capped at 2,147,483,647."),
@@ -226,12 +226,12 @@ const cryptoMembers: readonly StdlibMember[] = [
     fn("uuidVersion", "uuidVersion(uuid: string): number", "Version nibble (0-15) of a canonical UUID string; 0 when not canonical."),
 ];
 
-// std/time — docs: 21-time.md
+// std/time â€” docs: 21-time.md
 const timeMembers: readonly StdlibMember[] = [
     fn("stopwatch", "stopwatch(): Stopwatch", "Create a new stopped Stopwatch; new Stopwatch() is not part of the surface."),
 ];
 
-// std/readline — docs: 22-readline.md
+// std/readline â€” docs: 22-readline.md
 const readlineMembers: readonly StdlibMember[] = [
     fn("readLine", "readLine(): Promise<string>", "Next line of stdin (terminator removed); \"\" on EOF."),
     fn("readLines", "readLines(): Promise<string[]>", "All remaining lines to EOF, terminators removed."),
@@ -239,7 +239,7 @@ const readlineMembers: readonly StdlibMember[] = [
     fn("createReader", "createReader(): LineReader", "A line reader over stdin: readLine/readLines/on(\"line\" | \"close\")/close."),
 ];
 
-// std/hash — docs: 23-hash.md
+// std/hash â€” docs: 23-hash.md
 const hashMembers: readonly StdlibMember[] = [
     fn("crc32", "crc32(input: string | Buffer): u32", "IEEE 802.3 CRC-32 (number in TypeScript projects)."),
     fn("crc32c", "crc32c(input: string | Buffer): u32", "Castagnoli CRC-32C."),
@@ -248,7 +248,7 @@ const hashMembers: readonly StdlibMember[] = [
     fn("xxhash64", "xxhash64(input: string | Buffer): u64", "XXH64 with the seed fixed to 0."),
 ];
 
-// std/io — docs: 18-io.md
+// std/io â€” docs: 18-io.md
 const ioMembers: readonly StdlibMember[] = [
     fn("waitReadable", "waitReadable(fd: number): Promise<undefined>", "Await until fd is readable."),
     fn("waitWritable", "waitWritable(fd: number): Promise<undefined>", "Await until fd is writable."),
@@ -257,14 +257,14 @@ const ioMembers: readonly StdlibMember[] = [
     constant("POLL_WRITING", "checkProgress verdict: await waitWritable(getSocket())."),
 ];
 
-// std/env — docs: 02-env.md (named export `env`)
+// std/env â€” docs: 02-env.md (named export `env`)
 const envMembers: readonly StdlibMember[] = [
     fn("get", "get<T>(key: string, options?: { default?: T }): T", "Look up a key; throws when missing without a default."),
     fn("has", "has(key: string): boolean", "True iff the key exists; empty-string OS values count as absent."),
-    fn("load", "load(path: string): void", "Load a .env file into the environment; throws if unreadable."),
+    fn("load", "load(path: string): undefined", "Load a .env file into the environment; throws if unreadable."),
 ];
 
-// std/url — docs: 19-url.md (named exports: URL, URLSearchParams + encoding helpers)
+// std/url â€” docs: 19-url.md (named exports: URL, URLSearchParams + encoding helpers)
 const urlMembers: readonly StdlibMember[] = [
     fn("encodeURIComponent", "encodeURIComponent(s: string): string", "Component percent-encoding."),
     fn("decodeURIComponent", "decodeURIComponent(s: string): string", "Component percent-decoding; malformed sequences are left as-is."),
@@ -274,18 +274,18 @@ const urlMembers: readonly StdlibMember[] = [
     fn("URLSearchParams", "new URLSearchParams(query?: string): URLSearchParams", "Parse/manipulate a query string."),
 ];
 
-// std/text — docs: 20-text.md (named exports: TextEncoder, TextDecoder)
+// std/text â€” docs: 20-text.md (named exports: TextEncoder, TextDecoder)
 const textMembers: readonly StdlibMember[] = [
     fn("TextEncoder", "new TextEncoder(encoding?: string): TextEncoder", "UTF-8 encoder; only utf-8/utf8 labels are accepted."),
     fn("TextDecoder", "new TextDecoder(encoding?: string): TextDecoder", "UTF-8 decoder; malformed bytes become U+FFFD, a leading BOM is stripped."),
 ];
 
-// std/buffer — docs: 11-buffer.md (named export `Buffer`)
+// std/buffer â€” docs: 11-buffer.md (named export `Buffer`)
 const bufferMembers: readonly StdlibMember[] = [
     fn("Buffer", "new Buffer(length: number): Buffer", "Byte buffer; slice() copies, Buffer.alloc/from forms per docs."),
 ];
 
-// std/collections — docs: 12-collections.md (named exports; classes imported individually)
+// std/collections â€” docs: 12-collections.md (named exports; classes imported individually)
 const collectionsMembers: readonly StdlibMember[] = [
     fn("Map", "new Map<K, V>(): Map<K, V>", "Insertion-ordered key/value map; static Map.groupBy(list, callback) groups an array into Map<K, T[]>."),
     fn("Set", "new Set<T>(): Set<T>", "Insertion-ordered set; union/intersection/difference/isSubsetOf return fresh Sets."),
@@ -337,3 +337,5 @@ export function findDefaultModule(binding: string): StdlibModule | undefined {
     }
     return undefined;
 }
+
+

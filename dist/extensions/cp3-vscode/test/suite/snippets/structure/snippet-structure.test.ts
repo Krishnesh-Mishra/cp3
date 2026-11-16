@@ -1,4 +1,4 @@
-// Snippets / the contributed cp3 snippet set, checked structurally
+﻿// Snippets / the contributed cp3 snippet set, checked structurally
 import * as assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -79,3 +79,4 @@ suite("Snippets: the contributed cp3 set", () => {
         });
     }
 });
+

@@ -49,7 +49,8 @@ completionCases("Autocomplete: invalid and incomplete syntax", [
     },
     {
         name: "type annotation missing its type asks for nothing illegal",
-        source: "function broken(n: number, ): void {\n  const value = __CURSOR__;\n}\n",
+        source: "function broken(n: number, ): undefined {\n  const value = __CURSOR__;\n}\n",
         expectPresent: ["n"],
     },
 ]);
+

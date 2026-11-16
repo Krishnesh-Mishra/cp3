@@ -51,3 +51,4 @@ semanticTokenCases("Semantic tokens: lexical categories", [
     { name: "const keyword scopes as a storage type", source: SAMPLE, expectScopes: [["const", "storage.type.cp3"]] },
     { name: "newline handling keeps the grammar stable", source: SAMPLE, expectScopes: [["message", "variable.other.readwrite.cp3"]] },
 ]);
+

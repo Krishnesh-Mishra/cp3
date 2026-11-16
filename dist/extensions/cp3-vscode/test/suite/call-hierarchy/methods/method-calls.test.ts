@@ -4,18 +4,18 @@ import { callHierarchyCases } from "../../harness";
 callHierarchyCases("Call hierarchy: methods", [
     {
         name: "the prepared hierarchy for a method names the method",
-        source: "class Machine {\n  start(): void {}\n}\nconst m = new Machine();\nm.__CURSOR__start();\n",
+        source: "class Machine {\n  start(): undefined {}\n}\nconst m = new Machine();\nm.__CURSOR__start();\n",
         prepareContains: ["start"],
     },
     {
         name: "the outgoing call from a method names the method it invokes",
-        source: "class Machine {\n  boot(): void {}\n  start(): void {\n    this.boot();\n  }\n}\nconst m = new Machine();\nm.__CURSOR__start();\n",
+        source: "class Machine {\n  boot(): undefined {}\n  start(): undefined {\n    this.boot();\n  }\n}\nconst m = new Machine();\nm.__CURSOR__start();\n",
         prepareContains: ["start"],
         outgoingContains: ["boot"],
     },
     {
         name: "the incoming call from another method names the caller method",
-        source: "class Machine {\n  boot(): void {}\n  start(): void {\n    this.boot();\n  }\n}\nconst m = new Machine();\nconst value = __CURSOR__m.boot();\n",
+        source: "class Machine {\n  boot(): undefined {}\n  start(): undefined {\n    this.boot();\n  }\n}\nconst m = new Machine();\nconst value = __CURSOR__m.boot();\n",
         prepareContains: ["boot"],
         incomingContains: ["start"],
     },
@@ -37,7 +37,7 @@ callHierarchyCases("Call hierarchy: methods", [
     },
     {
         name: "a method called from two callers reports both callers",
-        source: "class Machine {\n  ping(): void {}\n  run(): void {\n    this.ping();\n  }\n  kick(): void {\n    this.ping();\n  }\n}\nconst m = new Machine();\nconst value = __CURSOR__m.ping();\n",
+        source: "class Machine {\n  ping(): undefined {}\n  run(): undefined {\n    this.ping();\n  }\n  kick(): undefined {\n    this.ping();\n  }\n}\nconst m = new Machine();\nconst value = __CURSOR__m.ping();\n",
         prepareContains: ["ping"],
         incomingContains: ["run", "kick"],
     },
@@ -48,7 +48,7 @@ callHierarchyCases("Call hierarchy: methods", [
     },
     {
         name: "a module-scope function called via a callback reports its callee",
-        source: "function render(item: number): void {\n}\nfunction each(items: number[], cb: (item: number) => void): void {\n  cb(items[0]);\n}\neach([1, 2], __CURSOR__render);\n",
+        source: "function render(item: number): undefined {\n}\nfunction each(items: number[], cb: (item: number) => undefined): undefined {\n  cb(items[0]);\n}\neach([1, 2], __CURSOR__render);\n",
         prepareContains: ["render"],
     },
     {
@@ -70,17 +70,18 @@ callHierarchyCases("Call hierarchy: methods", [
     },
     {
         name: "a class static referenced in a type position still prepares",
-        source: "class Machine {\n  static build(): void {}\n}\nMachine.__CURSOR__build();\n",
+        source: "class Machine {\n  static build(): undefined {}\n}\nMachine.__CURSOR__build();\n",
         prepareContains: ["build"],
     },
     {
         name: "a method called on a returned object reports the method",
-        source: "class Factory {\n  make(): Machine {\n    return new Machine();\n  }\n}\nclass Machine {\n  start(): void {}\n}\nconst f = new Factory();\nf.make().__CURSOR__start();\n",
+        source: "class Factory {\n  make(): Machine {\n    return new Machine();\n  }\n}\nclass Machine {\n  start(): undefined {}\n}\nconst f = new Factory();\nf.make().__CURSOR__start();\n",
         prepareContains: ["start"],
     },
     {
         name: "an interface-typed method call reports the interface method",
-        source: "interface Runner {\n  run(): void;\n}\nfunction go(r: Runner): void {\n  r.__CURSOR__run();\n}\nconst impl: Runner = { run(): void {} };\ngo(impl);\n",
+        source: "interface Runner {\n  run(): undefined;\n}\nfunction go(r: Runner): undefined {\n  r.__CURSOR__run();\n}\nconst impl: Runner = { run(): undefined {} };\ngo(impl);\n",
         prepareContains: ["run"],
     },
 ]);
+

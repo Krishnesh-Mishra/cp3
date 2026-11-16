@@ -14,7 +14,7 @@ definitionCases("Go to definition: functions", [
     },
     {
         name: "a nested function jumps to its declaration",
-        source: "function outer(): void {\n  function inner(): void {}\n  __CURSOR__inner();\n}\n",
+        source: "function outer(): undefined {\n  function inner(): undefined {}\n  __CURSOR__inner();\n}\n",
         expectLines: [1],
     },
     {
@@ -56,3 +56,4 @@ definitionCases("Go to definition: functions", [
         expectLines: [0],
     },
 ]);
+

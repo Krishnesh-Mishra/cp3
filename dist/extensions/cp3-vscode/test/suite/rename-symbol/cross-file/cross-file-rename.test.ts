@@ -17,7 +17,7 @@ renameCases("Rename symbol: cross-file renames", [
     {
         name: "an imported class renamed in the importing file renames the module declaration",
         source: "import { Widget } from \"./util.cp3\";\nconst w = new __CURSOR__Widget();\n",
-        modules: [["util.cp3", "export class Widget {\n  render(): void {}\n}\n"]],
+        modules: [["util.cp3", "export class Widget {\n  render(): undefined {}\n}\n"]],
         newName: "Panel",
     },
     {
@@ -64,3 +64,4 @@ renameCases("Rename symbol: cross-file renames", [
         newName: "Quick",
     },
 ]);
+

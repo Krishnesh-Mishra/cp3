@@ -50,7 +50,7 @@ completionCases("Autocomplete: object property completion", [
     },
     {
         name: "object property assigned a function offers it",
-        source: "const api = { refresh(): void {} };\napi.__CURSOR__\n",
+        source: "const api = { refresh(): undefined {} };\napi.__CURSOR__\n",
         expectPresent: ["refresh"],
     },
     {
@@ -75,7 +75,7 @@ completionCases("Autocomplete: object property completion", [
     },
     {
         name: "class instance offers its method",
-        source: "class Counter {\n  increment(): void {}\n}\nconst c = new Counter();\nc.__CURSOR__\n",
+        source: "class Counter {\n  increment(): undefined {}\n}\nconst c = new Counter();\nc.__CURSOR__\n",
         expectPresent: ["increment"],
     },
     {
@@ -95,7 +95,7 @@ completionCases("Autocomplete: object property completion", [
     },
     {
         name: "property access on unknown-typed value is a well-formed answer",
-        source: "function inspect(value: number): void {\n  value.__CURSOR__\n}\n",
+        source: "function inspect(value: number): undefined {\n  value.__CURSOR__\n}\n",
         expectPresent: [],
     },
     {
@@ -104,3 +104,4 @@ completionCases("Autocomplete: object property completion", [
         expectPresent: ["join", "push", "filter"],
     },
 ]);
+

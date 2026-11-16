@@ -50,7 +50,7 @@ autoImportCases("Auto-import: multiple matching exports", [
     {
         name: "a class and a function with the same name offer distinct items",
         source: "const joined = __CURSOR__\n",
-        modules: [["cls.cp3", "export class Combo { render(): void {} }\n"],
+        modules: [["cls.cp3", "export class Combo { render(): undefined {} }\n"],
                   ["fn.cp3", "export function Combo(): string { return \"combo\"; }\n"]],
         expectOffered: "Combo",
     },
@@ -75,3 +75,4 @@ autoImportCases("Auto-import: multiple matching exports", [
         expectOffered: "fuzzyMatch",
     },
 ]);
+

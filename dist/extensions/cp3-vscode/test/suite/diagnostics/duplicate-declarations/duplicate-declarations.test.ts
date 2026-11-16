@@ -28,3 +28,4 @@ diagnosticCases("Diagnostics: duplicate declarations", [
         expect: [{ severity: "error" }],
     },
 ]);
+

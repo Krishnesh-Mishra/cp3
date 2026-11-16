@@ -61,3 +61,4 @@ renameCases("Rename symbol: unsafe positions and invalid names", [
         expectFailure: true,
     },
 ]);
+

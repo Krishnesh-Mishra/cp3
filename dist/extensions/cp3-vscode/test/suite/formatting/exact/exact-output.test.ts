@@ -19,8 +19,8 @@ formattingCases("Document formatting: verified exact outputs", [
     },
     {
         name: "class members get 2-space indentation",
-        source: "class Counter {\n    count: number = 0;\n\n  increment(): void {\n    this.count = this.count + 1;\n  }\n}\n",
-        expectText: "class Counter {\n  count: number = 0;\n\n  increment(): void {\n    this.count = this.count + 1;\n  }\n}\n",
+        source: "class Counter {\n    count: number = 0;\n\n  increment(): undefined {\n    this.count = this.count + 1;\n  }\n}\n",
+        expectText: "class Counter {\n  count: number = 0;\n\n  increment(): undefined {\n    this.count = this.count + 1;\n  }\n}\n",
     },
     {
         name: "enum members get 2-space indentation",
@@ -53,3 +53,4 @@ formattingCases("Document formatting: verified exact outputs", [
         expectText: "// keep this header\nconst value = 1;\n",
     },
 ]);
+

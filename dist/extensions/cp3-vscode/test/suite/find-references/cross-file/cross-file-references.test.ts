@@ -40,7 +40,7 @@ referencesCases("Find references: cross-file symbols", [
     {
         name: "an imported class referenced in two places is found in both",
         source: "import { Widget } from \"./util.cp3\";\nconst a = new __CURSOR__Widget();\nconst b = new Widget();\n",
-        modules: [["util.cp3", "export class Widget {\n  render(): void {}\n}\n"]],
+        modules: [["util.cp3", "export class Widget {\n  render(): undefined {}\n}\n"]],
         expectSomeLines: [0, 1, 2],
         includeDeclaration: true,
     },
@@ -73,3 +73,4 @@ referencesCases("Find references: cross-file symbols", [
         includeDeclaration: true,
     },
 ]);
+

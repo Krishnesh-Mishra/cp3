@@ -4,7 +4,7 @@ import { definitionCases } from "../../harness";
 definitionCases("Go to definition: types and enums", [
     {
         name: "an enum used in a type position jumps to the enum",
-        source: "enum Direction { North, South }\nfunction travel(d: __CURSOR__Direction): void {}\n",
+        source: "enum Direction { North, South }\nfunction travel(d: __CURSOR__Direction): undefined {}\n",
         expectLines: [0],
     },
     {
@@ -30,13 +30,13 @@ definitionCases("Go to definition: types and enums", [
     },
     {
         name: "an enum used in an annotation across files jumps into the module",
-        source: "import { Mode } from \"./util.cp3\";\nfunction run(m: __CURSOR__Mode): void {}\n",
+        source: "import { Mode } from \"./util.cp3\";\nfunction run(m: __CURSOR__Mode): undefined {}\n",
         modules: [["util.cp3", "export enum Mode { Fast, Slow }\n"]],
         expectLines: [0],
     },
     {
         name: "a generic interface used across files jumps into the module",
-        source: "import { Pair } from \"./util.cp3\";\nfunction inspect(p: __CURSOR__Pair<number, string>): void {}\n",
+        source: "import { Pair } from \"./util.cp3\";\nfunction inspect(p: __CURSOR__Pair<number, string>): undefined {}\n",
         modules: [["util.cp3", "export interface Pair<A, B> {\n  first: A;\n  second: B;\n}\n"]],
         expectLines: [0],
     },
@@ -58,3 +58,4 @@ definitionCases("Go to definition: types and enums", [
         expectLines: [1],
     },
 ]);
+

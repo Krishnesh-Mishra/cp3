@@ -1,4 +1,4 @@
-// Autocomplete / the codebase-aware suggestion engine
+﻿// Autocomplete / the codebase-aware suggestion engine
 import { completionCases } from "../../harness";
 
 completionCases("Autocomplete: codebase-aware suggestion engine", [
@@ -58,3 +58,4 @@ completionCases("Autocomplete: codebase-aware suggestion engine", [
         expectAbsent: ["secretHelper"],
     },
 ]);
+

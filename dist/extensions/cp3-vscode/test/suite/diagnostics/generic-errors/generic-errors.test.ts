@@ -50,7 +50,8 @@ diagnosticCases("Diagnostics: generic type errors", [
     },
     {
         name: "a generic class instantiated with an incompatible argument is an error",
-        source: "class Box<T> {\n  value: T = 0 as T;\n}\nfunction takeBox(box: Box<number>): void {}\ntakeBox(new Box<string>());\n",
+        source: "class Box<T> {\n  value: T = 0 as T;\n}\nfunction takeBox(box: Box<number>): undefined {}\ntakeBox(new Box<string>());\n",
         expect: [{ severity: "error" }],
     },
 ]);
+

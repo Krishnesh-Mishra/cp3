@@ -14,7 +14,7 @@ completionCases("Autocomplete: variable completion", [
     },
     {
         name: "parameter is offered in the function body",
-        source: "function greet(name: string): void {\n  return __CURSOR__;\n}\n",
+        source: "function greet(name: string): undefined {\n  return __CURSOR__;\n}\n",
         expectPresent: ["name"],
     },
     {
@@ -78,3 +78,4 @@ completionCases("Autocomplete: variable completion", [
         expectPresent: ["toUpperCase"],
     },
 ]);
+

@@ -9,8 +9,8 @@ formattingCases("Document formatting: idempotency", [
     },
     {
         name: "a formatted class formats to itself",
-        source: "class Machine {\n  speed: number = 0;\n\n  boost(amount: number): void {\n    this.speed = this.speed + amount;\n  }\n}\n",
-        expectText: "class Machine {\n  speed: number = 0;\n\n  boost(amount: number): void {\n    this.speed = this.speed + amount;\n  }\n}\n",
+        source: "class Machine {\n  speed: number = 0;\n\n  boost(amount: number): undefined {\n    this.speed = this.speed + amount;\n  }\n}\n",
+        expectText: "class Machine {\n  speed: number = 0;\n\n  boost(amount: number): undefined {\n    this.speed = this.speed + amount;\n  }\n}\n",
     },
     {
         name: "a formatted interface formats to itself",
@@ -53,3 +53,4 @@ formattingCases("Document formatting: idempotency", [
         expectText: "const first = 1;\nconst second = 2;\nconst third = first + second;\n",
     },
 ]);
+

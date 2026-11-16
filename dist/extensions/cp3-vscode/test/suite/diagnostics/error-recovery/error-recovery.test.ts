@@ -104,3 +104,4 @@ suite("Diagnostics: error recovery while typing", () => {
         });
     }
 });
+

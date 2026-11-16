@@ -34,3 +34,4 @@ suite("Autocomplete", () => {
         assert.ok(labels.includes("age"), `expected "age" in completions: ${labels.join(", ")}`);
     });
 });
+

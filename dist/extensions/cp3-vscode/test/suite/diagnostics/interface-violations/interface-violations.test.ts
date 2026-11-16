@@ -4,7 +4,7 @@ import { diagnosticCases } from "../../harness";
 diagnosticCases("Diagnostics: interface violations", [
     {
         name: "a class implementing one interface misses the other is an error",
-        source: "interface A {\n  a(): void;\n}\ninterface B {\n  b(): void;\n}\nclass Impl implements A, B {\n  a(): void {}\n}\n",
+        source: "interface A {\n  a(): undefined;\n}\ninterface B {\n  b(): undefined;\n}\nclass Impl implements A, B {\n  a(): undefined {}\n}\n",
         expect: [{ severity: "error" }],
     },
     {
@@ -24,12 +24,12 @@ diagnosticCases("Diagnostics: interface violations", [
     },
     {
         name: "method with the wrong parameter shape fails the interface",
-        source: "interface Sink {\n  write(data: string): void;\n}\nclass Stdout implements Sink {\n  write(data: number): void {}\n}\n",
+        source: "interface Sink {\n  write(data: string): undefined;\n}\nclass Stdout implements Sink {\n  write(data: number): undefined {}\n}\n",
         expect: [{ severity: "error" }],
     },
     {
         name: "method missing the interface parameter is an error",
-        source: "interface Pair {\n  set(pair: string): void;\n}\nclass Impl implements Pair {\n  set(): void {}\n}\n",
+        source: "interface Pair {\n  set(pair: string): undefined;\n}\nclass Impl implements Pair {\n  set(): undefined {}\n}\n",
         expect: [{ severity: "error" }],
     },
     {
@@ -56,3 +56,4 @@ diagnosticCases("Diagnostics: interface violations", [
         expect: [{ severity: "error" }],
     },
 ]);
+

@@ -63,3 +63,4 @@ workspaceSymbolCases("Workspace symbols: functions and variables", [
         contains: ["ZqxKappaModuleTen"],
     },
 ]);
+

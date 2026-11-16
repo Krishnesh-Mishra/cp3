@@ -19,32 +19,32 @@ diagnosticCases("Diagnostics: invalid function arguments", [
     },
     {
         name: "string passed where a number parameter is expected is an error",
-        source: "function f(n: number): void {}\nf(\"one\");\n",
+        source: "function f(n: number): undefined {}\nf(\"one\");\n",
         expect: [{ severity: "error" }],
     },
     {
         name: "number passed where a string parameter is expected is an error",
-        source: "function f(s: string): void {}\nf(1);\n",
+        source: "function f(s: string): undefined {}\nf(1);\n",
         expect: [{ severity: "error" }],
     },
     {
         name: "boolean passed where a string parameter is expected is an error",
-        source: "function f(s: string): void {}\nf(true);\n",
+        source: "function f(s: string): undefined {}\nf(true);\n",
         expect: [{ severity: "error" }],
     },
     {
         name: "null passed where a string parameter is expected is an error",
-        source: "function f(s: string): void {}\nf(null);\n",
+        source: "function f(s: string): undefined {}\nf(null);\n",
         expect: [{ severity: "error" }],
     },
     {
         name: "undefined passed where a string parameter is expected is an error",
-        source: "function f(s: string): void {}\nf(undefined);\n",
+        source: "function f(s: string): undefined {}\nf(undefined);\n",
         expect: [{ severity: "error" }],
     },
     {
         name: "wrong object shape for a parameter is an error",
-        source: "interface Point { x: number; y: number; }\nfunction place(p: Point): void {}\nplace({ x: 1 });\n",
+        source: "interface Point { x: number; y: number; }\nfunction place(p: Point): undefined {}\nplace({ x: 1 });\n",
         expect: [{ severity: "error" }],
     },
     {
@@ -54,12 +54,12 @@ diagnosticCases("Diagnostics: invalid function arguments", [
     },
     {
         name: "array literal where number parameter is expected is an error",
-        source: "function f(n: number): void {}\nf([1, 2, 3]);\n",
+        source: "function f(n: number): undefined {}\nf([1, 2, 3]);\n",
         expect: [{ severity: "error" }],
     },
     {
         name: "function reference where a number parameter is expected is an error",
-        source: "function f(n: number): void {}\nfunction g(): number { return 1; }\nf(g);\n",
+        source: "function f(n: number): undefined {}\nfunction g(): number { return 1; }\nf(g);\n",
         expect: [{ severity: "error" }],
     },
     {
@@ -79,3 +79,4 @@ diagnosticCases("Diagnostics: invalid function arguments", [
         expect: [{ severity: "error" }],
     },
 ]);
+

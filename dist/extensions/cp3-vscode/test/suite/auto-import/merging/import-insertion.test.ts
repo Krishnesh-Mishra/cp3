@@ -77,3 +77,4 @@ autoImportCases("Auto-import: merging and insertion point", [
         expectImportInserted: "deep/path/combine.cp3",
     },
 ]);
+

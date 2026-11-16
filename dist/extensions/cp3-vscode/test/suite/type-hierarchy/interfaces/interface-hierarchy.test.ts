@@ -4,7 +4,7 @@ import { typeHierarchyCases } from "../../harness";
 typeHierarchyCases("Type hierarchy: interfaces", [
     {
         name: "the prepared hierarchy of an interface names the interface",
-        source: "interface Sized {\n  size(): number;\n}\nfunction inspect(s: __CURSOR__Sized): void {}\n",
+        source: "interface Sized {\n  size(): number;\n}\nfunction inspect(s: __CURSOR__Sized): undefined {}\n",
         prepareContains: ["Sized"],
     },
     {
@@ -26,7 +26,7 @@ typeHierarchyCases("Type hierarchy: interfaces", [
     },
     {
         name: "a class implementing two interfaces shows both as supertypes",
-        source: "interface Alpha {\n  alpha(): void;\n}\ninterface Beta {\n  beta(): void;\n}\nclass Impl implements Alpha, Beta {\n  alpha(): void {}\n  beta(): void {}\n}\nconst impl = new __CURSOR__Impl();\n",
+        source: "interface Alpha {\n  alpha(): undefined;\n}\ninterface Beta {\n  beta(): undefined;\n}\nclass Impl implements Alpha, Beta {\n  alpha(): undefined {}\n  beta(): undefined {}\n}\nconst impl = new __CURSOR__Impl();\n",
         prepareContains: ["Impl"],
         supertypesContains: ["Alpha", "Beta"],
     },
@@ -67,12 +67,12 @@ typeHierarchyCases("Type hierarchy: interfaces", [
     },
     {
         name: "an interface implementation list matches the interface name",
-        source: "interface Runner {\n  run(): void;\n}\nclass Circle implements __CURSOR__Runner {\n  run(): void {}\n}\n",
+        source: "interface Runner {\n  run(): undefined;\n}\nclass Circle implements __CURSOR__Runner {\n  run(): undefined {}\n}\n",
         prepareContains: ["Runner"],
     },
     {
         name: "a second interface in a multi-implements line is found as supertype",
-        source: "interface Alpha {\n  alpha(): void;\n}\ninterface Beta {\n  beta(): void;\n}\nclass Impl implements Alpha, Beta {\n  alpha(): void {}\n  beta(): void {}\n}\nconst impl = new __CURSOR__Impl();\n",
+        source: "interface Alpha {\n  alpha(): undefined;\n}\ninterface Beta {\n  beta(): undefined;\n}\nclass Impl implements Alpha, Beta {\n  alpha(): undefined {}\n  beta(): undefined {}\n}\nconst impl = new __CURSOR__Impl();\n",
         prepareContains: ["Impl"],
         supertypesContains: ["Beta"],
     },
@@ -84,8 +84,9 @@ typeHierarchyCases("Type hierarchy: interfaces", [
     },
     {
         name: "a class at the top of a deep interface chain keeps the nearest parent",
-        source: "interface A {\n  a(): void;\n}\ninterface B extends A {\n  b(): void;\n}\ninterface C extends B {\n  c(): void;\n}\nclass Impl implements C {\n  a(): void {}\n  b(): void {}\n  c(): void {}\n}\nconst impl = new __CURSOR__Impl();\n",
+        source: "interface A {\n  a(): undefined;\n}\ninterface B extends A {\n  b(): undefined;\n}\ninterface C extends B {\n  c(): undefined;\n}\nclass Impl implements C {\n  a(): undefined {}\n  b(): undefined {}\n  c(): undefined {}\n}\nconst impl = new __CURSOR__Impl();\n",
         prepareContains: ["Impl"],
         supertypesContains: ["C"],
     },
 ]);
+

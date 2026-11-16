@@ -29,7 +29,7 @@ diagnosticCases("Diagnostics: syntax errors", [
     },
     {
         name: "unmatched open brace is an error",
-        source: "function f(): void {\n  if (true) {\n    return;\n",
+        source: "function f(): undefined {\n  if (true) {\n    return;\n",
         expect: [{ severity: "error" }],
     },
     {
@@ -103,3 +103,4 @@ diagnosticCases("Diagnostics: syntax errors", [
         expect: [{ severity: "error" }],
     },
 ]);
+

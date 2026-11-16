@@ -43,7 +43,7 @@ signatureHelpCases("Signature help: parameters", [
     },
     {
         name: "a mixed-type signature shows each parameter's type",
-        source: "function render(title: string, count: number, active: boolean): void {}\nrender(\"t\", 3, __CURSOR__true);\n",
+        source: "function render(title: string, count: number, active: boolean): undefined {}\nrender(\"t\", 3, __CURSOR__true);\n",
         expectActiveParameter: 2,
         contains: ["boolean"],
     },
@@ -59,3 +59,4 @@ signatureHelpCases("Signature help: parameters", [
         contains: ["add"],
     },
 ]);
+

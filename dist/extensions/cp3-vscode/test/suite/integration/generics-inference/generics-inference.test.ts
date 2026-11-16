@@ -1,4 +1,4 @@
-// Integration / generics and inference
+﻿// Integration / generics and inference
 import { completionCases, hoverCases } from "../../harness";
 
 completionCases("Integration: generics + inference (completion)", [
@@ -30,10 +30,11 @@ hoverCases("Integration: generics + inference (hover)", [
     { name: "a generic array hover reports the element type", source: "const xs = [\"a\", \"b\"];\nconst read = __CURSOR__xs;\n", contains: ["string"] },
     { name: "a tuple-annotated hover stays stable", source: "const pair: [number, string] = [1, \"two\"];\nconst read = __CURSOR__pair;\n", contains: ["number"] },
     { name: "a nested generic hover stays stable", source: "class Box<T> { value: T = 0 as T; }\nconst nested = new Box(new Box(\"inner\"));\nconst read = __CURSOR__nested;\n", contains: ["Box"] },
-    { name: "an instantiated method hover reports its parameter", source: "class Box<T> { describe(value: T): void {} }\nconst b = new Box<string>();\nb.__CURSOR__describe(\"x\");\n", contains: ["describe"] },
+    { name: "an instantiated method hover reports its parameter", source: "class Box<T> { describe(value: T): undefined {} }\nconst b = new Box<string>();\nb.__CURSOR__describe(\"x\");\n", contains: ["describe"] },
     { name: "an instantiated interface hover reports the interface", source: "interface Sized {}\nclass Impl implements Sized {}\nconst impl: __CURSOR__Sized = new Impl();\n", contains: ["Sized"] },
     { name: "a generic return call hover keeps the inner type", source: "function first<T>(list: T[]): T | undefined { return list[0]; }\nconst head = first(__CURSOR__[1, 2]);\n", contains: ["number"] },
     { name: "a generic singleton hover reports the argument type", source: "function singleton<T>(v: T): T { return v; }\nconst one = singleton(__CURSOR__\"solo\");\n", contains: ["string"] },
     { name: "a widened const hover reports the widened type", source: "const xs = [1, 2, 3] as number[];\nconst read = __CURSOR__xs;\n", contains: ["number"] },
     { name: "a member completion candidate hover reports the member", source: "const user = { name: \"Test\" };\nconst read = __CURSOR__user.name;\n", contains: ["name"] },
 ]);
+

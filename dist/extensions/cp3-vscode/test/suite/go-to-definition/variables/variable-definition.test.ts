@@ -53,3 +53,4 @@ definitionCases("Go to definition: variables", [
         expectLines: [2],
     },
 ]);
+

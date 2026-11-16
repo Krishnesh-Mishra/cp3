@@ -4,7 +4,7 @@ import { documentSymbolCases } from "../../harness";
 documentSymbolCases("Document symbols: nesting", [
     {
         name: "a class outlines its methods",
-        source: "class Machine {\n  start(): void {}\n  stop(): void {}\n}\n",
+        source: "class Machine {\n  start(): undefined {}\n  stop(): undefined {}\n}\n",
         contains: ["Machine", "start", "stop"],
     },
     {
@@ -19,7 +19,7 @@ documentSymbolCases("Document symbols: nesting", [
     },
     {
         name: "a namespace-like module outlines nested declarations",
-        source: "function outer(): void {\n  function inner(): void {}\n}\n",
+        source: "function outer(): undefined {\n  function inner(): undefined {}\n}\n",
         contains: ["outer", "inner"],
     },
     {
@@ -39,12 +39,12 @@ documentSymbolCases("Document symbols: nesting", [
     },
     {
         name: "an interface with fields and methods outlines both",
-        source: "interface Mixed {\n  name: string;\n  greet(): void;\n}\n",
+        source: "interface Mixed {\n  name: string;\n  greet(): undefined;\n}\n",
         contains: ["Mixed", "name", "greet"],
     },
     {
         name: "nested classes outline both levels",
-        source: "class Outer {\n  class Nested {\n    thing(): void {}\n  }\n}\n",
+        source: "class Outer {\n  class Nested {\n    thing(): undefined {}\n  }\n}\n",
         contains: ["Outer", "Nested", "thing"],
     },
     {
@@ -78,3 +78,4 @@ documentSymbolCases("Document symbols: nesting", [
         contains: ["value"],
     },
 ]);
+

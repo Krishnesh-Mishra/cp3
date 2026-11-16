@@ -1,4 +1,4 @@
-// Integration / editing: diagnostics appear then clear as the file is fixed
+﻿// Integration / editing: diagnostics appear then clear as the file is fixed
 import * as assert from "node:assert/strict";
 import * as vscode from "vscode";
 import { cleanupFixtures, ensureCompilerConfigured, ensureServerStarted, writeWorkspaceCase } from "../../harness";
@@ -20,7 +20,7 @@ suite("Integration: editing + diagnostics recovery", () => {
         { name: "fixing a missing import clears its diagnostic", broken: "let x = Math.random();\n", fixed: "import Math from \"std/math\";\nlet x = Math.random();\n" },
         { name: "fixing an unknown member clears its diagnostic", broken: "const o = { a: 1 };\nconst b = o.b;\n", fixed: "const o = { a: 1, b: 2 };\nconst b = o.b;\n" },
         { name: "fixing a call argument count clears its diagnostic", broken: "function add(a: number, b: number): number {\n  return a + b;\n}\nconst total = add(1);\n", fixed: "function add(a: number, b: number): number {\n  return a + b;\n}\nconst total = add(1, 2);\n" },
-        { name: "fixing an argument type clears its diagnostic", broken: "function bump(n: number): void {}\nbump(\"one\");\n", fixed: "function bump(n: number): void {}\nbump(1);\n" },
+        { name: "fixing an argument type clears its diagnostic", broken: "function bump(n: number): undefined {}\nbump(\"one\");\n", fixed: "function bump(n: number): undefined {}\nbump(1);\n" },
         { name: "fixing a duplicate declaration clears its diagnostic", broken: "const value = 1;\nconst value = 2;\n", fixed: "const value = 1;\nconst value2 = 2;\n" },
         { name: "fixing a bad interface implementation clears its diagnostic", broken: "interface Sized {\n  size: number;\n}\nclass Impl implements Sized {\n}\n", fixed: "interface Sized {\n  size: number;\n}\nclass Impl implements Sized {\n  size: number = 1;\n}\n" },
         { name: "fixing a bad throw of a number clears its diagnostic", broken: "try {\n  throw 42;\n} catch (e) {\n  print(\"caught\");\n}\n", fixed: "try {\n  throw new Error(\"x\");\n} catch (e) {\n  print(\"caught\");\n}\n" },
@@ -32,7 +32,7 @@ suite("Integration: editing + diagnostics recovery", () => {
         { name: "fixing a named console import clears its diagnostic", broken: "import { console } from \"std/console\";\nconsole.log(\"x\");\n", fixed: "import console from \"std/console\";\nconsole.log(\"x\");\n" },
         { name: "fixing a bare Math without import clears its diagnostic", broken: "let x = Math.random();\n", fixed: "import Math from \"std/math\";\nlet x = Math.random();\n" },
         { name: "fixing a cannot-find-name clears its diagnostic", broken: "console.log(message);\nlet message = \"hi\";\n", fixed: "let message = \"hi\";\nconsole.log(message);\n" },
-        { name: "fixing a bad arrow argument clears its diagnostic", broken: "function each(cb: (item: number) => void): void {}\neach((item: string) => {});\n", fixed: "function each(cb: (item: number) => void): void {}\neach((item: number) => {});\n" },
+        { name: "fixing a bad arrow argument clears its diagnostic", broken: "function each(cb: (item: number) => undefined): undefined {}\neach((item: string) => {});\n", fixed: "function each(cb: (item: number) => undefined): undefined {}\neach((item: number) => {});\n" },
         { name: "fixing an unterminated template clears its diagnostic", broken: "const broken = `never closed\n", fixed: "const broken = `now closed`;\n" },
     ];
 
@@ -74,3 +74,4 @@ suite("Integration: editing + diagnostics recovery", () => {
         });
     }
 });
+

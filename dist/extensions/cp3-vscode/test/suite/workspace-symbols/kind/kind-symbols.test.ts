@@ -34,7 +34,7 @@ workspaceSymbolCases("Workspace symbols: kinds", [
     },
     {
         name: "a uniquely named abstract class is found by its unique prefix",
-        source: "abstract class ZqxPiAbstractSixteen {\n  abstract run(): void;\n}\n",
+        source: "abstract class ZqxPiAbstractSixteen {\n  abstract run(): undefined;\n}\n",
         query: "ZqxPiAbstractSixteen",
         contains: ["ZqxPiAbstractSixteen"],
     },
@@ -46,7 +46,7 @@ workspaceSymbolCases("Workspace symbols: kinds", [
     },
     {
         name: "a uniquely named interface member is not a workspace symbol root",
-        source: "interface ZqxSigmaHolderEighteen {\n  ZqxSigmaMemberNineteen(): void;\n}\n",
+        source: "interface ZqxSigmaHolderEighteen {\n  ZqxSigmaMemberNineteen(): undefined;\n}\n",
         query: "ZqxSigmaHolderEighteen",
         contains: ["ZqxSigmaHolderEighteen"],
     },
@@ -63,3 +63,4 @@ workspaceSymbolCases("Workspace symbols: kinds", [
         contains: ["ZqxUpsilonInstanceTwentyOne"],
     },
 ]);
+
