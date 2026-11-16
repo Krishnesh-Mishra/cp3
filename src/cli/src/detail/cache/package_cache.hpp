@@ -6,11 +6,12 @@
 //
 // Definitions live in src/cli/src/pkg/package_cache.cpp.
 //
-// A consumer uses a package's cached binary when the archive carries one for
-// the consumer's platform, and falls back to the package's C++ source when it
-// does not (CLI-README §5.4). A package whose author excluded the source has
-// no fallback at all, so the install fails with a named error instead of a
-// raw linker failure.
+// A source package is compiled from its authored `.cp3` sources on the
+// consuming machine - the normal path needs no decision. A hand-made package
+// whose author set `excludeSource` has no usable source; when it also ships no
+// cached binary for this platform the install fails with a named error
+// instead of a raw linker failure. (Binary caches belong to the pre-format-2
+// world; a .cp3pak built by this cp3c never carries one.)
 // =============================================================================
 #pragma once
 
@@ -23,10 +24,10 @@
 
 namespace cp3::cli {
 
-// How a consumer uses an installed package on this platform.
+// How a consumer would use an installed package on this platform.
 enum class PackageArtifactMode {
-    SourceFallback,  // the package's C++ source is compiled
-    CachedArtifact,  // the package's cached binary is used as is
+    SourceFallback,  // the package's sources are compiled (the normal path)
+    CachedArtifact,  // a hand-made cached binary for this platform is used
 };
 
 // The cached artifact an installed package offers for the current platform.

@@ -1,0 +1,5 @@
+export interface FormatOptions {
+    prefix: string;
+    width: number;
+}
+export type FormatKind = "plain" | "boxed";

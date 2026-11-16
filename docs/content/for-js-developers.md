@@ -94,7 +94,7 @@ cp3 toolchain list --json   # for scripts
 
 ## 2.4 Package commands
 
-`install`, `publish`, `recompile` (add native binary to a package archive), `link`, `unlink`, `exec`. Packages are `.cp3pak` artifacts. Use `--dry-run` where supported.
+`install`, `publish`, `link`, `unlink`, `exec`. (`recompile` belonged to the old binary-cache `.cp3pak` format; the current format ships no binary cache.) Packages are `.cp3pak` artifacts — the package's `.cp3` sources at their authored paths, `package.json` verbatim, and `cp3pak.json` with `formatVersion: 2`. `cp3 install <file.cp3pak>` asks before installing whether to delete the source file after a successful install (default: keep; non-interactive terminals and `--json` never prompt and never delete). Use `--dry-run` where supported. See [Packages and .cp3pak](./cli-and-compiler/12-packages.md).
 
 ## 2.5 Editor and docs tooling
 
@@ -1869,7 +1869,7 @@ Porting advice: classify each external API as a language feature, a `std/...` mo
 - [Chapter 1 · The language](./language/00-overview.md) — bindings, types, functions, control flow, values, generics, modules, errors, native types
 - [Internal Engineering](./internal-engineering/00-overview.md) — compiler design, the no-GC memory model, escape analysis, async non-blocking I/O, runtime libraries
 - [Chapter 3 · Standard library](./standard-library/00-overview.md) — module index and import conventions
-- [Chapter 4 · Compiler and tools](./cli-and-compiler/00-overview.md) — CLI, pipeline, optimization, diagnostics, toolchains, cache, tests, native interop
+- [Chapter 4 · Compiler and tools](./cli-and-compiler/00-overview.md) — CLI, pipeline, optimization, diagnostics, toolchains, cache, tests, native interop, packages and `.cp3pak`
 - [For JavaScript and TypeScript developers](./for-js-developers.md) — this page
 - [Create and run your first project](./quick-start.md) — scaffolding walkthrough
 - [URL extensions](./standard-library/24-url-extensions.md) — WHATWG form-urlencoded and normalization details

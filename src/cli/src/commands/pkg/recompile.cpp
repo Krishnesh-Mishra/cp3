@@ -3,12 +3,13 @@
 //
 // OWNERSHIP: cli module (src/cli/**). Implements cp3::cli::cmdRecompile.
 //
-// `cp3 recompile` adds (or refreshes) the current platform's cached binary in
-// an already-built `.cp3pak` (CLI-README §5.4). It reads the C++ source the
-// archive already carries, compiles it for the machine it runs on and writes
-// the result back into the same archive - no source re-fetch, no rebuild of
-// the package, and every other member (and every other platform's cache)
-// preserved untouched.
+// `cp3 recompile` adds (or refreshes) a platform's cached binary to a
+// `.cp3pak` that carries transpiled C++ (`pak/*.cpp`) - the layout produced
+// by pre-format-2 toolchains, and the only layout this command can operate
+// on. A source package (formatVersion 2, the only new output of this
+// toolchain) ships verified `.cp3` sources and no transpiled C++ and no
+// cached binary; for those, and for any archive whose formatVersion this
+// build does not read, the command fails with a clear message.
 //
 // The command is idempotent: an archive whose cache for this platform is
 // already current is left byte-identical.
@@ -214,7 +215,7 @@ bool applyExcludeSource(const std::vector<PlatformId>& claims,
     members = std::move(kept);
     std::fprintf(stderr,
                  "cp3c: excluded the C++ source (build.excludeSource); the "
-                 "headers and index.cp3 stay\n");
+                 "headers stay\n");
     return changed;
 }
 
@@ -275,11 +276,10 @@ int cmdRecompile(const CliOptions& opt) {
 
     if (!archiveHasSource(members)) {
         std::fprintf(stderr,
-                     "cp3c: '%s' carries no C++ source to compile (no "
-                     "pak/*.cpp inside); the author excluded it with "
-                     "build.excludeSource, so no cache can be added for %s\n",
-                     archivePath.string().c_str(),
-                     platformIdText(currentPlatform()).c_str());
+                     "cp3c: '%s' carries no C++ source to compile; a source "
+                     "package (formatVersion 2) ships its .cp3 sources, so "
+                     "there is no cached binary to refresh\n",
+                     archivePath.string().c_str());
         return kExitCompileError;
     }
 

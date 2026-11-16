@@ -88,6 +88,7 @@ set(cp3_cli_sources
     src/pkg/cache/cache_binary.cpp
     src/pkg/cache/cache_build.cpp
     src/pkg/manifest/signatures.cpp
+    src/pkg/manifest/source_closure.cpp
     src/pkg/remote/lockfile.cpp
     src/pkg/remote/install.cpp
     src/pkg/remote/link.cpp

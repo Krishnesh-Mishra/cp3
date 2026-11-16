@@ -1,0 +1,8 @@
+import { outsideValue } from "../../outside.cp3";
+
+export class Outlier {
+    id: number = 1;
+    read(): number {
+        return outsideValue;
+    }
+}

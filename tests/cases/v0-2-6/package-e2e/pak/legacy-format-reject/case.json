@@ -1,0 +1,19 @@
+{
+  "comment": "v0.2.6 source-package pin: the clean break. This installs a hand-fabricated LEGACY .cp3pak (formatVersion 1, C++-source members pak/src/tide.cpp + pak/src/tide.hpp, NO .cp3 sources at all) into app/. The install must FAIL: non-zero exit (1, kExitCompileError convention - the runner cannot express 'any non-zero'), stderr must contain the exact substring 'unsupported .cp3pak formatVersion', and no package may appear under app/.cp3/packages/. This pins that formatVersion 1 is rejected outright; a package must be rebuilt with a newer cp3c. NOTE: app/legacy-format-v1.cp3pak is a binary (gzip + USTAR tar) and is NOT checked in (gitignore ignores *.cp3pak); run make_legacy_pak.py once before this suite - see README.md in this folder. pkg/ holds the provenance source only; nothing in this scenario builds it.",
+  "steps": [
+    {
+      "cwd": "app",
+      "args": [
+        "install",
+        "legacy-format-v1.cp3pak"
+      ],
+      "expectExit": 1,
+      "stderrContains": [
+        "unsupported .cp3pak formatVersion"
+      ],
+      "filesAbsent": [
+        ".cp3/packages/legacy_tide"
+      ]
+    }
+  ]
+}

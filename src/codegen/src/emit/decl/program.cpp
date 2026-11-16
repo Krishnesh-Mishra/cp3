@@ -143,11 +143,10 @@ std::string unitInitDef(const ProgramUnitText& unit) {
 }
 
 // One unit's contribution: its namespace, the declaration section, the
-// definition section and (non-entry units) the module initializer. A package
-// unit contributes only its declarations: its implementation is compiled from
-// the archive's `pak/` sources, not regenerated here.
+// definition section and (non-entry units) the module initializer. Installed
+// package units contribute declarations and definitions like any other unit;
+// the archive's authored sources are what the consumer compiles.
 void appendUnit(std::string& out, const ProgramUnitText& unit, bool definitions) {
-    if (definitions && unit.isPackage) return;
     out += "namespace " + unit.namesp + " {\n\n";
     out += definitions ? unit.defs : unit.decls;
     out += "\n";
@@ -168,7 +167,7 @@ void appendProgramMain(std::string& out, const ProgramAssembly& assembly) {
     if (programHasAwait(assembly)) {
         out += "    auto cp3_top_level = [&]() -> ::cp3::runtime::Promise<void> {\n";
         for (const ProgramUnitText& unit : assembly.units) {
-            if (unit.isEntry || unit.isPackage) continue;
+            if (unit.isEntry) continue;
             out += unit.topLevelAwait ? "        co_await " + initCall(unit) + ";\n"
                                       : "        " + initCall(unit) + ";\n";
         }
@@ -179,7 +178,7 @@ void appendProgramMain(std::string& out, const ProgramAssembly& assembly) {
         out += "    cp3_top_level();\n";
     } else {
         for (const ProgramUnitText& unit : assembly.units) {
-            if (!unit.isEntry && !unit.isPackage)
+            if (!unit.isEntry)
                 out += "    " + initCall(unit) + ";\n";
         }
         const ProgramUnitText* entry = entryOf(assembly);
@@ -383,7 +382,7 @@ std::string sharedProgramHeader(const ProgramAssembly& assembly,
     // module initializer for the entry TU's main.
     for (const ProgramUnitText& unit : assembly.units) {
         appendUnit(out, unit, /*definitions=*/false);
-        if (unit.isEntry || unit.isPackage) continue;
+        if (unit.isEntry) continue;
         out += "namespace " + unit.namesp + " {\n";
         out += unit.topLevelAwait
                    ? "::cp3::runtime::Promise<void> cp3_module_init();\n"
@@ -466,7 +465,7 @@ GeneratedProgramModules assembleProgramModules(const ProgramAssembly& assembly,
         // The entry unit's definitions belong in the entry TU itself (it
         // carries the namespace block, the using directive and main());
         // emitting a second TU for it would overwrite it.
-        if (unit.isEntry || unit.isPackage) continue;
+        if (unit.isEntry) continue;
         GeneratedProgramUnit u;
         u.name = unitNameForPath(unit.sourceKey);
         u.sourceKey = unit.sourceKey;
@@ -616,7 +615,6 @@ void Generator::emitProgramUnit(const ProgramLink& link,
                                   : suggestNamespace(unit.moduleName);
                 text.sourceKey = unit.moduleName;
                 text.isEntry = unit.isEntry;
-                text.isPackage = unit.isPackage;
                 text.globals = rec.globals;
                 text.decls = rec.decls;
                 text.defs = rec.defs;
@@ -652,7 +650,6 @@ void Generator::emitProgramUnit(const ProgramLink& link,
     Generator inner(sink_, *semaIt->second, unit.moduleName, lineMapping_,
                     options);
     inner.programMode_ = true;
-    inner.packageSurfaceOnly_ = unit.isPackage;
     inner.virtualMethodSet_ = virtualSet;
     const auto importsIt = link.imports.find(unit.id);
     if (importsIt != link.imports.end()) inner.linkedNames_ = importsIt->second;
@@ -663,7 +660,6 @@ void Generator::emitProgramUnit(const ProgramLink& link,
                       : suggestNamespace(unit.moduleName);
     text.sourceKey = unit.moduleName;
     text.isEntry = unit.isEntry;
-    text.isPackage = unit.isPackage;
     inner.runUnit(*unit.ast, text.decls, text.defs, text.mainBody,
                   text.globals);
     text.topLevelAwait = inner.topLevelAwait_;

@@ -5,35 +5,43 @@
 //
 // Output (CLI-README §5, D61): intermediates under .cp3/build/, the final
 // artifact .cp3/out/<name>.cp3pak - a gzip-compressed archive carrying
-//   cp3pak.json      container manifest (integer formatVersion, §6)
+//   cp3pak.json      the container manifest (integer formatVersion 2), written
+//                    FIRST so a reader can validate the container version
+//                    before doing anything with the payload
 //   package.json     the author's manifest, verbatim
-//   index.cp3        signatures/types only, generated from the entry AST
-//   pak/<module>.*   the transpiled C++ (cpp + hpp)
-//   pak/<platform>/   the optional cached binary of that platform (§5.4)
+//   <closure>        the entry plus every module it reaches through relative
+//                    imports, as plain .cp3 files at their authored paths
+//                    relative to the package root (src/main.cp3 stays
+//                    src/main.cp3)
+//   <native members> the native bindings the module graph resolved (as before)
 //   <build.files>    extra files listed in package.json, verbatim
 //
-// A package build produces source; the binary cache is opt-in through
-// `build.cacheBinary` and only ever covers the platform the build machine
-// runs on - cp3c never forces a cross-compilation (§5.4). `build.excludeSource`
-// drops the C++ source, but only once the archive carries every cache the
-// package claims; the headers and index.cp3 always stay.
+// A package build produces source, not binaries: no transpiled C++ and no
+// cached binary are shipped, and none are needed - the consumer compiles the
+// same `.cp3` units it would compile locally. `build.cacheBinary` is accepted
+// but IGNORED for source packages (a warning is printed and the build stays
+// green); `build.excludeSource` has no effect for the same reason (the sources
+// are the package). The container manifest names the declared `main` exactly
+// as authored.
 // =============================================================================
 #include <algorithm>
 #include <cstdio>
+#include <iterator>
 #include <string>
 #include <system_error>
 #include <vector>
 
+#include "cp3/modules.hpp"
+
 #include "detail/cache/cache.hpp"
 #include "detail/cache/cache_binary.hpp"
-#include "detail/cache/cache_build.hpp"
 #include "detail/core/commands.hpp"
 #include "detail/pkg/cp3pak.hpp"
 #include "detail/pkg/json.hpp"
 #include "detail/pkg/native_pack.hpp"
 #include "detail/pkg/package_json.hpp"
-#include "detail/archive/platform.hpp"
 #include "detail/pkg/signatures.hpp"
+#include "detail/pkg/source_closure.hpp"
 #include "detail/archive/tar.hpp"
 #include "detail/core/util.hpp"
 
@@ -94,8 +102,7 @@ int checkPackManifest(const std::string& entryText, const Program& program) {
     // A package may surface its API through a default export
     // (`export default { ... }`, `export default Counter`) or through named
     // exports (`export class Counter`, `export { Counter }`); either form
-    // packs cleanly because the generated `index.cp3` carries both the
-    // verbatim default export and the named class exports.
+    // packs cleanly because the consumer compiles the authored sources.
     if (!hasPackageExportSurface(program)) {
         std::fprintf(stderr,
                      "cp3c: %s: 'type: package' projects need an "
@@ -131,29 +138,27 @@ bool writeIntermediates(const PackInput& input, const fs::path& projectRoot,
     return true;
 }
 
-// The native binding ids the package build resolved. The module graph is the
-// authority; the generated surface is a fallback for callers that only have
-// the pack input.
-std::vector<std::string> nativeIdsForPack(const PackInput& input,
-                                          const std::string& surface) {
+// The native binding ids the package build resolved. The module graph is
+// the authority (every binding it loaded is embedded in the archive).
+std::vector<std::string> nativeIdsForPack(const PackInput& input) {
     std::vector<std::string> ids;
-    if (input.nativeBindings != nullptr) {
-        for (const NativeBinding& binding : *input.nativeBindings) {
+    const auto add = [&ids](const std::vector<NativeBinding>* bindings) {
+        if (bindings == nullptr) return;
+        for (const NativeBinding& binding : *bindings) {
             if (binding.id.empty()) continue;
             if (std::find(ids.begin(), ids.end(), binding.id) == ids.end()) {
                 ids.push_back(binding.id);
             }
         }
-    }
-    for (const std::string& id : nativeBindingIdsInText(surface)) {
-        if (std::find(ids.begin(), ids.end(), id) == ids.end()) {
-            ids.push_back(id);
-        }
-    }
+    };
+    add(input.nativeBindings);
+    if (input.graph != nullptr) add(&input.graph->nativeBindings());
     return ids;
 }
 
-// Archive members, in the order CLI-README §5.3 lists them.
+// Archive members: package.json, the entry's relative-import closure, the
+// native binding members, then the author's build.files. (cp3pak.json is
+// written first by writeCp3pak.)
 bool collectEntries(const PackInput& input, const JsonValue& manifest,
                     const fs::path& projectRoot, std::vector<TarEntry>& entries,
                     const std::vector<std::string>& nativeIds,
@@ -164,159 +169,50 @@ bool collectEntries(const PackInput& input, const JsonValue& manifest,
         return false;
     }
     entries.push_back(TarEntry{"package.json", std::move(packageJsonText)});
-    // The declaration surface keeps every native import the implementation
-    // needs, even when the original import lived in a non-exported module.
-    entries.push_back(TarEntry{
-        "index.cp3",
-        ensureNativeImports(stripToSignatures(
-                                *input.source, *input.program,
-                                input.opt ? input.opt->compile.typeSystem
-                                        : TypeSystem::TypeScript),
-                            nativeIds)});
-    entries.push_back(
-        TarEntry{"pak/" + *input.moduleName + ".cpp", input.module->source});
-    entries.push_back(
-        TarEntry{"pak/" + *input.moduleName + ".hpp", input.module->header});
+    // The reachable relative-import closure of the entry, at paths relative
+    // to the package root. A unit whose file escapes the root is a hard
+    // error here, before a single member is consumed downstream: the pak
+    // must not be produced at all (the caller turns this into a non-zero
+    // exit).
+    std::vector<TarEntry> closure;
+    if (input.graph == nullptr) {
+        err = "internal error: the package build has no module graph";
+        return false;
+    }
+    if (!collectRelativeClosure(*input.graph, projectRoot, closure, err)) {
+        return false;
+    }
+    entries.insert(entries.end(),
+                   std::make_move_iterator(closure.begin()),
+                   std::make_move_iterator(closure.end()));
     if (!collectNativeBindingMembers(projectRoot, nativeIds, entries, err)) {
         return false;
     }
     return appendBuildFiles(manifest, projectRoot, entries, err);
 }
 
-// The claim list of a plan, spelled the way the archive records it.
-std::vector<std::string> claimTexts(const std::vector<PlatformId>& claims) {
-    std::vector<std::string> out;
-    for (const PlatformId& claim : claims) out.push_back(platformIdText(claim));
-    return out;
-}
-
-// The claim list as one comma-separated phrase.
-std::string claimList(const std::vector<PlatformId>& claims) {
-    std::string list;
-    for (const PlatformId& claim : claims) {
-        if (!list.empty()) list += ", ";
-        list += platformIdText(claim);
-    }
-    return list;
-}
-
-// True when the current machine's platform is one of the claimed platforms.
-bool claimsCurrentPlatform(const std::vector<PlatformId>& claims) {
-    const PlatformId& here = currentPlatform();
-    return std::any_of(claims.begin(), claims.end(),
-                       [&](const PlatformId& claim) {
-                           return platformSatisfies(claim, here);
-                       });
-}
-
-// The state of one package build's binary cache.
-struct CacheProduction {
-    const PackInput* input = nullptr;
-    const CacheBinaryPlan* plan = nullptr;
-    fs::path projectRoot;
-    std::vector<std::string> nativeIds;
-    std::vector<TarEntry>* entries = nullptr;
-    std::vector<PlatformId>* cached = nullptr;
-};
-
-// The cached artifact of the current platform, when the package asks for one
-// and this machine is one of the claimed platforms (CLI-README §5.4).
-bool produceCache(const CacheProduction& work, std::string& err) {
-    const PackInput& input = *work.input;
-    const CacheBinaryPlan& plan = *work.plan;
-    if (!plan.requested || plan.claims.empty()) return true;
-    if (!claimsCurrentPlatform(plan.claims)) {
+// The package's manifest and the optional `build.cacheBinary` plan. The
+// field is accepted but IGNORED for source packages: a warning keeps the
+// build green, and the value is still parsed so a malformed one is reported
+// - as a warning, never a hard error.
+bool readPackManifest(const fs::path& projectRoot, JsonValue& manifest,
+                      std::string& err) {
+    if (!loadPackageJson(projectRoot, manifest, err)) return false;
+    CacheBinaryPlan plan;
+    std::string planErr;
+    if (!parseCacheBinary(manifest, plan, planErr)) {
         std::fprintf(stderr,
-                     "cp3c: warning: build.cacheBinary lists %s, but this "
-                     "machine is %s; no cached binary was produced for it "
-                     "(cp3c never cross-compiles)\n",
-                     claimList(plan.claims).c_str(),
-                     platformIdText(currentPlatform()).c_str());
+                     "cp3c: warning: build.cacheBinary is ignored for "
+                     "source packages (no cached binary is produced or "
+                     "needed): %s\n",
+                     planErr.c_str());
         return true;
     }
-    const PlatformId& here = currentPlatform();
-    CacheBuildRequest request;
-    request.module = *input.moduleName;
-    request.source = input.module->source;
-    request.header = input.module->header;
-    request.workDir = work.projectRoot / ".cp3" / "build" / "cache" /
-                      fs::path(platformIdText(here));
-    request.verbose = input.opt->verbose;
-    // The package implementation includes the native binding's headers; the
-    // cached object must see the same include roots and defines as a consumer
-    // compiling the source fallback.
-    if (!nativeBuildFlagsFromProject(work.projectRoot, work.nativeIds,
-                                     request.includeDirs, request.defines,
-                                     err)) {
-        return false;
-    }
-    PlatformCacheBuild artifact;
-    if (!buildPlatformArtifact(request, artifact, err)) return false;
-
-    PlatformCacheManifest cache;
-    if (!planPlatformCache({CacheSourceRef{request.module, request.source,
-                                          request.header}},
-                           cache, err)) {
-        return false;
-    }
-    work.entries->push_back(TarEntry{platformCacheManifestMember(here),
-                                     platformCacheManifestToJson(cache)});
-    work.entries->push_back(TarEntry{artifact.member, artifact.data});
-    work.cached->push_back(here);
-    std::fprintf(stderr,
-                 "cp3c: cached binary for %s (pak/%s/%s.o)\n",
-                 platformIdText(here).c_str(), platformIdText(here).c_str(),
-                 request.module.c_str());
-    return true;
-}
-
-// `build.excludeSource` drops the C++ source - but only once the archive
-// carries every cache the package claims, so a package is never shipped
-// without a fallback it does not actually have (CLI-README §5.4).
-void applyExcludeSource(const CacheBinaryPlan& plan, bool excludeSource,
-                        std::vector<TarEntry>& entries,
-                        const std::vector<PlatformId>& cached) {
-    if (!excludeSource) return;
-    const std::vector<std::string> missing =
-        unsatisfiedClaims(plan.claims, cached);
-    if (!missing.empty()) {
-        std::string list;
-        for (const std::string& id : missing) {
-            if (!list.empty()) list += ", ";
-            list += id;
-        }
+    if (plan.requested) {
         std::fprintf(stderr,
-                     "cp3c: warning: build.excludeSource is set, but no cached "
-                     "binary exists for %s; the C++ source is kept so "
-                     "'cp3 recompile' can add it from another machine\n",
-                     list.c_str());
-        return;
-    }
-    std::vector<TarEntry> kept;
-    kept.reserve(entries.size());
-    for (TarEntry& entry : entries) {
-        if (isPakSourceMember(entry.name)) continue;
-        kept.push_back(std::move(entry));
-    }
-    entries = std::move(kept);
-    std::fprintf(stderr,
-                 "cp3c: excluded the C++ source (build.excludeSource); the "
-                 "headers and index.cp3 stay\n");
-}
-
-// The package's manifest and its binary-cache plan. The plan is validated
-// here, so a malformed platform id is reported before anything is written.
-bool readPackManifest(const fs::path& projectRoot, JsonValue& manifest,
-                       CacheBinaryPlan& plan, bool& excludeSource,
-                       std::string& err) {
-    if (!loadPackageJson(projectRoot, manifest, err)) return false;
-    if (!parseCacheBinary(manifest, plan, err)) return false;
-    excludeSource = excludeSourceRequested(manifest);
-    if (excludeSource && plan.claims.empty()) {
-        err = "build.excludeSource needs a non-empty build.cacheBinary list: "
-              "without a cached binary the package would be uninstallable on "
-              "every platform (CLI-README §5.4); no .cp3pak was produced";
-        return false;
+                     "cp3c: warning: build.cacheBinary is ignored for "
+                     "source packages (no cached binary is produced or "
+                     "needed)\n");
     }
     return true;
 }
@@ -325,21 +221,17 @@ bool readPackManifest(const fs::path& projectRoot, JsonValue& manifest,
 struct PackOutput {
     std::string name;
     std::string version;
-    std::string main;
-    CacheBinaryPlan plan;
-    std::vector<PlatformId> cached;
+    std::string main;   // the declared `main`, exactly as authored
 };
 
 // Writes the .cp3pak: the container manifest plus the archive members.
 bool writePackArchive(const fs::path& pakPath, const PackOutput& out,
-                       const std::vector<TarEntry>& entries, std::string& err) {
+                      const std::vector<TarEntry>& entries, std::string& err) {
     Cp3pakManifest pak;
     pak.formatVersion = kCp3pakFormatVersion;
     pak.name = out.name;
     pak.version = out.version;
     pak.main = out.main;
-    pak.cachePlatforms = claimTexts(out.cached);
-    pak.cacheClaims = claimTexts(out.plan.claims);
     return writeCp3pak(pakPath, pak, entries, err);
 }
 
@@ -349,10 +241,8 @@ int packProject(const PackInput& input) {
     const fs::path projectRoot = findProjectRoot(*input.entryPath);
 
     JsonValue manifest;
-    CacheBinaryPlan plan;
-    bool excludeSource = false;
     std::string err;
-    if (!readPackManifest(projectRoot, manifest, plan, excludeSource, err)) {
+    if (!readPackManifest(projectRoot, manifest, err)) {
         std::fprintf(stderr, "cp3c: %s\n", err.c_str());
         return kExitCompileError;
     }
@@ -360,38 +250,21 @@ int packProject(const PackInput& input) {
     const int policy =
         checkPackManifest(input.entryPath->string(), *input.program);
     if (policy != kExitSuccess) return policy;
-    if (!writeIntermediates(input, projectRoot, err)) {
-        std::fprintf(stderr, "cp3c: %s\n", err.c_str());
-        return kExitCompileError;
-    }
 
-    const std::string surface =
-        stripToSignatures(*input.source, *input.program,
-                          input.opt ? input.opt->compile.typeSystem
-                                  : TypeSystem::TypeScript);
-    const std::vector<std::string> nativeIds =
-        nativeIdsForPack(input, surface);
+    const std::vector<std::string> nativeIds = nativeIdsForPack(input);
 
+    // Resolve the members first: a package that escapes its root produces
+    // nothing, not even intermediates or an empty .cp3/out directory entry.
     std::vector<TarEntry> entries;
     if (!collectEntries(input, manifest, projectRoot, entries, nativeIds,
                         err)) {
         std::fprintf(stderr, "cp3c: %s\n", err.c_str());
         return kExitCompileError;
     }
-
-    std::vector<PlatformId> cached;
-    CacheProduction production;
-    production.input = &input;
-    production.plan = &plan;
-    production.projectRoot = projectRoot;
-    production.nativeIds = nativeIds;
-    production.entries = &entries;
-    production.cached = &cached;
-    if (!produceCache(production, err)) {
+    if (!writeIntermediates(input, projectRoot, err)) {
         std::fprintf(stderr, "cp3c: %s\n", err.c_str());
         return kExitCompileError;
     }
-    applyExcludeSource(plan, excludeSource, entries, cached);
 
     const fs::path outDir = projectRoot / ".cp3" / "out";
     std::error_code ec;
@@ -404,12 +277,9 @@ int packProject(const PackInput& input) {
     PackOutput out;
     out.name = packageName(manifest, projectRoot);
     out.version = packageVersion(manifest);
-    // The container always places the generated export surface at the archive
-    // root as `index.cp3`; the container manifest names that member, not the
-    // author's pre-pack `main` path (which may be `src/index.cp3`).
-    out.main = "index.cp3";
-    out.plan = plan;
-    out.cached = cached;
+    // The container names the declared `main` exactly as the author wrote it;
+    // it is never renamed or re-rooted.
+    out.main = packageMain(manifest);
     const fs::path pakPath = outDir / (out.name + ".cp3pak");
     if (!writePackArchive(pakPath, out, entries, err)) {
         std::fprintf(stderr, "cp3c: %s\n", err.c_str());

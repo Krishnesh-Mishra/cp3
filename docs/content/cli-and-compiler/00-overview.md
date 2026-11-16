@@ -20,6 +20,7 @@ This section is the practical guide to the CP3 command line: what the commands d
 | Understand `package.json`, `.cp3/`, and cache reuse | [Project settings and build cache](./09-project-settings-and-cache.md) |
 | Inspect the generated C++ for a check or a performance question | [Generated C++ inspection](./10-generated-cpp-inspection.md) |
 | Choose debug, incremental, release, or PGO | [Build profiles and PGO](./11-build-profiles-and-pgo.md) |
+| Build, publish, install, or link a CP3 package | [Packages and .cp3pak](./12-packages.md) |
 
 ## Two build trees
 
@@ -63,3 +64,4 @@ Start with [CLI commands](./01-cli-commands.md); pick your profile in [Build pro
 - [Project settings and build cache](./09-project-settings-and-cache.md)
 - [Generated C++ inspection](./10-generated-cpp-inspection.md)
 - [Build profiles and PGO](./11-build-profiles-and-pgo.md)
+- [Packages and .cp3pak](./12-packages.md)

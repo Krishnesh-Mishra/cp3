@@ -1,0 +1,7 @@
+// Placeholder consumer. This scenario installs a hand-fabricated LEGACY
+// (formatVersion 1) .cp3pak and expects the install to be rejected, so there
+// is nothing to consume; the file exists only to keep the fixture layout
+// uniform (case.json + pkg/ + app/). No app build/run step is executed.
+import console from "std/console";
+
+console.log("legacy-format fixture: the pak must not install");

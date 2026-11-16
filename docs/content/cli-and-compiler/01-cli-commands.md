@@ -36,11 +36,11 @@ cp3 run src/index.cp3
 | `cp3 clean [--all]` | Remove `.cp3/build`, `.cp3/cache`, `.cp3/out`. `--all` also removes `.cp3/packages`, `.cp3/native` and `.cp3/lock.json`. It keeps `.cp3/native` by default. |
 | `cp3 init [dir]` | Scaffold a new project (`package.json` + `src/index.cp3`). |
 | `cp3 toolchain ...` | Choose and inspect the Clang compiler (`list`, `detect`, `use`, `clear`, `current`). |
-| `cp3 install [src]` | Install a local `.cp3pak`/directory, or a GitHub release. |
+| `cp3 install [src]` | Install a local `.cp3pak`/directory, or a GitHub release. For a local `.cp3pak`, asks `delete source package file '<path>' after successful install? [y/N]: ` before installing (default: keep; non-interactive terminals and `--json` never prompt and never delete). See [Packages and .cp3pak](./12-packages.md). |
 | `cp3 update [name]` | Re-resolve locked GitHub dependencies to their latest release (`--dry-run` previews; `--json` for machines). |
 | `cp3 upgrade` | Upgrade cp3 itself from the latest GitHub release (`--dry-run`, `--yes`); the asset is verified against release SHA256SUMS before install. |
-| `cp3 publish [dir]` | Build a package and report/copy the `.cp3pak` (no registry). |
-| `cp3 recompile <pak>` | Add this platform's cached binary to a `.cp3pak`. |
+| `cp3 publish [dir]` | Build a package and report/copy the `.cp3pak` (no registry; the `.cp3pak` itself is the distribution). See [Packages and .cp3pak](./12-packages.md). |
+| `cp3 recompile <pak>` | Old binary-cache format: add this platform's cached binary to a `.cp3pak`. The current `.cp3pak` format ships no binary cache. |
 | `cp3 link <path>` / `cp3 unlink <name>` | Link/unlink a local package directory or `.cp3pak`; `--list` lists links, `--dry-run` previews. |
 | `cp3 exec <pkg> [args]` | Run a package's bundled tool. |
 | `cp3 lsp [--stdio]` | Language server over stdio (editor integrations). |
@@ -76,7 +76,7 @@ cp3 run src/index.cp3
 | `--type` / `--type-system` / `--author` / `--description` | `init` | Pre-select the scaffold answers. |
 | `--auto` | `install` | Auto-pick the GitHub release asset. |
 | `--dry-run` | `publish`, `update`, `upgrade` | Print what would happen. |
-| `--json` | `publish`, `link`, `unlink`, `install`, `update` | Machine-readable output. |
+| `--json` | `publish`, `link`, `unlink`, `install`, `update` | Machine-readable output; for `install`, never prompts and never deletes the source package file. |
 
 Exit codes: `0` success, `1` compile error, `2` usage error. `cp3 run` propagates the program's exit code.
 
@@ -95,6 +95,7 @@ The name is looked up in the nearest `package.json`'s `scripts` object. `run`, `
 ## Related pages
 
 - [Quick start](../quick-start.md)
+- [Packages and .cp3pak](./12-packages.md)
 - [Project settings and build cache](./09-project-settings-and-cache.md)
 - [Native toolchains](./05-native-toolchains.md)
 - [Build profiles and PGO](./11-build-profiles-and-pgo.md)

@@ -1,0 +1,13 @@
+import { glyphFor } from "./table.cp3";
+
+export class Token {
+    kind: string = "word";
+    text: string = "";
+    constructor(kind: string, text: string) {
+        this.kind = kind;
+        this.text = text;
+    }
+    mark(): string {
+        return glyphFor(this.kind);
+    }
+}

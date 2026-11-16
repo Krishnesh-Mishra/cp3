@@ -1,0 +1,19 @@
+{
+  "comment": "v0.2.6 source-package pin: a package whose entry imports a module OUTSIDE the package root must fail to pack. From pkg/src/main.cp3 the specifier '../../outside.cp3' resolves two levels up to the file at the case root, which is outside the package root (pkg/) - the task's shorthand for this was '../outside.cp3' with a package-root entry; with the standard src/ layout it takes '../../'. The build must fail: expectExit pinned to 1, the codebase's kExitCompileError convention for pack failures (see src/cli/include/cp3/cli.hpp); the runner can only express an exact exit code, not 'any non-zero', so if the landed fix reports this with a different code, change only expectExit and keep the stderr substring and filesAbsent pins - the intent is 'non-zero, no pak produced'. The build must not produce a .cp3pak (filesAbsent on .cp3/out/pak_escape.cp3pak), and stderr must carry the exact substring 'escapes the package root'. outside.cp3 exists and is compilable on purpose, so the failure cannot be attributed to a missing module. app/ is an unused placeholder (uniform fixture layout); no app step runs.",
+  "steps": [
+    {
+      "cwd": "pkg",
+      "args": [
+        "build",
+        "src/main.cp3"
+      ],
+      "expectExit": 1,
+      "stderrContains": [
+        "escapes the package root"
+      ],
+      "filesAbsent": [
+        ".cp3/out/pak_escape.cp3pak"
+      ]
+    }
+  ]
+}

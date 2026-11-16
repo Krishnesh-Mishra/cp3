@@ -27,6 +27,10 @@
 #include "detail/toolchain/pipeline.hpp"
 #include "detail/core/util.hpp"
 
+namespace cp3 {
+class ModuleGraph;
+}
+
 namespace cp3::cli {
 
 // -----------------------------------------------------------------------------
@@ -149,24 +153,13 @@ namespace detail {
 // Everything buildWithToolchain needs from the frontend half of cmdBuildOrRun:
 // pointers into the caller's locals (valid for the duration of the call).
 struct BuildRequest {
-    // An extra generated TU (spec 13: the worker modules the entry imports).
-    // Written beside the entry's generated files and compiled before it.
+    // An extra generated TU (spec 13: worker modules the entry imports, plus
+    // the plural pipeline's per-unit TUs). Written beside the entry's
+    // generated files and compiled before it.
     struct ExtraModule {
         std::string moduleName;         // output stem, e.g. "worker_impl"
         const GeneratedModule* module = nullptr;  // generated C++ (cpp/hpp)
         std::string sourceKey;          // incremental cache key (the .cp3 path)
-    };
-
-    // One implementation unit of an installed package. The package's generated
-    // `index.cp3` is only a declaration surface; the real definitions live in
-    // either a shipped cached object (`object`, used as is) or the archive's
-    // `pak/` C++ source (`source`, compiled here when no cache exists).
-    struct PackageImplementation {
-        fs::path source;                 // empty when `cached` is true
-        fs::path object;                 // installed cached artifact (.o)
-        std::vector<fs::path> includeDirs;
-        std::string sourceKey;
-        bool cached = false;
     };
 
     const CliOptions* opt = nullptr;
@@ -180,9 +173,6 @@ struct BuildRequest {
     // Empty for the single-TU (release) pipeline.
     std::string sharedProgramHeader;
     std::string sharedProgramHeaderName;
-    // Installed packages' `pak/` C++ implementations (declaration surfaces are
-    // linked against these, never regenerated as stubs).
-    const std::vector<PackageImplementation>* packageImplementations = nullptr;
     // The native bindings the program imports (`import native "id" as alias`)
     // travel with the compile options: their include roots, defines,
     // libraries and runtime DLLs join the build.
@@ -205,6 +195,10 @@ struct PackInput {
     const GeneratedModule* module = nullptr;  // generated C++ (cpp/hpp)
     const SourceFile* source = nullptr;       // entry source file
     const Program* program = nullptr;         // parsed entry AST
+    // The frontend's module graph (entry plus every unit it reaches).
+    // `packProject` walks its relative-import closure to collect the source
+    // files the .cp3pak carries.
+    const ModuleGraph* graph = nullptr;
     // The native bindings the module graph resolved (`import native "<id>"`).
     // Packing embeds their metadata and assets so the archive is buildable
     // without a separate platform bundle.
@@ -214,8 +208,9 @@ struct PackInput {
 
 // `cp3c build` for a `"type": "package"` project (CLI-README §5): validates the
 // mandatory `export default`, writes intermediates under .cp3/build/, and
-// produces .cp3/out/<name>.cp3pak carrying package.json + generated index.cp3
-// + the transpiled C++ under pak/ + any build.files. No toolchain involved.
+// produces .cp3/out/<name>.cp3pak - a source package carrying package.json,
+// the declared main as authored, and the entry's reachable relative-import
+// closure as plain .cp3 files. No toolchain involved.
 int packProject(const PackInput& input);
 
 }  // namespace detail

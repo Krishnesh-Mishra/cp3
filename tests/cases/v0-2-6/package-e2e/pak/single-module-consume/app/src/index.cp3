@@ -1,0 +1,6 @@
+import console from "std/console";
+import { Glimmer } from "pak_solo";
+
+const glimmer = new Glimmer();
+console.log(glimmer.greet());
+console.log(glimmer.id);

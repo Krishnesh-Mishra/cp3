@@ -1,0 +1,9 @@
+export function glyphFor(kind: string): string {
+    if (kind == "number") {
+        return "#";
+    }
+    if (kind == "word") {
+        return "a";
+    }
+    return ".";
+}

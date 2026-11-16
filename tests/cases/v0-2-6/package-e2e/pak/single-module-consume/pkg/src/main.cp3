@@ -1,0 +1,6 @@
+export class Glimmer {
+    id: number = 7;
+    greet(): string {
+        return "hello";
+    }
+}

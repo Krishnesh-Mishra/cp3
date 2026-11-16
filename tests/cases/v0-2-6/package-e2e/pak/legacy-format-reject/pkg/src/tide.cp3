@@ -1,0 +1,7 @@
+// The synthetic source the fabricated legacy pak was generated from.
+// It is NOT part of the fabricated archive (a v1 pak of this shape ships
+// transpiled C++ only - that is the point of this fixture); it is checked in
+// so the C++ members match a real v1-era artifact. Never imported by the app.
+export function surge(a: number, b: number): number {
+    return a + b;
+}

@@ -116,14 +116,32 @@ bool validateArchivePackage(const fs::path& archive, std::string& name,
         err = "package name '" + name + "' is not usable as a link name";
         return false;
     }
-    bool sawIndex = false;
+    // The export surface: the authored entry (exactly the path the package
+    // declared, or the filename fallback at the archive root), which must
+    // carry at least an `export ` occurrence.
+    const std::string main = packageMain(manifest);
+    const TarEntry* surface = nullptr;
+    const std::filesystem::path mainPath(main);
+    const std::string fallbackName =
+        mainPath.filename().empty() ? std::string() : mainPath.filename().generic_string();
     for (const TarEntry& member : members) {
-        if (member.name != "index.cp3") continue;
-        sawIndex = member.data.find("export ") != std::string::npos;
+        if (member.name == main) {
+            surface = &member;
+            break;
+        }
     }
-    if (!sawIndex) {
-        err = "archive has no exported index.cp3 surface; rebuild it with "
-              "`cp3c build`";
+    if (surface == nullptr && !fallbackName.empty()) {
+        for (const TarEntry& member : members) {
+            if (member.name == fallbackName) {
+                surface = &member;
+                break;
+            }
+        }
+    }
+    if (surface == nullptr ||
+        surface->data.find("export ") == std::string::npos) {
+        err = "archive has no exported entry surface (" + main +
+              "); rebuild it with `cp3c build`";
         return false;
     }
     return true;
@@ -154,7 +172,7 @@ bool linkDirectory(const LinkRequest& request, const fs::path& source,
     std::string version;
     if (!validateDirectoryPackage(source, name, version, err)) return false;
     // A package that excluded its C++ source is only usable on a platform it
-    // ships a cached binary for (CLI-README §5.4).
+    // ships a cached binary for: the same gate `cp3 install` applies.
     JsonValue manifest;
     std::string manifestError;
     PlatformCacheManifest cache;
@@ -190,7 +208,7 @@ bool linkDirectory(const LinkRequest& request, const fs::path& source,
 }
 
 // A package that excluded its C++ source is only usable on a platform it
-// ships a cached binary for (CLI-README §5.4).
+// ships a cached binary for: the same gate `cp3 install` applies.
 bool checkArchiveUsable(const fs::path& archive, const std::string& name,
                         const std::string& version, std::string& err) {
     Cp3pakManifest pak;

@@ -1,0 +1,53 @@
+{
+  "comment": "v0.2.6 source-package pin: a multi-module package must survive build -> install -> consume. The pak now carries the entry plus its full relative-import closure (verbatim .cp3 sources, exact folder structure), so the consumer compiles against real units instead of a signatures stub whose relative imports dangled (CP3601) and whose hidden types failed to resolve (CP3302). Before the fix this case fails at step 3 with CP3601 on every relative import of the installed stub.",
+  "steps": [
+    {
+      "cwd": "pkg",
+      "args": [
+        "build",
+        "src/main.cp3"
+      ],
+      "expectExit": 0,
+      "stderrContains": [
+        "packed"
+      ]
+    },
+    {
+      "cwd": "app",
+      "args": [
+        "install",
+        "../pkg/.cp3/out/pak_tide.cp3pak"
+      ],
+      "expectExit": 0,
+      "stderrContains": [
+        "installed"
+      ]
+    },
+    {
+      "cwd": "app",
+      "args": [
+        "build",
+        "src/index.cp3"
+      ],
+      "expectExit": 0,
+      "stderrNotContains": [
+        "CP3601",
+        "CP3302",
+        "CP3304"
+      ]
+    },
+    {
+      "cwd": "app",
+      "args": [
+        "run",
+        "src/index.cp3"
+      ],
+      "expectExit": 0,
+      "stdoutContains": [
+        "reads: a|tide:a6",
+        "--------------------",
+        "a|app"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "name": "legacy_tide",
+  "version": "1.2.3",
+  "main": "src/tide.cp3",
+  "type": "package"
+}

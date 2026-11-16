@@ -4,11 +4,12 @@
 //
 // OWNERSHIP: cli module (src/cli/**). Implements detail/package_cache.hpp.
 //
-// The rule is simple and is the whole point of the cache: a package that
-// carries a cached binary for the consumer's platform is used as is; a
-// package that does not falls back to its own C++ source; a package whose
-// author excluded the source and shipped no binary for this platform cannot
-// be used at all, and says so by name.
+// A source package is compiled from its authored `.cp3` sources on the
+// consuming machine - that is the normal path and needs no decision. A
+// hand-made package whose author set `excludeSource` and which ships no
+// cached binary for this platform cannot be used at all, and says so by
+// name. (Binary caches belong to the pre-format-2 world; a .cp3pak built by
+// this cp3c never carries one.)
 // =============================================================================
 #include "detail/cache/package_cache.hpp"
 
@@ -100,8 +101,8 @@ void reportPackageArtifactMode(const std::string& name,
         return;
     }
     std::fprintf(stderr,
-                 "cp3c: '%s' has no cached binary for %s; the C++ source is "
-                 "the fallback\n",
+                 "cp3c: '%s' carries no cached binary for %s; it is built "
+                 "from its sources\n",
                  name.c_str(), platformIdText(currentPlatform()).c_str());
 }
 

@@ -1,0 +1,4 @@
+// A real, compilable module that lives OUTSIDE the package root (pkg/).
+// It exists so the build's failure can only be attributed to the
+// package-root-escape check, never to "module not found".
+export const outsideValue = 41;

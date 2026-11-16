@@ -1,0 +1,15 @@
+export function repeatText(text: string, count: number): string {
+    let out = "";
+    for (let i = 0; i < count; i = i + 1) {
+        out = out + text;
+    }
+    return out;
+}
+
+export function padLeft(text: string, width: number): string {
+    let out = text;
+    while (out.length < width) {
+        out = " " + out;
+    }
+    return out;
+}

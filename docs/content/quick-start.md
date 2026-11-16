@@ -102,7 +102,7 @@ See [Build profiles and PGO](./cli-and-compiler/11-build-profiles-and-pgo.md) fo
 
 The default manifest includes commands named `start`, `verify`, and `build`. They invoke `cp3c run`, `cp3c check`, and `cp3c build` against the configured entry. They are convenience metadata; CP3 does not require npm to execute them. Inspect the generated command text before relying on it in a package manager or shell integration.
 
-The application scaffold enables `bundleNativeDlls` in its build section. Package scaffolds instead list files to include in the package archive and generate a default export object. Packaging behavior is distinct from building and running an application.
+The application scaffold enables `bundleNativeDlls` in its build section. Package scaffolds instead list files to include in the package archive and generate a default export object. See [Packages and .cp3pak](./cli-and-compiler/12-packages.md). Packaging behavior is distinct from building and running an application.
 
 ## 8. Project versus compiler build
 

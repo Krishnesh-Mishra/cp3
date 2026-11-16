@@ -34,15 +34,12 @@
 
 namespace cp3 {
 
-// A resolved package entry. The module name is the package's *original* module
-// name (`src/index` for `"main": "src/index.cp3"`), which is what its shipped
-// C++ implementation was generated under; using the archive-relative path
-// (`index`) would look for the wrong namespace at link time. `root` is the
-// installed package directory (the parent of its `pak/` implementation tree).
+// A resolved package entry: the entry `.cp3` file and the package's installed
+// directory (`root`). The loader names the loaded unit after its path like an
+// ordinary source unit; there is no separate namespace to honor.
 struct PackageEntry {
     std::filesystem::path path;
     std::filesystem::path root;
-    std::string moduleName;
 };
 
 // Resolves a package specifier (`import { x } from "addpkg"`) to the package

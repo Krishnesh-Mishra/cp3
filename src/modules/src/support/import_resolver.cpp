@@ -135,8 +135,19 @@ CompilationUnit* ProgramLoader::loadPackage(const std::string& specifier,
         return nullptr;
     }
     unit->isPackage = true;
-    unit->packageRoot = entry->root;
-    if (!entry->moduleName.empty()) unit->moduleName = entry->moduleName;
+    // An installed package unit is an ordinary unit of this program: its
+    // identity is the path relative to the consumer's project root (as for a
+    // local module). The vendored tree lives under `<project>/.cp3/packages/
+    // <name>/`, which keeps different packages' units distinct.
+    const fs::path filePath(unit->file->path);
+    std::error_code ec;
+    const fs::path rel = fs::relative(filePath, projectRoot_, ec);
+    const std::string relText = ec ? std::string() : rel.generic_string();
+    if (!relText.empty() && relText.rfind("..", 0) != 0 && !rel.is_absolute()) {
+        fs::path use = rel;
+        use.replace_extension();
+        unit->moduleName = use.generic_string();
+    }
     return unit;
 }
 

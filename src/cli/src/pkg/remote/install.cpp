@@ -4,13 +4,15 @@
 // OWNERSHIP: cli module (src/cli/**). Implements detail/install.hpp.
 //
 // A `.cp3pak` is decompressed once into .cp3/packages/<name>/ as plain files
-// (CLI-README Â§4). A directory install compiles its TypeScript-ish source
-// into the same shape a `.cp3pak` carries (package.json + generated
-// index.cp3 + pak/<module>.{cpp,hpp} + build.files) so consumers build
-// against the generated surface and the transpiled C++; when the directory
-// has no compilable entry (or compilation fails) install rejects it with a
-// clear "use a .cp3pak" error instead of copying uncompilable source. The
-// lock records version + source + a SHA-256 (artifact) or directory digest.
+// (CLI-README §4): the format carries the package's authored `.cp3` sources,
+// so the installed tree is exactly the archive's closure plus package.json and
+// the container manifest (`cp3pak.json`), and the consuming build compiles the
+// sources like its own. A directory install materializes the same layout from
+// the directory itself: package.json verbatim, the entry and its reachable
+// relative-import closure as plain .cp3 files at root-relative paths, plus
+// build.files; a directory with no entry file installs as a plain copy, as
+// before. The lock records version + source + a SHA-256 (artifact) or
+// directory digest.
 // =============================================================================
 #include "detail/pkg/install.hpp"
 
@@ -18,15 +20,10 @@
 #include <cstdio>
 #include <memory>
 #include <system_error>
-#include <unordered_map>
 #include <vector>
 
-#include "cp3/core/analysis.hpp"
-#include "cp3/codegen.hpp"
-#include "cp3/codegen_program.hpp"
-#include "cp3/diag/diagnostic.hpp"
+#include "cp3/modules.hpp"
 #include "cp3/meta/version.hpp"
-#include "cp3/core/source.hpp"
 
 #include "detail/cache/checksum.hpp"
 #include "detail/cache/cache.hpp"
@@ -35,13 +32,12 @@
 #include "detail/pkg/cp3pak.hpp"
 #include "detail/pkg/json.hpp"
 #include "detail/pkg/native_pack.hpp"
-#include "detail/pkg/signatures.hpp"
 #include "detail/cache/package_cache.hpp"
 #include "detail/pkg/package_json.hpp"
+#include "detail/pkg/source_closure.hpp"
 #include "detail/toolchain/pipeline.hpp"
 #include "detail/core/semver.hpp"
 #include "detail/archive/tar.hpp"
-#include "detail/core/worker_module.hpp"
 #include "detail/core/util.hpp"
 
 namespace cp3::cli {
@@ -175,107 +171,72 @@ bool parseArchivePackageJson(const std::vector<TarEntry>& members,
     return false;
 }
 
-// Assembles the whole-program unit list for the codegen path (mirrors
-// run.cpp): every loaded unit with a parsed AST, the entry carrying its own
-// SemaResult and every other unit its per-unit table.
-std::vector<CheckedModuleUnit> installCheckedUnits(
-    const ModuleGraph& graph, const SemaResult& entrySema,
-    const std::unordered_map<std::uint32_t, SemaResult>& unitSemas) {
-    std::vector<CheckedModuleUnit> units;
-    for (CompilationUnit* unit : graph.compilationOrder()) {
-        if (unit == nullptr || !unit->ast || unit->isPrelude) continue;
-        const SemaResult* sema = nullptr;
-        if (unit->isEntry) {
-            sema = &entrySema;
-        } else {
-            const auto it = unitSemas.find(unit->id);
-            if (it == unitSemas.end()) continue;
-            sema = &it->second;
-        }
-        units.push_back(CheckedModuleUnit{unit, sema});
-    }
-    return units;
-}
-
-std::string installUsePakMessage(const fs::path& source) {
-    return "cannot install '" + source.string() +
-           "': it has no compilable package entry (a directory install "
-           "compiles the TypeScript-ish source with its default or named "
-           "exports into a .cp3pak-shaped layout); use a .cp3pak instead "
-           "(build it with 'cp3c build' in the package directory)";
-}
-
-// Compiles a package directory's entry into the generated C++ for the
-// .cp3pak-shaped install layout. Returns false with a "use a .cp3pak"
-// message when the directory has no compilable entry; callers keep the
-// legacy copy path only for directories with no entry file at all.
-bool compilePackageEntry(const fs::path& source, const JsonValue& manifest,
-                         GeneratedModule& module, std::string& moduleName,
-                         const Program*& programOut, SourceManager& sm,
-                         SourceFile*& entryFile, CompileOptions& compile,
-                         std::string& err) {
+// Installs a source package directory: package.json verbatim, the entry and
+// its reachable relative-import closure as plain .cp3 files at root-relative
+// paths, plus build.files - exactly the layout a `.cp3pak` carries.
+bool installSourcePackage(const fs::path& source, const JsonValue& manifest,
+                          const fs::path& packageDir, std::string& err) {
     const std::string main = packageMain(manifest);
     const fs::path entryPath = source / fs::path(main);
-    std::error_code ec;
-    if (!fs::is_regular_file(entryPath, ec)) {
-        err = installUsePakMessage(source);
-        return false;
-    }
-    applyProjectTypeSettings(source, compile);
-    const fs::path projectRoot = source;
-    moduleName = moduleNameFor(entryPath, projectRoot);
+    SourceManager sm;
+    SourceFile* entryFile = nullptr;
     std::string loadErr;
     if (!loadEntrySource(entryPath.string(), sm, entryFile, loadErr)) {
-        err = installUsePakMessage(source) + " (" + loadErr + ")";
+        err = "cannot load the package entry '" + main + "': " + loadErr;
         return false;
     }
-    CollectingDiagnosticSink feSink;
-    std::unique_ptr<ModuleGraph> graph = loadModuleGraph(sm, *entryFile, feSink);
-    compile.nativeBindings = graph->nativeBindings();
-    CompilationUnit* entry = graph->entry();
-    SemaResult sema;
-    std::unordered_map<std::uint32_t, SemaResult> unitSemas;
-    if (entry != nullptr && entry->ast) {
-        analyzeProgramGraph(*graph, sema, unitSemas, feSink, compile);
-    }
-    RenderOptions ro;
-    ro.fallbackPath = entryPath.string();
-    renderDiagnostics(feSink.diagnostics(), ro, stderr);
-    if (feSink.hasErrors() || entry == nullptr || !entry->ast) {
-        err = installUsePakMessage(source) +
-              " (the package source did not pass the compiler frontend; fix "
-              "it and 'cp3c build' the package, or install a .cp3pak)";
+    // No sema/codegen here: install does not compile. The closure is computed
+    // from the loader's graph alone; the consuming build reports its own
+    // diagnostics against the installed sources.
+    CollectingDiagnosticSink sink;
+    std::unique_ptr<ModuleGraph> graph = loadModuleGraph(sm, *entryFile, sink);
+    std::string packageJsonText;
+    if (!readTextFile(source / "package.json", packageJsonText)) {
+        err = "cannot read " + (source / "package.json").string();
         return false;
     }
-    if (!hasPackageExportSurface(*entry->ast)) {
-        err = installUsePakMessage(source) +
-              " (the package entry needs `export default { ... }`, "
-              "`export class <Name>`, or `export { ... }`)";
+    std::vector<TarEntry> members;
+    if (!collectRelativeClosure(*graph, source, members, err)) return false;
+    // Extra shipped files listed in build.files (mirrors pack.cpp).
+    const JsonValue* build = manifest.find("build");
+    const JsonValue* files = build ? build->arrayField("files") : nullptr;
+    if (files != nullptr) {
+        for (const JsonValue& item : files->array) {
+            if (item.type != JsonValue::Type::String) {
+                err = "build.files entries must be strings";
+                return false;
+            }
+            std::string name = item.string;
+            for (char& c : name) {
+                if (c == '\\') c = '/';
+            }
+            std::string data;
+            if (!readTextFile(source / fs::path(name), data)) {
+                err = "build.files lists '" + item.string +
+                      "', but that file does not exist";
+                return false;
+            }
+            members.push_back(TarEntry{std::move(name), std::move(data)});
+        }
+    }
+    std::error_code ec;
+    fs::create_directories(packageDir, ec);
+    if (ec) {
+        err = "cannot create " + packageDir.string() + " (" + ec.message() + ")";
         return false;
     }
-    CodegenOptions options;
-    options.importedEnums = importedEnumsFor(*graph, *entry);
-    options.importedClasses = importedClassesFor(*graph, *entry);
-options.importedInterfaces = importedInterfacesFor(*graph, *entry);
-    options.typeSystem = compile.typeSystem;
-    options.nativeBindings = compile.nativeBindings;
-    CollectingDiagnosticSink cgSink;
-    if (hasProgramModules(*graph)) {
-        const std::vector<CheckedModuleUnit> units =
-            installCheckedUnits(*graph, sema, unitSemas);
-        module = generateProgramModule(
-            {*graph, units, moduleName, cgSink, false, options});
-    } else {
-        module = generateModule({*entry->ast, sema, moduleName, cgSink, false, options});
-    }
-    renderDiagnostics(cgSink.diagnostics(), ro, stderr);
-    if (cgSink.hasErrors() || (module.source.empty() && module.header.empty())) {
-        err = installUsePakMessage(source) +
-              " (code generation failed; fix the package source, or install "
-              "a .cp3pak built with 'cp3c build')";
+    if (!writeTextFile(packageDir / "package.json", packageJsonText, nullptr)) {
+        err = "cannot write " + (packageDir / "package.json").string();
         return false;
     }
-    programOut = entry->ast.get();
+    for (const TarEntry& member : members) {
+        const fs::path dest = packageDir / fs::path(member.name);
+        fs::create_directories(dest.parent_path(), ec);
+        if (ec || !writeTextFile(dest, member.data, nullptr)) {
+            err = "cannot write " + dest.string();
+            return false;
+        }
+    }
     return true;
 }
 
@@ -286,7 +247,7 @@ bool installFromDirectory(const fs::path& source, const fs::path& projectRoot,
     const std::string name = packageName(manifest, source);
     const std::string version = packageVersion(manifest);
     // A package that excluded its C++ source is only usable on a platform it
-    // ships a cached binary for (CLI-README Â§5.4).
+    // ships a cached binary for: the same gate an installed artifact sees.
     PlatformCacheManifest cache;
     const bool hasCache = installedPlatformCache(source, cache);
     if (!checkPackageUsable(name, version, manifest, hasCache, err)) {
@@ -299,88 +260,14 @@ bool installFromDirectory(const fs::path& source, const fs::path& projectRoot,
     std::error_code ec;
     const fs::path entryProbe = source / fs::path(packageMain(manifest));
     if (!fs::is_regular_file(entryProbe, ec)) {
-        // Legacy path: a directory with no entry file at all (metadata-only
-        // fixtures) installs as a plain copy, as before.
+        // A directory with no entry file at all (metadata-only fixtures)
+        // installs as a plain copy, as before.
         if (!copyTree(source, packageDir, err)) return false;
     } else {
-        // Compiled path: `cp3 install <dir>` transpiles the package entry
-        // into the same members a `.cp3pak` carries, so downstream builds
-        // link the generated C++ instead of the raw source.
-        SourceManager sm;
-        SourceFile* entryFile = nullptr;
-        CompileOptions compile;
-        GeneratedModule module;
-        std::string moduleName;
-        const Program* program = nullptr;
-        if (!compilePackageEntry(source, manifest, module, moduleName, program,
-                                 sm, entryFile, compile, err)) {
+        // Install the source the way its .cp3pak carries it; the consumer's
+        // build compiles the units itself.
+        if (!installSourcePackage(source, manifest, packageDir, err)) {
             return false;
-        }
-        // Materialize the .cp3pak-shaped layout: package.json verbatim,
-        // index.cp3 from signatures + native imports, pak/<module>.{cpp,hpp}.
-        std::string packageJsonText;
-        if (!readTextFile(source / "package.json", packageJsonText)) {
-            err = "cannot read " + (source / "package.json").string();
-            return false;
-        }
-        fs::create_directories(packageDir, ec);
-        if (ec) {
-            err = "cannot create " + packageDir.string() + " (" + ec.message() + ")";
-            return false;
-        }
-        if (!writeTextFile(packageDir / "package.json", packageJsonText, nullptr)) {
-            err = "cannot write " + (packageDir / "package.json").string();
-            return false;
-        }
-        std::vector<TarEntry> members;
-        members.push_back(TarEntry{"package.json", std::move(packageJsonText)});
-        std::string surface = stripToSignatures(*entryFile, *program, compile.typeSystem);
-        std::vector<std::string> nativeIds;
-        for (const NativeBinding& binding : compile.nativeBindings) {
-            if (binding.id.empty()) continue;
-            if (std::find(nativeIds.begin(), nativeIds.end(), binding.id) ==
-                nativeIds.end()) {
-                nativeIds.push_back(binding.id);
-            }
-        }
-        for (const std::string& id : nativeBindingIdsInText(surface)) {
-            if (std::find(nativeIds.begin(), nativeIds.end(), id) == nativeIds.end()) {
-                nativeIds.push_back(id);
-            }
-        }
-        surface = ensureNativeImports(std::move(surface), nativeIds);
-        members.push_back(TarEntry{"index.cp3", std::move(surface)});
-        members.push_back(
-            TarEntry{"pak/" + moduleName + ".cpp", module.source});
-        members.push_back(
-            TarEntry{"pak/" + moduleName + ".hpp", module.header});
-        // Extra shipped files listed in build.files (mirrors pack.cpp).
-        const JsonValue* build = manifest.find("build");
-        const JsonValue* files = build ? build->arrayField("files") : nullptr;
-        if (files != nullptr) {
-            for (const JsonValue& item : files->array) {
-                if (item.type != JsonValue::Type::String) {
-                    err = "build.files entries must be strings";
-                    return false;
-                }
-                const fs::path filePath = source / fs::path(item.string);
-                std::string data;
-                if (!readTextFile(filePath, data)) {
-                    err = "build.files lists '" + item.string +
-                          "', but that file does not exist";
-                    return false;
-                }
-                members.push_back(TarEntry{item.string, std::move(data)});
-            }
-        }
-        for (const TarEntry& member : members) {
-            if (member.name == "package.json") continue;
-            const fs::path dest = packageDir / fs::path(member.name);
-            fs::create_directories(dest.parent_path(), ec);
-            if (ec || !writeTextFile(dest, member.data, nullptr)) {
-                err = "cannot write " + dest.string();
-                return false;
-            }
         }
     }
     // The package's `.cp3/native` tree is not part of the installed package
@@ -399,30 +286,13 @@ bool installFromDirectory(const fs::path& source, const fs::path& projectRoot,
     return true;
 }
 
+// Writes one member to the package directory.
 bool writePackageMember(const fs::path& packageDir, const TarEntry& member,
                         std::string& err) {
-    std::string data = member.data;
-    // Beta-one archives generated the export surface with a doubled keyword
-    // (`export export function ...`) because the AST span already carried the
-    // modifier. The generator is fixed, but an already-published archive must
-    // keep installing; repair the generated surface on the way in.
-    if (member.name == "index.cp3") {
-        const std::string doubled = "export export ";
-        std::size_t at = 0;
-        while ((at = data.find(doubled, at)) != std::string::npos) {
-            const bool lineStart =
-                at == 0 || data[at - 1] == '\n' || data[at - 1] == '\r';
-            if (!lineStart) {
-                at += doubled.size();
-                continue;
-            }
-            data.erase(at, std::string("export ").size());
-        }
-    }
     const fs::path dest = packageDir / fs::path(member.name);
     std::error_code ec;
     fs::create_directories(dest.parent_path(), ec);
-    if (!writeTextFile(dest, data, nullptr)) {
+    if (!writeTextFile(dest, member.data, nullptr)) {
         err = "cannot write " + dest.string();
         return false;
     }
@@ -470,7 +340,8 @@ bool installArchivePackage(const fs::path& archive, const fs::path& projectRoot,
                            LockEntry& entry, std::string& err) {
     Cp3pakManifest pak;
     std::vector<TarEntry> members;
-    if (!readCp3pak(archive, pak, members, err)) return false;
+    std::string rawManifest;
+    if (!readCp3pak(archive, pak, members, err, &rawManifest)) return false;
 
     JsonValue manifest;
     if (!parseArchivePackageJson(members, manifest, err)) return false;
@@ -482,7 +353,7 @@ bool installArchivePackage(const fs::path& archive, const fs::path& projectRoot,
     const std::string name = *declared;
     const std::string version = packageVersion(manifest);
     // A package that excluded its C++ source is only usable on a platform it
-    // ships a cached binary for (CLI-README Â§5.4).
+    // ships a cached binary for: the same gate a directory install sees.
     const bool hasCache =
         archiveHasPlatformCache(members, currentPlatform());
     if (!checkPackageUsable(name, version, manifest, hasCache, err)) {
@@ -499,6 +370,13 @@ bool installArchivePackage(const fs::path& archive, const fs::path& projectRoot,
     for (const TarEntry& member : members) {
         if (isNativeArchiveMember(member.name)) continue;
         if (!writePackageMember(packageDir, member, err)) return false;
+    }
+    // The container manifest lands next to package.json, so the installed
+    // tree is self-describing: the consumer can tell a source package from a
+    // legacy one and see the declared main without opening the archive.
+    if (!writePackageMember(packageDir, TarEntry{"cp3pak.json", std::move(rawManifest)},
+                            err)) {
+        return false;
     }
 
     std::string bytes;

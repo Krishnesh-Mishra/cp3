@@ -1,0 +1,7 @@
+// Placeholder consumer. This scenario's package is expected to fail at
+// `cp3c build` (its entry escapes the package root), so there is nothing
+// to install or consume; the file exists only to keep the fixture layout
+// uniform (case.json + pkg/ + app/). No app step is run.
+import console from "std/console";
+
+console.log("escape fixture: nothing to consume");

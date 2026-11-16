@@ -75,15 +75,25 @@
               "\"integrity\": \"sha256:"
             ]
           },
-          ".cp3/packages/local-kit/index.cp3": {
+          ".cp3/packages/local-kit/src/index.cp3": {
             "exists": true
+          },
+          ".cp3/packages/local-kit/cp3pak.json": {
+            "contains": [
+              "\"formatVersion\": 2",
+              "\"main\": \"src/index.cp3\""
+            ]
           },
           ".cp3/packages/local-kit/package.json": {
             "json_paths": {
               "version": "1.2.3"
             }
           }
-        }
+        },
+        "files_absent": [
+          ".cp3/packages/local-kit/index.cp3",
+          ".cp3/packages/local-kit/pak"
+        ]
       }
     },
     {
@@ -130,8 +140,13 @@
           ".cp3/native/demo/source/0/demo.cpp": {
             "exists": true
           },
-          ".cp3/packages/native-dep/index.cp3": {
+          ".cp3/packages/native-dep/src/index.cp3": {
             "contains": "import native \"demo\""
+          },
+          ".cp3/packages/native-dep/cp3pak.json": {
+            "contains": [
+              "\"formatVersion\": 2"
+            ]
           },
           ".cp3/lock.json": {
             "contains": "\"native-dep\""
@@ -730,9 +745,12 @@
         "stderr": {
           "contains": [
             "unsupported .cp3pak formatVersion 99",
-            "reads up to 1"
+            "rebuild the package with a newer cp3c"
           ]
-        }
+        },
+        "files_absent": [
+          ".cp3/packages/local-kit"
+        ]
       }
     },
     {
@@ -1027,7 +1045,7 @@
     {
       "group": "install",
       "name": "cached-binary-for-this-platform",
-      "description": "a package with a cache for this platform installs and uses the cached binary",
+      "description": "a hand-made pak carrying a cache for this platform installs (extracted, never linked) and reports it",
       "argv": [
         "install",
         "deps/local-kit.cp3pak"

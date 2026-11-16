@@ -1,0 +1,7 @@
+import console from "std/console";
+import { buildReport, describe, Token } from "pak_tide";
+
+const report = buildReport("reads: ", 20, "boxed", [1, 2, 3]);
+console.log(report);
+const token = new Token("word", "app");
+console.log(describe(token));

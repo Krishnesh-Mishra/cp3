@@ -7,11 +7,16 @@
 // GitHub repository URL (latest non-prerelease release, `.cp3pak` assets,
 // interactive selector or --auto). A local install is copied into
 // `.cp3/packages/<name>/`; a GitHub install is downloaded with the system curl
-// and recorded with repo/tag/asset and a SHA-256. Linked packages are never
+// and recorded with repo/tag/asset and a SHA-256. Installing a local `.cp3pak`
+// FILE (not a directory) asks first whether the source file may be deleted
+// once the install succeeds; the default answer is no, and a non-interactive
+// invocation never prompts nor deletes. Linked packages are never
 // overwritten without --force, and a bare package name is not guessed as a
 // path: named registry installs are explicitly out of beta one.
 // =============================================================================
+#include <cctype>
 #include <cstdio>
+#include <iostream>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -354,6 +359,50 @@ int cmdInstall(const CliOptions& opt) {
                      source.string().c_str());
         return kExitCompileError;
     }
+    // A local .cp3pak FILE (never a directory, a URL or a bare name) is a
+    // disposable artifact the author may want gone once installed. Ask about
+    // deleting it before the install starts; delete only after the whole
+    // install path succeeded. A directory source is never offered (deleting
+    // would destroy the author's project), and a non-interactive invocation
+    // never prompts nor deletes.
+    std::string deleteCandidate;
+    {
+        std::error_code absEc;
+        std::error_code fileEc;
+        const fs::path absolute = fs::absolute(source, absEc);
+        const std::string shown =
+            absEc ? source.string() : absolute.string();
+        if (!opt.json && !opt.autoSelect && !opt.yes && isTty(stdin) &&
+            fs::is_regular_file(source, fileEc)) {
+            std::string name = source.filename().generic_string();
+            for (char& c : name) {
+                c = static_cast<char>(
+                    std::tolower(static_cast<unsigned char>(c)));
+            }
+            if (endsWith(name, ".cp3pak")) deleteCandidate = shown;
+        }
+    }
+    bool deleteSource = false;
+    if (!deleteCandidate.empty()) {
+        std::fprintf(stderr,
+                     "delete source package file '%s' after successful "
+                     "install? [y/N]: ",
+                     deleteCandidate.c_str());
+        std::string answer;
+        // EOF (a closed stdin) reads as a default "no": the file stays.
+        if (std::getline(std::cin, answer)) {
+            const std::size_t first = answer.find_first_not_of(" \t\r\n");
+            if (first != std::string::npos) {
+                const std::size_t last = answer.find_last_not_of(" \t\r\n");
+                std::string trimmed = answer.substr(first, last - first + 1);
+                for (char& c : trimmed) {
+                    c = static_cast<char>(
+                        std::tolower(static_cast<unsigned char>(c)));
+                }
+                deleteSource = trimmed == "y" || trimmed == "yes";
+            }
+        }
+    }
     LockEntry entry;
     const int rc = installLocalOne(source, projectRoot, opt, lock, entry);
     if (rc != kExitSuccess) return rc;
@@ -365,6 +414,17 @@ int cmdInstall(const CliOptions& opt) {
         printInstallJson({entry});
     } else {
         reportInstalled(entry, false);
+    }
+    if (deleteSource) {
+        std::error_code removeEc;
+        if (!fs::remove(source, removeEc)) {
+            std::fprintf(stderr,
+                         "cp3c: warning: could not delete '%s' (%s)\n",
+                         deleteCandidate.c_str(), removeEc.message().c_str());
+        } else {
+            std::fprintf(stderr, "cp3c: deleted '%s'\n",
+                         deleteCandidate.c_str());
+        }
     }
     return kExitSuccess;
 }

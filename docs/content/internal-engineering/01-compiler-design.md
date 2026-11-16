@@ -21,7 +21,7 @@ What lives in `.cp3/`:
 
 | Entry | Holds |
 | --- | --- |
-| `.cp3/build/` | Generated C++ only (D61): one `.cpp`/`.hpp` pair per unit (`src/index.cpp`), plus `cp3_program.hpp` for multi-unit builds, and PCH artifacts (Incremental profile only). For packages, staging for cached objects. |
+| `.cp3/build/` | Generated C++ only (D61): one `.cpp`/`.hpp` pair per unit (`src/index.cpp`), plus `cp3_program.hpp` for multi-unit builds, and PCH artifacts (Incremental profile only). |
 | `.cp3/cache/` | Native object files mirroring the source tree (`src/index.o`), stock runtime objects under `_runtime/`, `build-manifest.txt` (the v3 incremental manifest), `incremental-program-cache` (per-unit fragment cache), the `<exe>.link-stamp`, and the link-arguments response file (`link-objects.rsp`) when it would exceed the command-line limit. |
 | `.cp3/out/` | The linked executable (`<entry-stem>` or `<entry-stem>.exe`), or a `.cp3pak` for package projects. |
 | `.cp3/packages/<name>/` | Installed CP3 packages (unpacked from `.cp3pak` archives). |
@@ -60,7 +60,7 @@ Three output shapes exist:
 | Whole-program TU | Local-module graph, **Release**/**Debug** | One `.cpp`; a `cp3/compilation unit` becomes a `cp3_mod_<unit>` namespace; two-phase emission (all declarations, then all definitions) |
 | Plural per-module TUs | Local-module graph, **Incremental** | One shared header `cp3_program.hpp` plus one TU per unit, compiled and cached independently; unchanged units are reused |
 
-Programs with workers emit extra TUs for the worker entries. The only consumers of the generator are the toolchain driver and the package packer — both write `.cpp` files and invoke Clang.
+Programs with workers emit extra TUs for the worker entries. The generator's consumer is the toolchain driver: it writes `.cpp` files and invokes Clang. The package packer produces no C++ — a `.cp3pak` carries the package's `.cp3` sources (see [Packages and .cp3pak](../cli-and-compiler/12-packages.md)).
 
 ## Stage 4 — native compilation: C++20 to machine code
 

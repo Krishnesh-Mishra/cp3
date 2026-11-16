@@ -1,0 +1,22 @@
+import { Token } from "./lexer/token.cp3";
+import { glyphFor } from "./lexer/table.cp3";
+import { FormatOptions, FormatKind } from "./types/options.cp3";
+import { padLeft, repeatText } from "./utils/text.cp3";
+import { describe as describeToken } from "./describe.cp3";
+
+export { describe } from "./describe.cp3";
+export { Token } from "./lexer/token.cp3";
+
+export function buildReport(prefix: string, width: number, kind: FormatKind, cells: number[]): string {
+    const options: FormatOptions = { prefix: prefix, width: width };
+    let total = 0;
+    for (let i = 0; i < cells.length; i = i + 1) {
+        total = total + cells[i];
+    }
+    const token = new Token("word", "tide");
+    const line = padLeft(`${options.prefix}${describeToken(token)}:${glyphFor(token.kind)}${total}`, options.width);
+    if (kind == "boxed") {
+        return repeatText("-", options.width) + "\n" + line;
+    }
+    return line;
+}

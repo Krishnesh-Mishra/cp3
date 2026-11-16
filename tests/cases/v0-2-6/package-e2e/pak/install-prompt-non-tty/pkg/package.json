@@ -1,0 +1,6 @@
+{
+  "name": "pak_promptkeep",
+  "version": "0.1.0",
+  "main": "src/main.cp3",
+  "type": "package"
+}

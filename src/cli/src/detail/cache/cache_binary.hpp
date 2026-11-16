@@ -5,8 +5,11 @@
 //
 // Definitions live in src/cli/src/pkg/cache_binary.cpp.
 //
-// The cache is the optional per-platform compiled artifact a package may ship
-// next to its C++ source (CLI-README §5.4). The archive layout is:
+// The cache is the per-platform compiled artifact `cp3 recompile` can add to
+// an archive that carries transpiled C++ (`pak/*.cpp`) - the pre-format-2
+// layout, kept alive for hand-made and older artifacts. A source package
+// (formatVersion 2, the only new output of this cp3c) never carries one; the
+// archive layout is:
 //
 //   pak/<platform>/cache.json    the cache manifest of that platform
 //   pak/<platform>/<module>.o    the compiled artifact of that module

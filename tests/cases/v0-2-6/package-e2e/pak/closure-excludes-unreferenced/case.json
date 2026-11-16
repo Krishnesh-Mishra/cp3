@@ -1,0 +1,45 @@
+{
+  "comment": "v0.2.6 source-package pin: the pak carries exactly the relative-import closure (verbatim .cp3 sources, exact folder structure) and nothing else. src/used.cp3 is imported (directly) by the entry, src/unused.cp3 is never imported and must not ship. There is no archive-inspect step in this runner, so the exact member list is a documented manual check (see README.md in this folder); the installed-tree assertions below are the harness-expressible proxy: install unpacks the members at their archive-relative paths, so an installed tree without src/unused.cp3 (and with src/main.cp3 + src/used.cp3) shows the closure was computed correctly. The paths assume the archive member names keep the package-relative folder structure (src/...), per the v0.2.6 change; if the landed layout differs, adjust only these three paths and keep the intent.",
+  "steps": [
+    {
+      "cwd": "pkg",
+      "args": [
+        "build",
+        "src/main.cp3"
+      ],
+      "expectExit": 0,
+      "stderrContains": [
+        "packed"
+      ]
+    },
+    {
+      "cwd": "app",
+      "args": [
+        "install",
+        "../pkg/.cp3/out/pak_closure.cp3pak"
+      ],
+      "expectExit": 0,
+      "stderrContains": [
+        "installed"
+      ],
+      "filesExist": [
+        ".cp3/packages/pak_closure/src/main.cp3",
+        ".cp3/packages/pak_closure/src/used.cp3"
+      ],
+      "filesAbsent": [
+        ".cp3/packages/pak_closure/src/unused.cp3"
+      ]
+    },
+    {
+      "cwd": "app",
+      "args": [
+        "run",
+        "src/index.cp3"
+      ],
+      "expectExit": 0,
+      "stdoutContains": [
+        "21"
+      ]
+    }
+  ]
+}

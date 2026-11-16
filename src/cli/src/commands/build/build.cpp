@@ -597,9 +597,9 @@ void laneBBody(const CliOptions opt, const std::string entryString) {
 // Forward declaration - defined below with the link-stamp helpers.
 std::string fileStamp(const fs::path& path);
 
-// Builds the job list for the extra TU modules (spec 13), the entry TU, the
-// runtime TUs, and the package implementations. The manifest is NOT saved
-// here; compileAll saves it after every TU settles.
+// Builds the job list for the extra TU modules (spec 13), the entry TU and
+// the runtime TUs. The manifest is NOT saved here; compileAll saves it after
+// every TU settles.
 bool buildJobs(BuildState& st, const BuildRequest& request,
                const fs::path& cppPath, const fs::path& objPath,
                const std::string& entryKey, std::vector<ObjectJob>& jobs) {
@@ -683,62 +683,6 @@ bool buildJobs(BuildState& st, const BuildRequest& request,
         fs::create_directories(rtJob.obj.parent_path(), relEc);
         jobs.push_back(std::move(rtJob));
     }
-    // Packages: cached objects (if available) are linked directly and recorded
-    // in the manifest; source-only packages compile here.
-    if (request.packageImplementations != nullptr) {
-        for (const BuildRequest::PackageImplementation& impl :
-             *request.packageImplementations) {
-            const fs::path objKey = impl.object;
-            std::error_code ec;
-            if (impl.cached) {
-                if (!fs::is_regular_file(impl.object, ec)) {
-                    std::fprintf(stderr,
-                                 "cp3c: cached package artifact '%s' is missing; "
-                                 "reinstall the package\n",
-                                 impl.object.string().c_str());
-                    return false;
-                }
-                const std::string hash = fileStamp(impl.object);
-                CacheEntry* existing = findEntry(st.manifest, objKey.string());
-                if (existing == nullptr) {
-                    st.manifest.push_back(CacheEntry{st.profile,
-                                                     impl.sourceKey,
-                                                     hash,
-                                                     st.headerFingerprint,
-                                                     st.compilerKey,
-                                                     impl.object.string(),
-                                                     impl.object.string()});
-                } else {
-                    existing->profile = st.profile;
-                    existing->source = impl.sourceKey;
-                    existing->hash = hash;
-                    existing->header = st.headerFingerprint;
-                    existing->compiler = st.compilerKey;
-                    existing->cpp = impl.object.string();
-                }
-                st.objects.push_back(impl.object);
-                continue;
-            }
-            // A beta-one package was generated as an entry program, so its C++
-            // carries an `int main()`. The package is linked as a library;
-            // rename that symbol so it cannot collide with the consumer's main.
-            // The package initializer is not called (packages hold no top-level
-            // state in the beta-one surface).
-            const std::string stem = impl.source.stem().string();
-            const fs::path obj =
-                st.layout.cacheDir /
-                ("pkg_" + std::to_string(fnv1a64(impl.sourceKey)) + "_" + stem +
-                 ".o");
-            std::vector<std::string> flags{
-                "-Dmain=cp3_pkg_main_" + std::to_string(fnv1a64(impl.sourceKey))};
-            ObjectJob pkgJob;
-            pkgJob.sourceKey = impl.sourceKey;
-            pkgJob.cpp = impl.source;
-            pkgJob.obj = obj;
-            pkgJob.extraFlags = std::move(flags);
-            jobs.push_back(std::move(pkgJob));
-        }
-    }
     return true;
 }
 
@@ -756,9 +700,10 @@ bool compileAll(BuildState& st, const BuildRequest& request,
     return true;
 }
 
-// A cheap identity for a file we do not compile ourselves (a package's cached
-// object): size plus modification time. The link stamp carries it, so replacing
-// the artifact on a reinstall relinks the program even when no local TU changed.
+// A cheap identity for a file we do not compile ourselves (a vendored
+// archive): size plus modification time. The stamp carries it so replacing
+// the artifact on a reinstall relinks the program even when no local TU
+// changed.
 std::string fileStamp(const fs::path& path) {
     std::error_code ec;
     const auto size = fs::file_size(path, ec);
@@ -1349,19 +1294,6 @@ int buildWithToolchain(const BuildRequest& request) {
     // libraries and runtime DLLs join the build (detail/native_build.hpp).
     if (!applyRequestNativeBindings(request, layout, *nativeFlags)) {
         return kExitCompileError;
-    }
-
-    // Package implementations include their own generated headers by relative
-    // path (`#include "index.hpp"`, `#include "src/index.hpp"`). Add every
-    // directory that holds one before the header fingerprint is taken, so a
-    // package update retires the objects built against the old headers.
-    if (request.packageImplementations != nullptr) {
-        for (const BuildRequest::PackageImplementation& impl :
-             *request.packageImplementations) {
-            for (const fs::path& dir : impl.includeDirs) {
-                addUniqueIncludeDir(layout.includeDirs, dir);
-            }
-        }
     }
 
     selectRuntimeSources(opt, layout, programText);

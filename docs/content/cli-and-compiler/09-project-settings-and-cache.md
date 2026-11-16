@@ -30,11 +30,11 @@ A CP3 project is its `package.json` and its entry point. This page explains the 
 | Field | Meaning |
 | --- | --- |
 | `name`, `version`, `description`, `author` | Project metadata; `version` and `name` flow into publish/install output. |
-| `type` | `application` (default) or `package` — a package produces a `.cp3pak` on build, with `export default { ... }` as its mandatory library entry. |
+| `type` | `application` (default) or `package` — a package produces a `.cp3pak` on build, with `export default { ... }` as its mandatory library entry. See [Packages and .cp3pak](./12-packages.md). |
 | `main` | The entry file for bare commands (`cp3 run` with no argument). Overridable per command with an explicit path. |
 | `typeSystem` | Type-name vocabulary: `typescript`, `cpp`, or `rust` (e.g. `u16` vs `uint16_t` unprefixed scalars). It changes checking, never codegen — output is always C++. |
 | `strictNumericCasts` | Reject implicit cross-width numeric conversions that the default rules allow. |
-| `build` | `bundleNativeDlls` (applications: bundle native binding DLLs next to the executable) or `files` (packages: extra files to include in the `.cp3pak`). |
+| `build` | `bundleNativeDlls` (applications: bundle native binding DLLs next to the executable), `files` (packages: extra files to include in the `.cp3pak`), or `cacheBinary` (packages: no longer used — the `.cp3pak` format ships no binary cache; the build warns `build.cacheBinary is ignored` and ignores it). |
 | `scripts` | npm-style runnable entries; the CLI reads them directly (`cp3 start`) and comforts `pre<cmd>`/`post<cmd>` hooks for built-ins. |
 | `toolchain` | A pin written by `cp3 toolchain use ... --project`: `{ "id": "clang", "version": "18", "policy": "latest" }` or `"exact"`. |
 | `license`, other fields | Carried along; not used by the build. |
@@ -78,6 +78,7 @@ Practical notes:
 ## Related pages
 
 - [CLI commands](./01-cli-commands.md)
+- [Packages and .cp3pak](./12-packages.md)
 - [Native toolchains](./05-native-toolchains.md)
 - [Build profiles and PGO](./11-build-profiles-and-pgo.md)
 - [How a build flows](./02-compilation-pipeline.md)

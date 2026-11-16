@@ -259,10 +259,6 @@ bool needsJsonFile_ = false;   // JSON parseFile/stringifyToFile -> cp3/std/json
     // the classes declared in THIS unit's file instead of re-emitting every
     // imported class's struct into each unit.
     const SourceFile* unitSourceFile_ = nullptr;
-    // A package unit is a declaration surface: the implementation lives in the
-    // package's shipped `pak/` C++ and is linked separately. Body-less
-    // functions therefore stay declarations instead of becoming empty stubs.
-    bool packageSurfaceOnly_ = false;
     std::unordered_set<std::string> functions_;
     // Local names introduced by imports. A builtin rewrite must not fire when
     // one of these shadows the builtin (e.g. `import { sleep } from "./lib"`).

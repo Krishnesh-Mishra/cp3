@@ -13,6 +13,7 @@
     "08-tests-and-verification",
     "09-project-settings-and-cache",
     "10-generated-cpp-inspection",
-    "11-build-profiles-and-pgo"
+    "11-build-profiles-and-pgo",
+    "12-packages"
   ]
 }

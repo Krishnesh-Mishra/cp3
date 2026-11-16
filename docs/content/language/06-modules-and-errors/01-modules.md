@@ -134,7 +134,7 @@ The inline form is an `async`-free arrow whose single parameter carries the `Thr
 
 ## Module graphs
 
-A program is a graph of modules rooted at the entry point. The compiler analyzes the whole graph before generating the native program, so a type error in an imported module is reported against that module's source with its full import path shown. Cross-package imports resolve through the package registry and installed package artifacts, not through npm.
+A program is a graph of modules rooted at the entry point. The compiler analyzes the whole graph before generating the native program, so a type error in an imported module is reported against that module's source with its full import path shown. Cross-package imports resolve through installed packages (`.cp3/packages/`), not through npm.
 
 ## Related pages
 

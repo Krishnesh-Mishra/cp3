@@ -32,10 +32,24 @@
       "stderrNotContains": [
         "CP3601"
       ],
-      "fileNotContains": [
+      "filesExist": [
+        ".cp3/packages/pak_stub/cp3pak.json",
+        ".cp3/packages/pak_stub/package.json",
+        ".cp3/packages/pak_stub/src/index.cp3",
+        ".cp3/packages/pak_stub/src/widget.cp3"
+      ],
+      "filesAbsent": [
+        ".cp3/packages/pak_stub/index.cp3",
+        ".cp3/packages/pak_stub/pak"
+      ],
+      "fileContains": [
         {
-          "path": ".cp3/packages/pak_stub/index.cp3",
-          "contains": "from \"./"
+          "path": ".cp3/packages/pak_stub/cp3pak.json",
+          "contains": "\"formatVersion\": 2"
+        },
+        {
+          "path": ".cp3/packages/pak_stub/cp3pak.json",
+          "contains": "\"main\": \"src/index.cp3\""
         }
       ]
     }

@@ -1,0 +1,42 @@
+{
+  "comment": "v0.2.6 source-package pin (non-tty path only): a valid NEW-format pak is built in pkg/ and installed into app/ through the runner's standard invocation, which is non-interactive (the runner captures stdout/stderr and never allocates a tty; see tests/v0.2.5/package-test/runner.py). Pinned: install succeeds, the consumer builds and runs, and - the point of this fixture - the SOURCE .cp3pak FILE STILL EXISTS after the install (filesExist on ../pkg/.cp3/out/pak_promptkeep.cp3pak, resolved against the install step's cwd, the app/ folder). The interactive prompt (whether the installer asks to keep/delete the source pak) cannot be exercised in this harness, and its question text is deliberately NOT pinned: the fix has not landed, and a guessed substring would either false-fail a correct implementation or silently pin nothing. The interactive path is a documented manual verification for the maintainer (see README.md in this folder); this fixture pins the non-tty/default path only.",
+  "steps": [
+    {
+      "cwd": "pkg",
+      "args": [
+        "build",
+        "src/main.cp3"
+      ],
+      "expectExit": 0,
+      "stderrContains": [
+        "packed"
+      ]
+    },
+    {
+      "cwd": "app",
+      "args": [
+        "install",
+        "../pkg/.cp3/out/pak_promptkeep.cp3pak"
+      ],
+      "expectExit": 0,
+      "stderrContains": [
+        "installed"
+      ],
+      "filesExist": [
+        "../pkg/.cp3/out/pak_promptkeep.cp3pak"
+      ]
+    },
+    {
+      "cwd": "app",
+      "args": [
+        "run",
+        "src/index.cp3"
+      ],
+      "expectExit": 0,
+      "stdoutContains": [
+        "beacon",
+        "5"
+      ]
+    }
+  ]
+}

@@ -117,13 +117,13 @@ matches how the product resolves paths after a `cwd` override.
 Special fixture names generate deterministic data instead of copying a tree:
 
 - `empty`
-- `local-dep.cp3pak`
-- `local-dep-bad-version.cp3pak`
-- `local-dep-no-package-json.cp3pak`
+- `local-dep.cp3pak` (a hand-made source package, formatVersion 2)
+- `local-dep-bad-version.cp3pak` (formatVersion 99 - rejected with `unsupported .cp3pak formatVersion`)
+- `local-dep-no-package-json.cp3pak` (no package.json member - rejected)
 - `not-a-pak.cp3pak`
-- `local-dep-source.cp3pak` (carries the C++ source `cp3 recompile` compiles)
-- `local-dep-excluded-source.cp3pak` (excludes the source, ships no cache)
-- `local-dep-cached.cp3pak` (carries a cache for this machine's platform)
+- `local-dep-excluded-source.cp3pak` (declares `build.excludeSource`, ships no cache - install refuses it)
+- `local-dep-cached.cp3pak` (hand-made, carries a cache for this machine's platform - install extracts it; the binary is never linked)
+- `native-dep.cp3pak` (embeds a self-contained native binding)
 
 `.cp3pak` archives use USTAR tar and gzip with mtime zero so repeated runs
 produce identical bytes.
@@ -255,7 +255,7 @@ programs that log their argv and honor `FAKE_EDITOR_EXIT`.
 
 ## Groups and counts
 
-The suite currently discovers 355 cases:
+The suite currently discovers 353 cases:
 
 | Group | Cases |
 | --- | ---: |
@@ -271,7 +271,7 @@ The suite currently discovers 355 cases:
 | `native-import` | 8 |
 | `native-install` | 10 |
 | `package` | 17 |
-| `recompile` | 5 |
+| `recompile` | 3 |
 | `exec` | 6 |
 | `hooks` | 13 |
 | `shim` | 24 |

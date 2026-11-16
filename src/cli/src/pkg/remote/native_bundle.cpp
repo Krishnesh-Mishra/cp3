@@ -3,7 +3,7 @@
 //
 // OWNERSHIP: cli module (src/cli/**). Implements detail/pkg/native_bundle.hpp.
 //
-// The package's generated `index.cp3` names the native binding it imports. The
+// A package's `.cp3` sources name the native binding they import. The
 // release's platform bundle is downloaded from the same tag and extracted at
 // the project root, matching the layout the bundle documents:
 //

@@ -1,0 +1,8 @@
+import { tideCell } from "./used.cp3";
+
+export class ClosureProbe {
+    id: number = 11;
+    probe(): number {
+        return tideCell();
+    }
+}

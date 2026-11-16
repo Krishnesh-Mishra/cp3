@@ -58,13 +58,11 @@ struct CompilationUnit {
     bool isPrelude = false;
     PreludeKind preludeKind = PreludeKind::None;
 
-    // A unit loaded through `import ... from "<package>"`. The package's
-    // generated `index.cp3` is a declaration surface: its C++ implementation
-    // (the `pak/` sources shipped in the archive) is compiled and linked by the
-    // CLI instead of being re-emitted as empty stub bodies. `packageRoot` names
-    // the installed package directory so the build can find those sources.
+    // A unit loaded through `import ... from "<package>"`. Installed packages
+    // are ordinary source units, compiled from their authored sources like
+    // any other unit; this flag only records the unit's provenance for the
+    // incremental fragment cache's identity key.
     bool isPackage = false;
-    std::filesystem::path packageRoot;
 
     // Prelude files whose items were injected at the top of this unit, in
     // application order (same -> strong -> weak), as documented in §18.

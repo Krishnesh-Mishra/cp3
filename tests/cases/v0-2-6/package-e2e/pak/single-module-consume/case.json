@@ -1,0 +1,52 @@
+{
+  "comment": "v0.2.6 source-package pin: a single-file package (entry src/main.cp3, no relative imports) survives build -> install -> consume exactly as before. Guards the previously-working path against the format bump - if this goes red while the multi-module pin is green, the new format broke the degenerate case.",
+  "steps": [
+    {
+      "cwd": "pkg",
+      "args": [
+        "build",
+        "src/main.cp3"
+      ],
+      "expectExit": 0,
+      "stderrContains": [
+        "packed"
+      ]
+    },
+    {
+      "cwd": "app",
+      "args": [
+        "install",
+        "../pkg/.cp3/out/pak_solo.cp3pak"
+      ],
+      "expectExit": 0,
+      "stderrContains": [
+        "installed"
+      ]
+    },
+    {
+      "cwd": "app",
+      "args": [
+        "build",
+        "src/index.cp3"
+      ],
+      "expectExit": 0,
+      "stderrNotContains": [
+        "CP3601",
+        "CP3302",
+        "CP3304"
+      ]
+    },
+    {
+      "cwd": "app",
+      "args": [
+        "run",
+        "src/index.cp3"
+      ],
+      "expectExit": 0,
+      "stdoutContains": [
+        "hello",
+        "7"
+      ]
+    }
+  ]
+}

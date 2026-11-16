@@ -7,8 +7,8 @@
 // surface, resolved to the qualified C++ spellings the unit's namespace carries
 // (recursing through `export * from` / `export { x } from` chains; a cycle
 // yields the partial surface built so far, matching ES-module reality), and
-// every local import of every unit, resolved against the surface of the unit
-// it points to. `std`/package/native/cpp specifiers are not linked: they keep
+// every local or package import of every unit, resolved against the surface of
+// the unit it points to. `std`/native/cpp specifiers are not linked: they keep
 // their existing lowering (a lowered intrinsic, or a use-site error when no
 // lowering exists).
 //
@@ -472,7 +472,7 @@ void LinkBuilder::fillImports(CompilationUnit& unit,
         if (!stmt || stmt->kind != NodeKind::ImportDeclaration) continue;
         const auto& imp = static_cast<const ImportDeclaration&>(*stmt);
         CompilationUnit* target = localTarget(unit, imp.span);
-        if (target == nullptr) continue;  // std/package/native/cpp: unchanged
+        if (target == nullptr) continue;  // std/native/cpp (and unresolved): unchanged
         const UnitSurface& surface = surfaceOf(target->id);
         if (!imp.defaultBinding.empty()) {
             out[imp.defaultBinding] = surface.hasDefault

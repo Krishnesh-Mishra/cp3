@@ -41,8 +41,9 @@ std::string manifestToJson(const Cp3pakManifest& manifest) {
     out += "  \"name\": " + jsonQuote(manifest.name) + ",\n";
     out += "  \"version\": " + jsonQuote(manifest.version) + ",\n";
     out += "  \"main\": " + jsonQuote(manifest.main);
-    // The binary-cache fields are optional: an archive without a cache keeps
-    // the exact manifest shape it always had.
+    // The binary-cache fields are optional: a source package keeps the
+    // minimal manifest shape. Hand-made archives and `cp3 recompile` may
+    // still record them.
     if (!manifest.cachePlatforms.empty()) {
         out += ",\n  \"cachePlatforms\": [";
         for (std::size_t i = 0; i < manifest.cachePlatforms.size(); ++i) {
@@ -76,11 +77,10 @@ bool parseManifest(const std::string& text, Cp3pakManifest& manifest,
         return false;
     }
     manifest.formatVersion = static_cast<int>(version->number);
-    if (manifest.formatVersion <= 0 ||
-        manifest.formatVersion > kCp3pakFormatVersion) {
+    if (manifest.formatVersion != kCp3pakFormatVersion) {
         err = "unsupported .cp3pak formatVersion " +
-              std::to_string(manifest.formatVersion) + " (this cp3c reads up to " +
-              std::to_string(kCp3pakFormatVersion) + ")";
+              std::to_string(manifest.formatVersion) +
+              " (rebuild the package with a newer cp3c)";
         return false;
     }
     if (const std::string* name = doc.stringField("name")) {
@@ -123,10 +123,12 @@ bool writeCp3pak(const std::filesystem::path& outPath,
 }
 
 bool readCp3pak(const std::filesystem::path& path, Cp3pakManifest& manifest,
-                std::vector<TarEntry>& entries, std::string& err) {
+                std::vector<TarEntry>& entries, std::string& err,
+                std::string* rawManifest) {
     err.clear();
     manifest = Cp3pakManifest{};
     entries.clear();
+    if (rawManifest != nullptr) rawManifest->clear();
 
     std::string bytes;
     if (!readTextFile(path, bytes)) {
@@ -149,6 +151,7 @@ bool readCp3pak(const std::filesystem::path& path, Cp3pakManifest& manifest,
     for (TarEntry& member : all) {
         if (member.name == kManifestName) {
             sawManifest = true;
+            if (rawManifest != nullptr) *rawManifest = member.data;
             if (!parseManifest(member.data, manifest, err)) return false;
             continue;
         }

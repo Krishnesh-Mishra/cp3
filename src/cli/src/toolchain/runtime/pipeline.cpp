@@ -747,11 +747,11 @@ std::filesystem::path packageRootFor(const std::string& specifier,
     return projectRoot / ".cp3" / "packages" / std::filesystem::path(specifier);
 }
 
-// Resolves a package's declared `main`. Archives built before v0.2 can carry
-// `"main": "src/index.cp3"` while the archive root has `index.cp3`; accept both
-// layouts so an old artifact stays usable after the compiler fix. The returned
-// `moduleName` is still the declared module path (`src/index`), because that is
-// the namespace its shipped C++ implementation was generated under.
+// Resolves a package's declared `main`. A source package carries its authored
+// entry at the path the author wrote (never a generated synonym); the loaded
+// unit is treated exactly like an ordinary source unit, so there is no
+// separate namespace to honor. The filename fallback covers a package whose
+// archive root really does hold `<name>.cp3` while `main` names a subfolder.
 std::optional<PackageEntry> packageEntry(
     const std::filesystem::path& root) {
     std::error_code ec;
@@ -759,7 +759,6 @@ std::optional<PackageEntry> packageEntry(
         PackageEntry info;
         info.path = root;
         info.root = root.parent_path();
-        info.moduleName = root.stem().string();
         return info;
     }
     if (!std::filesystem::is_directory(root, ec)) return std::nullopt;
@@ -769,30 +768,19 @@ std::optional<PackageEntry> packageEntry(
     std::string err;
     std::string main;
     const bool hasManifest = loadPackageJson(root, manifest, err);
-    if (hasManifest) {
-        main = packageMain(manifest);
-        candidates.push_back(root / std::filesystem::path(main));
-        const std::filesystem::path mainPath(main);
-        if (!mainPath.filename().empty()) {
-            candidates.push_back(root / mainPath.filename());
-        }
+    if (!hasManifest) return std::nullopt;
+    main = packageMain(manifest);
+    candidates.push_back(root / std::filesystem::path(main));
+    const std::filesystem::path mainPath(main);
+    if (!mainPath.filename().empty()) {
+        candidates.push_back(root / mainPath.filename());
     }
-    candidates.push_back(root / "index.cp3");
-    candidates.push_back(root / "src" / "index.cp3");
 
     for (const std::filesystem::path& candidate : candidates) {
         if (!std::filesystem::is_regular_file(candidate, ec)) continue;
-        std::filesystem::path modulePath =
-            main.empty() ? std::filesystem::relative(candidate, root, ec)
-                         : std::filesystem::path(main);
-        if (main.empty() && ec) modulePath = candidate.filename();
-        modulePath.replace_extension();
-        std::string moduleName = modulePath.generic_string();
-        if (moduleName.empty()) moduleName = candidate.stem().string();
         PackageEntry info;
         info.path = candidate;
         info.root = root;
-        info.moduleName = std::move(moduleName);
         return info;
     }
     return std::nullopt;
