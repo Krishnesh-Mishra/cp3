@@ -390,6 +390,7 @@ void ModelRegistry::reset() {
     litCounter_ = 0;
     localClassCounter_ = 0;
     typeIdCounter_ = 1;
+    selfInterface_.clear();
 }
 
 void ModelRegistry::registerBuiltinErrorClasses() {

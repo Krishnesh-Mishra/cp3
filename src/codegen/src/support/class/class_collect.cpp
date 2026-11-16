@@ -96,57 +96,78 @@ void Generator::registerInterface(const InterfaceDeclaration& i) {
                                                  std::move(generic));
         return;
     }
-    std::vector<ObjectFieldModel> fields;
-    bool hasIndex = false;
-    Type indexType;
-    for (const auto& mp : i.members) {
-        if (!mp) continue;
-        ObjectFieldModel f;
-        if (mp->kind == NodeKind::IndexSignature) {
-            // `[name: string]: T` (v0.2.4): the value type rides on the
-            // model so a typed EventEmitter's dynamic event name can
-            // resolve its payload type through the Events map.
-            const auto& is = static_cast<const IndexSignature&>(*mp);
-            indexType = is.valueType ? modelTypeFromTypeNode(*is.valueType)
-                                     : Type::unknown();
-            hasIndex = true;
-            continue;
-        }
-        if (mp->kind == NodeKind::PropertySignature) {
-            const auto& ps = static_cast<const PropertySignature&>(*mp);
-            f.name = keyNameOf(ps.key.get());
-            f.optional = ps.optional;
-            if (ps.type) f.type = modelTypeFromTypeNode(*ps.type);
-        } else if (mp->kind == NodeKind::MethodSignature) {
-            const auto& ms = static_cast<const MethodSignature&>(*mp);
-            f.name = keyNameOf(ms.key.get());
-            f.optional = ms.optional;
-            std::vector<Type> params;
-            for (const auto& p : ms.params) {
-                if (!p) continue;
-                params.push_back(p->type ? modelTypeFromTypeNode(*p->type)
-                                         : Type::unknown());
+    ModelRegistry& reg = ModelRegistry::get();
+    // A member annotation that names the interface itself resolves to sema's
+    // `unknown` placeholder (src/sema/src/support/declarations.cpp) while the
+    // members resolve. Resolving it the same way here keeps the shape label
+    // identical to sema's. A second pass, run after the interface is
+    // registered, spells the self-reference as the interface's own object
+    // type: the stored members must classify for the wrapper and the
+    // literal struct, and the label keeps its finite, sema-matching spelling.
+    auto collectFields = [&i]() {
+        struct Collected {
+            std::vector<ObjectFieldModel> fields;
+            bool hasIndex = false;
+            Type indexType;
+        } out;
+        for (const auto& mp : i.members) {
+            if (!mp) continue;
+            ObjectFieldModel f;
+            if (mp->kind == NodeKind::IndexSignature) {
+                // `[name: string]: T` (v0.2.4): the value type rides on the
+                // model so a typed EventEmitter's dynamic event name can
+                // resolve its payload type through the Events map.
+                const auto& is = static_cast<const IndexSignature&>(*mp);
+                out.indexType = is.valueType ? modelTypeFromTypeNode(*is.valueType)
+                                             : Type::unknown();
+                out.hasIndex = true;
+                continue;
             }
-            const Type ret = ms.returnType
-                                 ? modelTypeFromTypeNode(*ms.returnType)
-                                 : Type::unknown();
-            f.type = Type::function(std::move(params), ret);
-            f.isFunction = true;
-            f.isMethod = true;
-        } else {
-            continue;
+            if (mp->kind == NodeKind::PropertySignature) {
+                const auto& ps = static_cast<const PropertySignature&>(*mp);
+                f.name = keyNameOf(ps.key.get());
+                f.optional = ps.optional;
+                if (ps.type) f.type = modelTypeFromTypeNode(*ps.type);
+            } else if (mp->kind == NodeKind::MethodSignature) {
+                const auto& ms = static_cast<const MethodSignature&>(*mp);
+                f.name = keyNameOf(ms.key.get());
+                f.optional = ms.optional;
+                std::vector<Type> params;
+                for (const auto& p : ms.params) {
+                    if (!p) continue;
+                    params.push_back(p->type ? modelTypeFromTypeNode(*p->type)
+                                             : Type::unknown());
+                }
+                const Type ret = ms.returnType
+                                     ? modelTypeFromTypeNode(*ms.returnType)
+                                     : Type::unknown();
+                f.type = Type::function(std::move(params), ret);
+                f.isFunction = true;
+                f.isMethod = true;
+            } else {
+                continue;
+            }
+            if (!f.name.empty()) out.fields.push_back(std::move(f));
         }
-        if (!f.name.empty()) fields.push_back(std::move(f));
-    }
+        return out;
+    };
+    reg.setSelfInterface(i.name);
+    auto first = collectFields();
+    reg.setSelfInterface("");
     // Sema's shape label carries the index signature entry; the registry
     // must key the model under the same label or lookups from the typed
     // EventEmitter<Events> path miss it.
     const std::string label =
-        objectLabelOf(fields, hasIndex ? &indexType : nullptr);
-    ObjectModel& om = ModelRegistry::get().addInterface(i.name, label, fields);
-    if (hasIndex) {
+        objectLabelOf(first.fields,
+                      first.hasIndex ? &first.indexType : nullptr);
+    ObjectModel& om =
+        reg.addInterface(i.name, label, std::move(first.fields));
+    auto second = collectFields();
+    // The label is registered already; only the stored member types change.
+    om.fields = std::move(second.fields);
+    if (second.hasIndex) {
         om.hasIndex = true;
-        om.indexType = std::move(indexType);
+        om.indexType = std::move(second.indexType);
     }
 }
 void Generator::collectBodyModels(const Stmt& s) { walkStmtModels(s, sema_, false); }

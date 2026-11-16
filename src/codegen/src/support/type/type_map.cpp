@@ -219,6 +219,14 @@ std::optional<Type> typeFromTypeNode(const TypeNode& tn, TypeSystem typeSystem) 
             if (std::optional<Type> generic = instantiateGenericInterface(nt)) {
                 return generic;
             }
+            // An interface that names itself in a member annotation resolves to
+            // sema's `unknown` placeholder (src/sema/src/support/declarations.cpp);
+            // the registration pass resolves it the same way so the shape label
+            // matches sema's byte-for-byte.
+            if (const std::string& self = ModelRegistry::get().selfInterface();
+                !self.empty() && nt.name == self) {
+                return Type::unknown();
+            }
             // An interface name resolves to its structural object type
             // (spec 15); only names registered by the model pass qualify.
             if (const ObjectModel* om =

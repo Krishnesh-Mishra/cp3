@@ -197,6 +197,14 @@ public:
     // The object models in registration order (stable struct-emission order).
     std::vector<const ObjectModel*> objects() const;
 
+    // The name of the interface currently being registered ("" when none).
+    // A member annotation that names the interface itself resolves through
+    // sema's `unknown` placeholder (src/sema/src/support/declarations.cpp),
+    // so the registration pass resolves it the same way to keep the shape
+    // label identical to sema's.
+    void setSelfInterface(const std::string& name) { selfInterface_ = name; }
+    const std::string& selfInterface() const { return selfInterface_; }
+
     // Is the object model `label` fully lowerable? Computes and caches on
     // demand; a shape that is currently being computed (a self-reference) is
     // optimistically treated as usable.
@@ -217,6 +225,7 @@ private:
     int litCounter_ = 0;
     int ifaceCounter_ = 0;
     std::uint32_t typeIdCounter_ = 1;
+    std::string selfInterface_;
 
     int localClassCounter_ = 0;
 };
