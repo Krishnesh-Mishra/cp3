@@ -258,8 +258,24 @@ std::string Generator::emitPromiseRecordMember(const MemberExpr& m) {
         return std::string();
     }
     if (m.property == "promise") return "(" + recv + ").promise";
-    if (m.property == "resolve") return "(" + recv + ").resolve";
-    if (m.property == "reject") return "(" + recv + ").reject";
+    // The runtime record's resolver members are std::function<void(...)>
+    // (the std ABI); the language-facing signature is `(...) => undefined`,
+    // whose `classify` spelling is std::function<cp3::runtime::Undefined(...)>.
+    // Wrap the read so the value converts into that spelling (a plain
+    // std::function<void(...)> is not assignable to the Undefined one).
+    if (m.property == "resolve" || m.property == "reject") {
+        const bool noArgs =
+            m.property == "resolve" && !objectType.parts.empty() &&
+            objectType.parts.front().isVoid();
+        if (noArgs) {
+            return "[cp3_r = (" + recv + ").resolve]() -> "
+                   "::cp3::runtime::Undefined { cp3_r(); "
+                   "return cp3::runtime::undefined; }";
+        }
+        return "[cp3_r = (" + recv + ")." + m.property + "](auto cp3_v) -> "
+               "::cp3::runtime::Undefined { cp3_r(std::move(cp3_v)); "
+               "return cp3::runtime::undefined; }";
+    }
     return std::string();
 }
 

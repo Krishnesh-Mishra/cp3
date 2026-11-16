@@ -175,12 +175,19 @@ Type Analyzer::promiseWithResolversRecordType(const Type& value) {
     const bool isVoid = value.isVoid();
     std::vector<Type> resolveParams;
     if (!isVoid) resolveParams.push_back(value);
+    // The documented surface (docs/.../promise.md) types both resolvers
+    // `(...) => undefined`; spelling the field `undefined`-returning keeps
+    // the destructured binding's C++ shape identical to a source-annotated
+    // `(value: T) => undefined` function, so the two classify to one
+    // std::function spelling. The runtime record keeps its
+    // std::function<void(...)> members; codegen bridges the ABI at the
+    // accessor (it is the one boundary that crosses between the two).
     std::vector<Field> fields{
         Field{"promise", promiseClass, false},
         Field{"resolve",
-              Type::function(std::move(resolveParams), Type::voidType()),
+              Type::function(std::move(resolveParams), Type::undefined()),
               false},
-        Field{"reject", Type::function({error}, Type::voidType()), false},
+        Field{"reject", Type::function({error}, Type::undefined()), false},
     };
     Type st = makeObjectType(std::move(fields), false, false, {});
     const auto label = shapes_.find(st.name);

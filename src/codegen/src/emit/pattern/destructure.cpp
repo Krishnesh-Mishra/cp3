@@ -374,6 +374,25 @@ void PatternEmitter::walkObjectPattern(const ObjectPattern& op, const Site& site
         if (cm != nullptr || plainShape) {
             return "((" + site.access + ")->" + mapIdent(name) + ")";
         }
+        if (base.kind == TypeKind::Object && base.name == "$withResolvers" &&
+            (name == "resolve" || name == "reject")) {
+            // The runtime record's resolver members are
+            // std::function<void(...)>; the language-facing signature is
+            // `(...) => undefined`, whose `classify` spelling is
+            // std::function<cp3::runtime::Undefined(...)>. Wrap the accessor
+            // so the destructured binding converts into that spelling.
+            const bool noArgs =
+                name == "resolve" && !base.parts.empty() &&
+                base.parts.front().isVoid();
+            if (noArgs) {
+                return "[cp3_r = ((" + site.access + ").resolve)]() -> "
+                       "::cp3::runtime::Undefined { cp3_r(); "
+                       "return cp3::runtime::undefined; }";
+            }
+            return "[cp3_r = ((" + site.access + ")." + name + ")](auto cp3_v) -> "
+                   "::cp3::runtime::Undefined { cp3_r(std::move(cp3_v)); "
+                   "return cp3::runtime::undefined; }";
+        }
         return "((" + site.access + ")." + mapIdent(name) + ")";
     };
     for (const auto& prop : op.properties) {
