@@ -245,6 +245,11 @@ void Analyzer::registerImportedObjectShape(const std::string& label) {
 
 void Analyzer::preRegisterImportTypes() {
     if (imports_ == nullptr) return;
+    // Two passes over the import table. First register every imported type's
+    // placeholder before any body is re-registered, so an imported declaration
+    // may name a sibling from the same module regardless of the (unordered)
+    // iteration order of `imports_` - the same trick the per-declaration
+    // placeholders above apply to self references, applied to the whole set.
     for (const auto& [name, binding] : *imports_) {
         if (name.empty()) continue;
         // An imported plain record (`$o{...}`) is usable in this TU exactly like
@@ -261,30 +266,44 @@ void Analyzer::preRegisterImportTypes() {
                            binding.type.isUnknown()
                                ? Type::named(TypeKind::Class, name)
                                : binding.type);
-        if (binding.classDecl != nullptr) {
-            const std::uint32_t key = binding.classDecl->nodeId;
+    }
+    // Second pass: re-register the declaration bodies against the complete
+    // placeholder set (classes, then interfaces, then aliases, so the entries
+    // most annotations refer to are real types by the time the rest resolve).
+    const auto reRegister = [this](const ImportedBinding& binding) {
+        if (const auto* cls = binding.classDecl) {
+            const std::uint32_t key = cls->nodeId;
             // The TU of the dep already registered this class under the same
             // nodeId - don't re-walk the AST into a second registration.
             if (!classResolved_.count(key)) {
                 classResolved_.insert(key);
-                resolveClass(*const_cast<ClassDeclaration*>(binding.classDecl),
+                resolveClass(*const_cast<ClassDeclaration*>(cls),
                              /*publishBinding=*/false);
             }
-        }
-        if (binding.isType) {
-            // A re-exported interface / alias is usable in the consumer TU
-            // under its own name; resolve it here so annotation positions
-            // see a real type instead of `unknown`.
-            if (binding.interfaceDecl != nullptr) {
-                registerInterface(
-                    *const_cast<InterfaceDeclaration*>(binding.interfaceDecl));
-            } else if (binding.aliasDecl != nullptr) {
-                if (declaredTypes_.insert(binding.aliasDecl->nodeId).second) {
-                    declareTypeAlias(*const_cast<TypeAliasDeclaration*>(
-                        binding.aliasDecl));
-                }
+        } else if (const auto* iface = binding.interfaceDecl) {
+            registerInterface(
+                *const_cast<InterfaceDeclaration*>(iface));
+        } else if (const auto* alias = binding.aliasDecl) {
+            if (declaredTypes_.insert(alias->nodeId).second) {
+                declareTypeAlias(*const_cast<TypeAliasDeclaration*>(
+                    alias));
             }
         }
+    };
+    for (const auto& [name, binding] : *imports_) {
+        if (name.empty() || !binding.isType) continue;
+        if (binding.classDecl == nullptr) continue;
+        reRegister(binding);
+    }
+    for (const auto& [name, binding] : *imports_) {
+        if (name.empty() || !binding.isType) continue;
+        if (binding.interfaceDecl == nullptr) continue;
+        reRegister(binding);
+    }
+    for (const auto& [name, binding] : *imports_) {
+        if (name.empty() || !binding.isType) continue;
+        if (binding.aliasDecl == nullptr) continue;
+        reRegister(binding);
     }
 }
 
@@ -539,6 +558,46 @@ void Analyzer::declareBuiltins() {
             typeNames_.emplace(cls.name,
                                Type::named(TypeKind::Class, cls.name));
         }
+    }
+}
+
+// =============================================================================
+// Placeholder pre-pass
+// =============================================================================
+// `checkStmts` hoists the block's type declarations in source order, and the
+// alias/interface resolution passes resolve the bodies they are given eagerly.
+// That makes the *declaration* order decide whether `type Alias = PlainNode`
+// (PlainNode declared later in the same block) resolves. Register every
+// type name first — an opaque placeholder for aliases/interfaces (the same
+// trick `declareTypeAlias`/`registerInterface` apply to their own names for
+// self references) and a nominal Class type for classes — so resolution no
+// longer depends on the order.
+void Analyzer::placeholderTypeDecl(Stmt& s) {
+    if (s.kind == NodeKind::ExportDeclaration) {
+        auto& e = static_cast<ExportDeclaration&>(s);
+        if (e.declaration) placeholderTypeDecl(*e.declaration);
+        return;
+    }
+    switch (s.kind) {
+        case NodeKind::ClassDeclaration: {
+            auto& c = static_cast<ClassDeclaration&>(s);
+            if (!c.name.empty()) {
+                typeNames_.emplace(c.name, Type::named(TypeKind::Class, c.name));
+            }
+            return;
+        }
+        case NodeKind::InterfaceDeclaration: {
+            auto& i = static_cast<InterfaceDeclaration&>(s);
+            if (!i.name.empty()) typeNames_.emplace(i.name, Type::unknown());
+            return;
+        }
+        case NodeKind::TypeAliasDeclaration: {
+            auto& t = static_cast<TypeAliasDeclaration&>(s);
+            if (!t.name.empty()) typeNames_.emplace(t.name, Type::unknown());
+            return;
+        }
+        default:
+            return;
     }
 }
 

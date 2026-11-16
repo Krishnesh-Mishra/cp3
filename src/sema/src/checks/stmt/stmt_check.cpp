@@ -24,7 +24,12 @@ namespace cp3 {
 // =============================================================================
 void Analyzer::checkStmts(StmtList& body) {
     // Type declarations are hoisted first so that function signatures and
-    // other annotations can refer to types declared later in the block.
+    // other annotations can refer to types declared later in the block. The
+    // placeholder pass runs ahead of that: bodies resolve in source order,
+    // so every sibling's *name* must be registered before the first body.
+    for (auto& s : body) {
+        if (s) placeholderTypeDecl(*s);
+    }
     for (auto& s : body) {
         if (s) hoistType(*s);
     }

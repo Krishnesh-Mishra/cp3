@@ -292,6 +292,210 @@ bool constantTypeDeclaration(const Stmt& stmt, const std::string& name) {
     return isTypeOnlyDeclaration(stmt) && declarationName(stmt) == name;
 }
 
+// =============================================================================
+// Same-module linking
+// =============================================================================
+// An imported declaration's annotations can name other top-level declarations
+// of the module that defines it (`type LaterAlias = Later`, `class Client {
+// connect(o: Opts) }`). Those names are not this unit's imports, but the
+// defining module resolved them when it was analyzed, and the consumer TU
+// re-resolves the imported declaration bodies against its own type table - so
+// the siblings must be re-registered there too. Linking below computes the
+// transitive closure from the already-imported declarations to the defining
+// module's own exported declarations, so the re-registration can find them.
+// Linked entries only ever feed the type table and the class/interface/alias
+// registries; they never declare a binding in this unit's value scope.
+
+void collectFreeTypeNames(const TypeNode* t,
+                          const std::unordered_set<std::string>& bound,
+                          std::unordered_set<std::string>& out);
+void collectFreeTypeParamNames(const TypeParamList& tps,
+                               const std::unordered_set<std::string>& bound,
+                               std::unordered_set<std::string>& out);
+
+void collectFreeSignatureNames(const SignatureMember& m,
+                               const std::unordered_set<std::string>& bound,
+                               std::unordered_set<std::string>& out) {
+    switch (m.kind) {
+        case NodeKind::PropertySignature:
+            collectFreeTypeNames(static_cast<const PropertySignature&>(m).type.get(),
+                                 bound, out);
+            return;
+        case NodeKind::MethodSignature: {
+            const auto& ms = static_cast<const MethodSignature&>(m);
+            auto fnBound = bound;
+            for (const auto& tp : ms.typeParams)
+                if (tp) fnBound.insert(tp->name);
+            collectFreeTypeParamNames(ms.typeParams, fnBound, out);
+            for (const ParameterPtr& p : ms.params)
+                if (p && p->type) collectFreeTypeNames(p->type.get(), fnBound, out);
+            collectFreeTypeNames(ms.returnType.get(), fnBound, out);
+            return;
+        }
+        case NodeKind::IndexSignature: {
+            const auto& is = static_cast<const IndexSignature&>(m);
+            collectFreeTypeNames(is.keyType.get(), bound, out);
+            collectFreeTypeNames(is.valueType.get(), bound, out);
+            return;
+        }
+        default:
+            return;
+    }
+}
+
+void collectFreeTypeParamNames(const TypeParamList& tps,
+                               const std::unordered_set<std::string>& bound,
+                               std::unordered_set<std::string>& out) {
+    for (const TypeParameterPtr& tp : tps) {
+        if (!tp) continue;
+        collectFreeTypeNames(tp->constraint.get(), bound, out);
+        collectFreeTypeNames(tp->defaultType.get(), bound, out);
+    }
+}
+
+void collectFreeTypeNames(const TypeNode* t,
+                          const std::unordered_set<std::string>& bound,
+                          std::unordered_set<std::string>& out) {
+    if (t == nullptr) return;
+    switch (t->kind) {
+        case NodeKind::NamedType: {
+            const auto& nt = static_cast<const NamedType&>(*t);
+            if (!nt.name.empty() && bound.find(nt.name) == bound.end()) out.insert(nt.name);
+            for (const TypePtr& a : nt.typeArgs) collectFreeTypeNames(a.get(), bound, out);
+            return;
+        }
+        case NodeKind::UnionType:
+            for (const TypePtr& m : static_cast<const UnionType&>(*t).types)
+                collectFreeTypeNames(m.get(), bound, out);
+            return;
+        case NodeKind::ArrayType:
+            collectFreeTypeNames(static_cast<const ArrayType&>(*t).element.get(), bound, out);
+            return;
+        case NodeKind::TupleType:
+            for (const TypePtr& e : static_cast<const TupleType&>(*t).elements)
+                collectFreeTypeNames(e.get(), bound, out);
+            return;
+        case NodeKind::FunctionType: {
+            const auto& ft = static_cast<const FunctionType&>(*t);
+            auto fnBound = bound;
+            for (const auto& tp : ft.typeParams)
+                if (tp) fnBound.insert(tp->name);
+            collectFreeTypeParamNames(ft.typeParams, fnBound, out);
+            for (const ParameterPtr& p : ft.params)
+                if (p && p->type) collectFreeTypeNames(p->type.get(), fnBound, out);
+            collectFreeTypeNames(ft.returnType.get(), fnBound, out);
+            return;
+        }
+        case NodeKind::ObjectType:
+            for (const SignatureMemberPtr& m : static_cast<const ObjectType&>(*t).members)
+                if (m) collectFreeSignatureNames(*m, bound, out);
+            return;
+        case NodeKind::ParenthesizedType:
+            collectFreeTypeNames(static_cast<const ParenthesizedType&>(*t).inner.get(),
+                                 bound, out);
+            return;
+        default:
+            // LiteralType and PrefixedType carry no names.
+            return;
+    }
+}
+
+std::unordered_set<std::string> ownTypeParamNames(const TypeParamList& tps) {
+    std::unordered_set<std::string> out;
+    for (const TypeParameterPtr& tp : tps)
+        if (tp) out.insert(tp->name);
+    return out;
+}
+
+// The names of other top-level declarations one declaration's annotations
+// reference (a best-effort syntactic scan of the annotation grammar; names
+// bound by the declaration's own type parameters are excluded).
+std::unordered_set<std::string> freeTypeNamesOf(const Stmt& decl) {
+    std::unordered_set<std::string> out;
+    switch (decl.kind) {
+        case NodeKind::ClassDeclaration: {
+            const auto& c = static_cast<const ClassDeclaration&>(decl);
+            const auto bound = ownTypeParamNames(c.typeParams);
+            collectFreeTypeParamNames(c.typeParams, bound, out);
+            collectFreeTypeNames(c.extendsType.get(), bound, out);
+            for (const TypePtr& t : c.implementsTypes) collectFreeTypeNames(t.get(), bound, out);
+            for (const ClassMemberPtr& mp : c.members) {
+                if (!mp) continue;
+                if (mp->kind == NodeKind::PropertyDeclaration) {
+                    const auto& p = static_cast<const PropertyDeclaration&>(*mp);
+                    collectFreeTypeNames(p.type.get(), bound, out);
+                } else if (mp->kind == NodeKind::MethodDeclaration) {
+                    const auto& md = static_cast<const MethodDeclaration&>(*mp);
+                    auto fnBound = bound;
+                    for (const auto& tp : md.typeParams)
+                        if (tp) fnBound.insert(tp->name);
+                    collectFreeTypeParamNames(md.typeParams, fnBound, out);
+                    for (const ParameterPtr& p : md.params)
+                        if (p && p->type) collectFreeTypeNames(p->type.get(), fnBound, out);
+                    collectFreeTypeNames(md.returnType.get(), fnBound, out);
+                } else if (mp->kind == NodeKind::AccessorDeclaration) {
+                    const auto& a = static_cast<const AccessorDeclaration&>(*mp);
+                    for (const ParameterPtr& p : a.params)
+                        if (p && p->type) collectFreeTypeNames(p->type.get(), bound, out);
+                    collectFreeTypeNames(a.returnType.get(), bound, out);
+                } else if (mp->kind == NodeKind::ConstructorDeclaration) {
+                    const auto& cd = static_cast<const ConstructorDeclaration&>(*mp);
+                    for (const ParameterPtr& p : cd.params)
+                        if (p && p->type) collectFreeTypeNames(p->type.get(), bound, out);
+                }
+            }
+            return out;
+        }
+        case NodeKind::InterfaceDeclaration: {
+            const auto& i = static_cast<const InterfaceDeclaration&>(decl);
+            const auto bound = ownTypeParamNames(i.typeParams);
+            collectFreeTypeParamNames(i.typeParams, bound, out);
+            for (const TypePtr& e : i.extendsTypes) collectFreeTypeNames(e.get(), bound, out);
+            for (const SignatureMemberPtr& m : i.members)
+                if (m) collectFreeSignatureNames(*m, bound, out);
+            return out;
+        }
+        case NodeKind::TypeAliasDeclaration: {
+            const auto& t = static_cast<const TypeAliasDeclaration&>(decl);
+            const auto bound = ownTypeParamNames(t.typeParams);
+            collectFreeTypeParamNames(t.typeParams, bound, out);
+            collectFreeTypeNames(t.type.get(), bound, out);
+            return out;
+        }
+        default:
+            return out;
+    }
+}
+
+// The declaration one import binding carries, if any.
+const Stmt* declarationStmt(const ImportedBinding& binding) {
+    if (binding.classDecl != nullptr)
+        return static_cast<const Stmt*>(binding.classDecl);
+    if (binding.interfaceDecl != nullptr)
+        return static_cast<const Stmt*>(binding.interfaceDecl);
+    if (binding.aliasDecl != nullptr)
+        return static_cast<const Stmt*>(binding.aliasDecl);
+    return nullptr;
+}
+
+// Finds `name` in one module's exported surface: the named export, or a
+// default export whose declaration is that declaration.
+std::optional<ImportedBinding> linkedBinding(const ExportSurface& surface,
+                                             const std::string& name) {
+    if (const auto found = surface.named.find(name);
+        found != surface.named.end()) {
+        return found->second;
+    }
+    if (surface.hasDefault) {
+        const ImportedBinding& d = surface.defaultExport;
+        if (const Stmt* decl = declarationStmt(d);
+            decl != nullptr && declarationName(*decl) == name) {
+            return d;
+        }
+    }
+    return std::nullopt;
+}
+
 const SemaResult* semaForUnit(
     const CompilationUnit& unit, const SemaResult& entrySema,
     const std::unordered_map<std::uint32_t, SemaResult>& unitSemas) {
@@ -328,11 +532,51 @@ public:
         return surface;
     }
 
+    // Links the same-module declarations an imported binding's annotations
+    // transitively reference into `out` (type positions only) - see the
+    // "Same-module linking" block above. `homes` maps each binding to the
+    // exported surface of the module it came from.
+    void linkSameModuleTypes(ImportedBindings& out,
+                             std::unordered_map<std::string,
+                                                const ExportSurface*>& homes) {
+        struct Item {
+            const Stmt* decl;
+            const ExportSurface* surface;
+        };
+        std::vector<Item> work;
+        std::unordered_set<std::uint32_t> seenDecls;
+        for (const auto& [name, binding] : out) {
+            const Stmt* decl = declarationStmt(binding);
+            const auto home = homes.find(name);
+            if (decl != nullptr && home != homes.end() &&
+                seenDecls.insert(decl->nodeId).second) {
+                work.push_back({decl, home->second});
+            }
+        }
+        while (!work.empty()) {
+            const Item item = work.back();
+            work.pop_back();
+            const ExportSurface* surface = item.surface;
+            for (const std::string& name : freeTypeNamesOf(*item.decl)) {
+                if (out.find(name) != out.end()) continue;
+                std::optional<ImportedBinding> linked = linkedBinding(*surface, name);
+                if (!linked || !linked->isType) continue;
+                out.emplace(name, *linked);
+                homes[name] = surface;
+                if (const Stmt* linkedDecl = declarationStmt(*linked);
+                    linkedDecl != nullptr && seenDecls.insert(linkedDecl->nodeId).second) {
+                    work.push_back({linkedDecl, surface});
+                }
+            }
+        }
+    }
+
     // Builds the import table sema needs for one unit: local binding name ->
     // the exported declaration's type/signature.
     ImportedBindings importsFor(CompilationUnit& unit) {
         ImportedBindings out;
         if (!unit.ast) return out;
+        std::unordered_map<std::string, const ExportSurface*> homes;
         for (const StmtPtr& stmt : unit.ast->body) {
             if (!stmt || stmt->kind != NodeKind::ImportDeclaration) continue;
             const auto& imp = static_cast<const ImportDeclaration&>(*stmt);
@@ -348,6 +592,7 @@ public:
             const ExportSurface& targetSurface = surfaceOf(*target);
             if (!imp.defaultBinding.empty() && targetSurface.hasDefault) {
                 out[imp.defaultBinding] = targetSurface.defaultExport;
+                homes[imp.defaultBinding] = &targetSurface;
             }
             for (const ImportSpecifierPtr& spec : imp.specifiers) {
                 if (!spec) continue;
@@ -356,8 +601,10 @@ public:
                 const std::string local =
                     spec->local.empty() ? spec->imported : spec->local;
                 out[local] = found->second;
+                homes[local] = &targetSurface;
             }
         }
+        linkSameModuleTypes(out, homes);
         return out;
     }
 

@@ -163,6 +163,10 @@ private:
                          const SourceSpan& span);
     void declareBuiltins();
     void hoistType(Stmt& s);
+    // Registers the *name* of every type declaration in the block before any
+    // body resolves, so an annotation may name a sibling declared later in
+    // the same block regardless of hoist order.
+    void placeholderTypeDecl(Stmt& s);
     void hoistFunction(FunctionDeclaration& fn);
     void hoistVars(StmtList& body);
     void hoistVarsIn(Stmt& s);
