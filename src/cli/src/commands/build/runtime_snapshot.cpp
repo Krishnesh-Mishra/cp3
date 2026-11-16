@@ -21,7 +21,10 @@
 // =============================================================================
 #include "detail/core/runtime_snapshot.hpp"
 
+#include <cstdint>
 #include <cstdio>
+#include <cstring>
+#include <fstream>
 #include <string>
 #include <system_error>
 
@@ -30,6 +33,34 @@
 namespace cp3::cli {
 
 namespace {
+
+// True when `a` and `b` hold the same bytes. Used to tolerate a
+// destination that already exists with identical content; a read failure
+// reports false so the caller surfaces the original copy error instead of
+// silently passing.
+bool filesIdentical(const fs::path& a, const fs::path& b) {
+    std::error_code ec;
+    const std::uintmax_t sizeA = fs::file_size(a, ec);
+    if (ec) return false;
+    const std::uintmax_t sizeB = fs::file_size(b, ec);
+    if (ec || sizeA != sizeB) return false;
+    std::ifstream inA(a, std::ios::binary);
+    std::ifstream inB(b, std::ios::binary);
+    if (!inA || !inB) return false;
+    char bufA[8192];
+    char bufB[8192];
+    for (;;) {
+        inA.read(bufA, sizeof bufA);
+        inB.read(bufB, sizeof bufB);
+        const std::streamsize gotA = inA.gcount();
+        const std::streamsize gotB = inB.gcount();
+        if (gotA != gotB) return false;
+        if (gotA == 0) return true;
+        if (std::memcmp(bufA, bufB, static_cast<std::size_t>(gotA)) != 0) {
+            return false;
+        }
+    }
+}
 
 // Plain one-shot copy: the mirror is created in full or not at all (a
 // failure deletes the partial tree so the next --show-runtime retries).
@@ -41,12 +72,23 @@ bool copyFile(const fs::path& from, const fs::path& to, bool verbose) {
                      to.parent_path().string().c_str());
         return false;
     }
-    fs::copy_file(from, to, fs::copy_options::overwrite_existing, ec);
-    if (ec) {
-        std::fprintf(stderr, "cp3c: cannot copy '%s' to '%s': %s\n",
-                     from.string().c_str(), to.string().c_str(),
-                     ec.message().c_str());
-        return false;
+    // The same include root can be reached twice; a destination that
+    // already holds these exact bytes is not an error. Identical content
+    // skips, anything else is copied over (or reported) as before.
+    if (!fs::is_regular_file(to, ec) || !filesIdentical(from, to)) {
+        ec.clear();
+        fs::copy_file(from, to, fs::copy_options::overwrite_existing, ec);
+        if (ec) {
+            // Some filesystems refuse the overwrite even though the
+            // destination is already correct; identical bytes skip, any
+            // other error is still reported.
+            if (!filesIdentical(from, to)) {
+                std::fprintf(stderr, "cp3c: cannot copy '%s' to '%s': %s\n",
+                             from.string().c_str(), to.string().c_str(),
+                             ec.message().c_str());
+                return false;
+            }
+        }
     }
     if (verbose) {
         std::fprintf(stderr, "cp3c: runtime mirror: %s\n", to.string().c_str());

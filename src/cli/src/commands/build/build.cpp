@@ -1099,7 +1099,9 @@ std::optional<NativeBuildFlags> applyNativePackages(
                 reportBroken(pkg->specifier, "include directory", dir);
                 return std::nullopt;
             }
-            layout.includeDirs.push_back(dir);
+            // A row can name a root the always-available D72 trees
+            // already provide; the same directory joins the list once.
+            addUniqueIncludeDir(layout.includeDirs, dir);
         }
         for (std::size_t i = 0; i < pkg->runtimeSources.size(); ++i) {
             const std::string& rel = pkg->runtimeSources[i];
@@ -1357,14 +1359,7 @@ int buildWithToolchain(const BuildRequest& request) {
         for (const BuildRequest::PackageImplementation& impl :
              *request.packageImplementations) {
             for (const fs::path& dir : impl.includeDirs) {
-                bool seen = false;
-                for (const fs::path& existing : layout.includeDirs) {
-                    if (existing == dir) {
-                        seen = true;
-                        break;
-                    }
-                }
-                if (!seen) layout.includeDirs.push_back(dir);
+                addUniqueIncludeDir(layout.includeDirs, dir);
             }
         }
     }

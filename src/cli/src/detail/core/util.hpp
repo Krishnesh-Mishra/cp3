@@ -100,6 +100,15 @@ std::uint64_t totalPhysicalMemoryMb() noexcept;
 // are returned.
 std::vector<fs::path> compilerIncludeRoots();
 
+// Appends `dir` to `roots` unless a root naming the same directory is
+// already there. The first spelling wins and the order of the rest is
+// preserved. Identity is filesystem identity (fs::equivalent); when the
+// filesystem cannot compare the two roots (for example, one of them does
+// not exist) the comparison falls back to the normalised lexical spelling
+// instead of failing, so an uncanonicalizable root never aborts the
+// build.
+void addUniqueIncludeDir(std::vector<fs::path>& roots, const fs::path& dir);
+
 // True when `markers` occurs in `text`. `markers` is a '|'-separated any-of
 // list; an empty list means "always". Used to decide which runtime translation
 // units a generated program links: the program links what it names.

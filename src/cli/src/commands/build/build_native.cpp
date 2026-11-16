@@ -21,6 +21,7 @@
 #include <system_error>
 #include <vector>
 
+#include "detail/core/util.hpp"
 #include "detail/pkg/package_json.hpp"
 
 namespace cp3::cli::detail {
@@ -88,8 +89,10 @@ bool applyNativeBindings(const std::vector<NativeBinding>& bindings,
             }
             // The include root joins the program's own: the header
             // fingerprint then covers the SDK's headers, so a changed one
-            // retires the object (detail/cache.hpp).
-            layout.includeDirs.push_back(path);
+            // retires the object (detail/cache.hpp). A root already in
+            // the list (an always-available D72 tree, say) is not added
+            // twice.
+            addUniqueIncludeDir(layout.includeDirs, path);
         }
         for (const std::string& define : binding.module.defines) {
             flags.compile.push_back("-D" + define);

@@ -272,6 +272,25 @@ fs::path resolveIncludeRoot(const fs::path& root, const std::string& rel) {
     return direct;
 }
 
+// Appends `dir` to `roots` unless a root naming the same directory is
+// already there. fs::equivalent answers with filesystem identity (the same
+// directory spelled through different separators, case or `.` segments);
+// when the filesystem cannot compare the two roots (a root that does not
+// exist, for example) the comparison falls back to the normalised lexical
+// spelling instead of giving up.
+void addUniqueIncludeDir(std::vector<fs::path>& roots, const fs::path& dir) {
+    for (const fs::path& existing : roots) {
+        std::error_code ec;
+        const bool same = fs::equivalent(existing, dir, ec);
+        if (ec) {
+            if (existing.lexically_normal() == dir.lexically_normal()) return;
+            continue;
+        }
+        if (same) return;
+    }
+    roots.push_back(dir);
+}
+
 std::vector<fs::path> compilerIncludeRoots() {
     std::vector<fs::path> roots;
     const fs::path repo = repositoryRoot();
