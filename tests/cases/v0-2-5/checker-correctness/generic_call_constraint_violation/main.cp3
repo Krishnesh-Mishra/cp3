@@ -1,0 +1,15 @@
+import console from "std/console";
+
+// The `extends` constraint is checked at instantiation, not only when the
+// type argument is given explicitly - the inferred binding `T := number`
+// violates `T extends Shape` here.
+interface Shape {
+    area: number;
+}
+
+function areaOf<T extends Shape>(s: T): number {
+    return s.area;
+}
+
+const n: number = areaOf(5);
+console.log(n);

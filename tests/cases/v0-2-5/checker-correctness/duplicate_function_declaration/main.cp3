@@ -1,0 +1,14 @@
+import console from "std/console";
+
+// Two declarations of the same name are not overloads here: cp3 has no
+// overloads for plain functions, so a second declaration is a duplicate
+// declaration, like a duplicate class.
+function combine(a: number, b: number): number {
+    return a + b;
+}
+
+function combine(a: string, b: string): string {
+    return a + b;
+}
+
+console.log(combine(1, 2));

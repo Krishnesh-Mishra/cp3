@@ -1,0 +1,15 @@
+import console from "std/console";
+
+// A class that implements an interface must declare every member the
+// interface requires. The member here exists but has the wrong type.
+interface Config {
+    retries: number;
+    mode: string;
+}
+
+class Client implements Config {
+    retries: string = "high";
+    mode: string = "tcp";
+}
+
+console.log("done");
