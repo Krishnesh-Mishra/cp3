@@ -68,7 +68,8 @@ std::vector<lsp::CompletionCandidate> memberCandidates(
 // a relative path (no disk scanning).
 // Import-named-list candidates: the named exports of the specifier the
 // enclosing import statement names, for a cursor inside
-// `import { | } from "..."`. Empty when the module is not a known std module.
+// `import { | } from "..."`. Empty when the module is not a known std module
+// or has no named exports (the caller falls back to the clause keywords).
 std::vector<lsp::CompletionCandidate> importNamedCandidates(
     const std::string& text, std::uint32_t offset);
 

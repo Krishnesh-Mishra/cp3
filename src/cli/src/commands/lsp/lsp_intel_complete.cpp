@@ -207,12 +207,16 @@ std::vector<lsp::CompletionCandidate> completeAt(const std::string& path,
     }
     if (context.position == CompletionPosition::ImportClause) {
         // The named exports of the module the import statement names win over
-        // the generic keyword list (keywords stay available as the fallback).
+        // the clause keywords. A module with no named exports (or an unknown
+        // one) offers just the keywords the clause grammar admits — the
+        // expression catalog has no place inside an import list.
         if (std::vector<lsp::CompletionCandidate> named =
                 importNamedCandidates(text, offset);
             !named.empty()) {
             return named;
         }
+        return incompleteCandidates(CompletionPosition::ImportClause,
+                                    context.awaitAllowed);
     }
     if (context.stringLiteral) {
         if (!analysisReady(*document)) return {};

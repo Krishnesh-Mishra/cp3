@@ -135,6 +135,25 @@ bool opensArrowParameters(const std::vector<Token>& tokens, std::size_t index) {
     return false;
 }
 
+// The brace opened by an import clause (`import {` or `import Name, {`):
+// the cursor is inside the named-import list being typed, so the only
+// legal names are the module's named exports — statement keywords and the
+// expression catalog have no place there.
+bool isImportClauseBrace(const std::vector<Token>& tokens,
+                         std::size_t index) {
+    if (tokens[index].kind != TokenKind::LBrace) return false;
+    const std::size_t prev = significantBefore(tokens, index);
+    if (prev == tokens.size() || prev >= index) return false;
+    if (tokens[prev].kind == TokenKind::KwImport) return true;
+    if (tokens[prev].kind != TokenKind::Identifier) return false;
+    const std::size_t before = significantBefore(tokens, prev);
+    if (before == tokens.size() || before >= prev) return false;
+    if (tokens[before].kind != TokenKind::Comma) return false;
+    const std::size_t kw = significantBefore(tokens, before);
+    if (kw == tokens.size() || kw >= before) return false;
+    return tokens[kw].kind == TokenKind::KwImport;
+}
+
 // True when the `(` at `index` opens a declaration's parameter list:
 // `function f(`, `get x(`, `set x(`, `constructor(` or an arrow's `(a, b) =>`.
 bool opensParameterList(const std::vector<Token>& tokens, std::size_t index) {
@@ -241,6 +260,13 @@ CompletionPosition tokenPosition(const std::vector<Token>& tokens,
                                   const std::string& text,
                                   std::uint32_t offset,
                                   const std::vector<OpenBracket>& brackets) {
+    if (!brackets.empty()) {
+        const OpenBracket& open = brackets.back();
+        if (open.kind == TokenKind::LBrace &&
+            isImportClauseBrace(tokens, open.tokenIndex)) {
+            return CompletionPosition::ImportClause;
+        }
+    }
     if (!brackets.empty() && brackets.back().parameterList) {
         // While the AST is unavailable (a common state as a declaration is
         // being typed), distinguish `name: Type` from the parameter name slot
