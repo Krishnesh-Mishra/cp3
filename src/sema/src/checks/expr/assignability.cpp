@@ -46,6 +46,18 @@ bool Analyzer::wouldAccept(const Type& from, const Type& to, bool freshLiteral) 
             return nativeCanRepresentLiteral(to, from);
         }
         if (isNativeType(from) && isNativeType(to)) {
+            // Rust literal adoption (spec 03 / D65): a NUMBER-kind literal
+            // adopts the declared native target by range (the same predicate
+            // `defaultLiteralType` applies; nativeCanRepresentLiteral checks
+            // the exact-spelling bounds for 64-bit edges) instead of the
+            // identical-id rule. A raw Literal source is already adopted by
+            // the branch above; both literal spellings of this guard are
+            // kept so the adoption cannot be missed. A variable of one
+            // native width is never implicitly converted to another; write
+            // the conversion explicitly.
+            if (from.isLiteral() && from.literalBase == TypeKind::Number) {
+                return nativeCanRepresentLiteral(to, from);
+            }
             return from.name == to.name;
         }
         return false;

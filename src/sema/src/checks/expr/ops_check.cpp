@@ -500,14 +500,29 @@ bool Analyzer::isWeakMemberTarget(const MemberExpr& m) const {
 // Assignment narrowing: the binding's recorded type lowers to whatever the
 // assignment leaves in it (widened through literals), never to an error
 // and never beyond what the declared binding accepts.
+//
+// D65/spec 03 (native literal adoption): under a non-TypeScript vocabulary,
+// an integral literal stored into a native-typed slot keeps the slot's
+// declared native width (Rust infers the literal against the expected
+// type) instead of widening to `number`. The store was range-checked by
+// checkAssign just before this runs, so this only picks which type later
+// reads see. TypeScript projects keep the literal -> number widening.
 void Analyzer::narrowAssignmentView(Expr& ae, const Type& stored,
                                     const SourceSpan& span) {
     if (ae.kind == NodeKind::Identifier) {
         auto& id = static_cast<Identifier&>(ae);
-        const Type t = widen(stored);
-        if (t.isError()) return;
         Binding b;
         if (!lookup(id.name, b)) return;
+        Type t = widen(stored);
+        if (options_.typeSystem != TypeSystem::TypeScript &&
+            stored.isLiteral() && stored.literalBase == TypeKind::Number) {
+            const Type& slot =
+                b.declaredType.isUnknown() ? b.type : b.declaredType;
+            if (isNativeType(slot) && nativeCanRepresentLiteral(slot, stored)) {
+                t = slot;
+            }
+        }
+        if (t.isError()) return;
         overrideBinding(id.name, t, span);
         return;
     }
