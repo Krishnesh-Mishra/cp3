@@ -534,6 +534,8 @@ void Analyzer::registerInterface(InterfaceDeclaration& i) {
     // up names (hover, definition fallback, ...) need an entry in the same
     // symbol table every other declaration uses.
     publishInterfaceSymbol(i);
+    // A doc comment above the declaration is hover documentation.
+    publishDoc(i.nodeId, i.span);
     // The cycle analysis identifies an interface by its shape label (an
     // interface is a structural type), so the label -> the interface name
     // mapping is recorded here.
@@ -628,6 +630,11 @@ void Analyzer::declareTypeAlias(TypeAliasDeclaration& t) {
     typeNames_[t.name] = Type::unknown();
     typeNames_[t.name] = t.type ? resolveType(*t.type) : Type::unknown();
     leaveClassTypeParams(saved);
+    // The alias is a compile-time name queries can jump to: publish it like an
+    // interface (the same node id keys the symbol table entry).
+    publishTypeAliasSymbol(t);
+    // A doc comment above the declaration is hover documentation.
+    publishDoc(t.nodeId, t.span);
     if (params.empty()) {
         typeAliasParams_.erase(t.name);
         return;

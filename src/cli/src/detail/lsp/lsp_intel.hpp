@@ -27,6 +27,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "cp3/core/analysis.hpp"
@@ -48,6 +49,12 @@ struct AnalyzedDocument {
     std::unique_ptr<ModuleGraph> graph;
     CompilationUnit* entry = nullptr;
     SemaResult sema;
+    // The sema of every analyzed unit of the import closure, keyed by unit id
+    // (each parser restarts nodeIds, so the tables cannot be merged). The
+    // entry's own result lands in `sema`; this table holds the rest, produced
+    // by the same `analyzeProgramGraph` run so cross-module queries never
+    // reanalyze the graph. Empty when the analysis did not run.
+    std::unordered_map<std::uint32_t, SemaResult> unitSemas;
     std::vector<Diagnostic> diagnostics;
     // The project vocabulary the analysis used; std documentation spells
     // native integer results (`u16`, `usize`, ...) in this vocabulary.
@@ -91,8 +98,9 @@ bool isPlaceholderType(const Type& type);
 const SymbolInfo* nearestSymbolAt(const SemaResult& sema, const std::string& name,
                                   const SourceFile& file, std::uint32_t offset);
 
-// The first occurrence of `name` inside `span`, as a span of its own; the whole
-// span when the name cannot be found (a safe, if imprecise, fallback).
+// The first occurrence of `name` inside `span`, as a whole word (bounded by
+// non-identifier bytes), as a span of its own; the whole span when the name
+// cannot be found (a safe, if imprecise, fallback).
 SourceSpan nameSpanIn(const SourceSpan& span, const std::string& name);
 
 // The name of a member key (`m() {}`, `x: number`), or empty.
@@ -117,8 +125,9 @@ std::optional<lsp::HoverAnswer> hoverAt(const std::string& path,
                                         std::uint32_t line,
                                         std::uint32_t column);
 
-// Definition (lsp_intel_define.cpp): same-file declarations and local-module
-// imports; std imports answer no location instead of a wrong one.
+// Definition (lsp_intel_define.cpp): same-file declarations, local-module
+// imports, and member positions (`receiver.member`, a member's own key); std
+// imports answer no location instead of a wrong one.
 std::vector<lsp::SourceTarget> definitionAt(const std::string& path,
                                             const std::string& text,
                                             std::uint32_t line,
@@ -143,6 +152,29 @@ const ImportDeclaration* importForName(const Program& program,
 const ModuleDependency* dependencyFor(const ModuleGraph& graph,
                                       std::uint32_t importer,
                                       const std::string& specifier);
+
+// The terminal declaration for `name` as `unit` exports it, following
+// re-export chains across Local module edges (`export { x as y } from "./m"`,
+// `export * from "./m"`, `export { local as y }`, `export default` chains).
+// std/package/native/unknown hops refuse (nullopt). `name` is ignored when
+// `wantDefault` is set. On success `name` carries the declaration's own name
+// in `unit` (the hops reduce the importing unit's spelling to it).
+struct ExportedDeclaration {
+    CompilationUnit* unit = nullptr;       // the unit that declares it
+    const Node* declaration = nullptr;      // the declaration node in that unit
+    std::string name;                      // the declaration's own name
+};
+std::optional<ExportedDeclaration> resolveExportChain(
+    const ModuleGraph& graph, CompilationUnit* unit, const std::string& name,
+    bool wantDefault);
+
+// The units a nominal type may come from: the entry first, then the units the
+// import graph analyzed for it (an unresolved local import cannot contribute).
+// Compiler-owned prelude units are excluded. A receiver whose declaration
+// lives in an imported module cannot be found by scanning the entry program
+// alone.
+std::vector<const CompilationUnit*> reachableUnitsFor(
+    const AnalyzedDocument& document);
 
 // References (lsp_intel_references.cpp): every occurrence of the binding the
 // cursor resolves to, including the declaration itself when asked. Std /

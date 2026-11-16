@@ -15,6 +15,7 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "cp3/core/analysis.hpp"
@@ -89,6 +90,7 @@ std::vector<lsp::RawDiagnostic> checkTextOnce(const std::string& path,
     CollectingDiagnosticSink sink;
     const std::unique_ptr<ModuleGraph> graph = loadModuleGraph(sources, *file, sink);
     SemaResult sema;
+    std::unordered_map<std::uint32_t, SemaResult> unitSemas;
     CompilationUnit* entry = graph != nullptr ? graph->entry() : nullptr;
     CompileOptions compile;
     std::filesystem::path root;
@@ -97,7 +99,10 @@ std::vector<lsp::RawDiagnostic> checkTextOnce(const std::string& path,
     }
     if (graph != nullptr) compile.nativeBindings = graph->nativeBindings();
     if (entry != nullptr && entry->ast != nullptr) {
-        analyzeProgram(*entry->ast, sema, sink, compile);
+        // The same wiring `cp3c check` applies: analyze every reachable unit
+        // in dependency order with the import bindings between units, so the
+        // entry gets the import-scoped diagnostics the batch check emits.
+        analyzeProgramGraph(*graph, sema, unitSemas, sink, compile);
     }
     return collectDiagnostics(*file, sink.diagnostics());
 }

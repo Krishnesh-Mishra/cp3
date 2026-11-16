@@ -175,6 +175,22 @@ void appendBlockNames(const BlockStatement& block, const SemaResult& sema,
             break;
         }
     }
+    // The function declarations a block nests: cp3 hoists function
+    // declarations, so every statement of the block sees them whatever the
+    // cursor position is - an editor at the top of an empty body still
+    // offers the nested declaration.
+    for (const StmtPtr& statement : block.body) {
+        if (statement == nullptr || !statement->span.valid()) continue;
+        if (statement->kind != NodeKind::FunctionDeclaration) continue;
+        const auto& declaration =
+            static_cast<const FunctionDeclaration&>(*statement);
+        lsp::CompletionCandidate candidate;
+        candidate.label = declaration.name;
+        candidate.kind = 3;
+        candidate.detail = typeDetail(sema, statement->nodeId, "function");
+        candidate.documentation = docFor(sema, statement->nodeId);
+        out.push_back(std::move(candidate));
+    }
 }
 
 // The binding a `for ... of` / `for ... in` loop introduces.

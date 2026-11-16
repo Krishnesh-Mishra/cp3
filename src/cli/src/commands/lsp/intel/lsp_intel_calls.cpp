@@ -18,9 +18,11 @@
 // =============================================================================
 #include "detail/lsp/lsp_intel.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "cp3/core/analysis.hpp"
@@ -296,6 +298,41 @@ std::string pathOf(const SourceSpan& span) {
                                                 : std::string();
 }
 
+// A call-site range for one call site (the callee expression's span), in
+// compiler coordinates. The LSP layer turns it into a `fromRanges` entry.
+lsp::SourceTarget callRangeOf(const Expr& callee) {
+    lsp::SourceTarget target;
+    if (!callee.span.valid()) return target;
+    target.path = pathOf(callee.span);
+    target.line = callee.span.begin.line;
+    target.column = callee.span.begin.column;
+    target.endLine = callee.span.end.line;
+    target.endColumn = callee.span.end.column;
+    return target;
+}
+
+// The identity a merged hierarchy entry answers to (one entry per caller or
+// callee; every call site lands in its `callRanges`).
+std::string entryKey(const lsp::HierarchyEntry& entry) {
+    return entry.path + "\n" + std::to_string(entry.line) + "\n" +
+           std::to_string(entry.column) + "\n" + entry.name;
+}
+
+// Adds `entry` to `entries`, folding the call ranges into an existing entry
+// with the same identity instead of listing the same callable twice.
+void addMergedEntry(std::vector<lsp::HierarchyEntry>& entries,
+                    lsp::HierarchyEntry entry) {
+    const std::string key = entryKey(entry);
+    for (lsp::HierarchyEntry& existing : entries) {
+        if (entryKey(existing) != key) continue;
+        for (const lsp::SourceTarget& range : entry.callRanges) {
+            existing.callRanges.push_back(range);
+        }
+        return;
+    }
+    entries.push_back(std::move(entry));
+}
+
 // The callable a declaration is.
 Callable callableOf(const Node& declaration) {
     Callable callable;
@@ -474,6 +511,7 @@ lsp::HierarchyEntry entryOf(const Callable& callable) {
 // A call site of the program with the callable it names.
 struct CallSite {
     const Node* call = nullptr;
+    const Expr* calleeExpr = nullptr;   // the callee expression (for ranges)
     std::optional<Callable> callee;
 };
 
@@ -494,6 +532,7 @@ std::vector<CallSite> callSitesOf(const AnalyzedDocument& document) {
         } else {
             callee = static_cast<const NewExpr&>(node).callee.get();
         }
+        site.calleeExpr = callee;
         site.callee = resolveCallee(document, callee);
         sites.push_back(site);
     });
@@ -652,7 +691,12 @@ std::vector<lsp::HierarchyEntry> callHierarchyIncomingAt(
         if (caller == nullptr) continue;
         const Callable callable = callableOf(*caller);
         if (callable.name.empty()) continue;
-        entries.push_back(entryOf(callable));
+        lsp::HierarchyEntry built = entryOf(callable);
+        if (site.calleeExpr != nullptr && site.calleeExpr->span.valid()) {
+            built.callRanges.push_back(callRangeOf(*site.calleeExpr));
+        }
+        // One entry per caller; every call site lands on its `callRanges`.
+        addMergedEntry(entries, std::move(built));
     }
     return entries;
 }
@@ -669,7 +713,12 @@ std::vector<lsp::HierarchyEntry> callHierarchyOutgoingAt(
         if (!site.callee.has_value()) continue;
         // The call must sit inside the item's body.
         if (!covers(declaration->span, site.call->span)) continue;
-        entries.push_back(entryOf(*site.callee));
+        lsp::HierarchyEntry built = entryOf(*site.callee);
+        if (site.calleeExpr != nullptr && site.calleeExpr->span.valid()) {
+            built.callRanges.push_back(callRangeOf(*site.calleeExpr));
+        }
+        // One entry per callee; every call site lands on its `callRanges`.
+        addMergedEntry(entries, std::move(built));
     }
     return entries;
 }

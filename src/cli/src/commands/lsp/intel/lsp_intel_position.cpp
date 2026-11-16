@@ -337,6 +337,115 @@ CompletionPosition tokenPosition(const std::vector<Token>& tokens,
 // The AST around the cursor
 // -----------------------------------------------------------------------------
 
+// The last '<' before `offset`, when it directly precedes a generic callee:
+// the token stream cannot tell `f<a>(x)` from a less-than comparison, so the
+// checker's own tables decide. The left-hand side of the '<' must name a
+// generic callable or a generic declaration in this file (or in an imported
+// unit); anything else keeps the ordinary expression classification.
+bool lessOpensTypeArguments(const AnalyzedDocument& document,
+                            const std::vector<Token>& tokens,
+                            std::uint32_t offset) {
+    std::size_t lessIndex = tokens.size();
+    for (std::size_t i = 0; i < tokens.size(); ++i) {
+        const Token& token = tokens[i];
+        if (token.kind == TokenKind::EndOfFile) break;
+        if (token.span.end.offset > offset) break;
+        if (token.kind == TokenKind::Less) lessIndex = i;
+    }
+    if (lessIndex == tokens.size() || lessIndex == 0) return false;
+    const std::size_t left = significantBefore(tokens, lessIndex);
+    if (left >= tokens.size()) return false;
+    if (tokens[left].kind != TokenKind::Identifier) return false;
+    const std::string name{tokens[left].lexeme};
+    if (name.empty()) return false;
+    // The `<` must still be waiting for its arguments at the cursor. If a
+    // `>` already closed it before the cursor (a comparison, a completed
+    // call), nothing that follows is part of the type-argument list.
+    for (std::size_t i = lessIndex + 1; i < tokens.size(); ++i) {
+        const Token& token = tokens[i];
+        if (!token.span.valid() || token.span.end.offset > offset) break;
+        if (token.kind == TokenKind::Greater) return false;
+    }
+    // With no usable checker a trailing `name <` is an unfinished type list
+    // in a half-typed document (a comparison would have an operand on the
+    // right in a complete file).
+    if (!analysisReady(document)) return true;
+    // 1. The checker's own generic-callable table (functions and generic
+    //    arrows published with their type parameter lists).
+    for (const auto& entry : document.sema.functions) {
+        if (entry.second.name == name && !entry.second.typeParams.empty()) {
+            return true;
+        }
+    }
+    // 2. Generic declarations in this file or in an imported unit: a class or
+    //    interface the type arguments instantiate, an alias, a function or a
+    //    generic arrow bound to a const.
+    const auto isGenericDeclaration = [&](const Node& node) {
+        switch (node.kind) {
+            case NodeKind::ClassDeclaration: {
+                const auto& declaration = static_cast<const ClassDeclaration&>(node);
+                return declaration.name == name && !declaration.typeParams.empty();
+            }
+            case NodeKind::InterfaceDeclaration: {
+                const auto& declaration =
+                    static_cast<const InterfaceDeclaration&>(node);
+                return declaration.name == name && !declaration.typeParams.empty();
+            }
+            case NodeKind::TypeAliasDeclaration: {
+                const auto& declaration =
+                    static_cast<const TypeAliasDeclaration&>(node);
+                return declaration.name == name && !declaration.typeParams.empty();
+            }
+            case NodeKind::FunctionDeclaration: {
+                const auto& declaration = static_cast<const FunctionDeclaration&>(node);
+                return declaration.name == name && !declaration.typeParams.empty();
+            }
+            case NodeKind::VariableDeclaration: {
+                const auto& declaration =
+                    static_cast<const VariableDeclaration&>(node);
+                for (const VariableDeclaratorPtr& declarator : declaration.declarations) {
+                    if (declarator == nullptr || declarator->id == nullptr ||
+                        declarator->id->kind != NodeKind::Identifier) {
+                        continue;
+                    }
+                    if (static_cast<const Identifier&>(*declarator->id).name != name) {
+                        continue;
+                    }
+                    if (declarator->init != nullptr &&
+                        declarator->init->kind == NodeKind::ArrowFunction &&
+                        !static_cast<const ArrowFunction&>(*declarator->init)
+                             .typeParams.empty()) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            default:
+                return false;
+        }
+    };
+    bool found = false;
+    auto scan = [&](const Program& program) {
+        forEachNode(program, [&](const Node& node) {
+            if (!found && isGenericDeclaration(node)) found = true;
+        });
+    };
+    if (document.entry != nullptr && document.entry->ast != nullptr) {
+        scan(*document.entry->ast);
+    }
+    if (!found && document.graph != nullptr) {
+        for (const CompilationUnit* unit : document.graph->units()) {
+            if (found) break;
+            if (unit == nullptr || unit->ast == nullptr || unit->isPrelude) {
+                continue;
+            }
+            if (document.entry != nullptr && unit == document.entry) continue;
+            scan(*unit->ast);
+        }
+    }
+    return found;
+}
+
 // The AST nodes that enclose `offset`, outermost first.
 std::vector<const Node*> enclosingChain(const AnalyzedDocument& document,
                                         std::uint32_t offset) {
@@ -571,6 +680,12 @@ CompletionPosition classifyPosition(const AnalyzedDocument& document,
     const std::vector<OpenBracket> brackets = openBrackets(tokens, offset);
     const CompletionPosition position =
         tokenPosition(tokens, text, offset, brackets);
+    // `callee<` opens the callee's type-argument list when the checker knows
+    // the callee is generic; the token stream alone cannot tell that from a
+    // less-than comparison.
+    if (lessOpensTypeArguments(document, tokens, offset)) {
+        return CompletionPosition::TypePosition;
+    }
     // Parse/analyze can fail transiently while the user is halfway through a
     // declaration. Token context remains useful and keeps syntax completion
     // available even when no recoverable AST exists yet.

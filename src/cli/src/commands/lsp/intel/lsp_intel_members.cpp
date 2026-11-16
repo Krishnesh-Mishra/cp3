@@ -43,6 +43,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cctype>
+#include <functional>
 #include <limits>
 #include <optional>
 #include <string>
@@ -158,6 +159,131 @@ void appendTypeShapeKeys(const Program& program, const SourceFile& file,
     }
 }
 
+// The `extends` clause of a class, as a plain type name. Anything more
+// expressive than a plain identifier (a qualified base, a computed name) is
+// not followed.
+std::string baseNameOf(const ClassDeclaration& declaration) {
+    if (declaration.extendsType == nullptr) return std::string();
+    if (declaration.extendsType->kind != NodeKind::NamedType) return std::string();
+    return static_cast<const NamedType&>(*declaration.extendsType).name;
+}
+
+// The binding name of a parameter: the identifier it binds, the argument of
+// a rest parameter, nothing for a pattern.
+std::string bindingNameOfParameter(const Parameter& parameter) {
+    const Node* name = parameter.name.get();
+    if (name == nullptr) return std::string();
+    if (name->kind == NodeKind::Identifier) {
+        return static_cast<const Identifier&>(*name).name;
+    }
+    if (name->kind == NodeKind::RestElement) {
+        const auto& rest = static_cast<const RestElement&>(*name);
+        if (rest.argument != nullptr &&
+            rest.argument->kind == NodeKind::Identifier) {
+            return static_cast<const Identifier&>(*rest.argument).name;
+        }
+    }
+    return std::string();
+}
+
+// The declared type of a receiver, read from the source: a variable or
+// parameter annotation names its type, and `new Widget()` names the class.
+// The resolved type of an imported owner is a structural shape label, so the
+// declaration site is what names the owner.
+std::string declaredTypeNameOfLocal(const Program& program,
+                                    const std::string& name) {
+    if (name.empty()) return std::string();
+    std::string found;
+    forEachNode(program, [&](const Node& node) {
+        if (!found.empty()) return;
+        if (node.kind == NodeKind::Parameter) {
+            const auto& parameter = static_cast<const Parameter&>(node);
+            if (bindingNameOfParameter(parameter) != name) return;
+            if (parameter.type != nullptr &&
+                parameter.type->kind == NodeKind::NamedType) {
+                found = static_cast<const NamedType&>(*parameter.type).name;
+            }
+            return;
+        }
+        if (node.kind != NodeKind::VariableDeclarator) return;
+        const auto& declarator = static_cast<const VariableDeclarator&>(node);
+        if (declarator.id == nullptr ||
+            declarator.id->kind != NodeKind::Identifier) {
+            return;
+        }
+        if (static_cast<const Identifier&>(*declarator.id).name != name) return;
+        if (declarator.type != nullptr &&
+            declarator.type->kind == NodeKind::NamedType) {
+            found = static_cast<const NamedType&>(*declarator.type).name;
+            return;
+        }
+        if (declarator.init != nullptr &&
+            declarator.init->kind == NodeKind::NewExpr) {
+            const auto& construction =
+                static_cast<const NewExpr&>(*declarator.init);
+            if (construction.callee != nullptr &&
+                construction.callee->kind == NodeKind::Identifier) {
+                found = static_cast<const Identifier&>(*construction.callee).name;
+            }
+        }
+    });
+    return found;
+}
+
+// Collects the members of the class/interface `name`, walking the extends
+// chain across module boundaries. Entry-declaration wins over an imported one
+// of the same name (the units are ordered entry first and the walk stops at
+// the first declaration found). `seen` breaks cycles in a self-referential
+// chain.
+void appendImportedTypeMembers(const std::vector<const CompilationUnit*>& units,
+                               const std::string& name, int depth,
+                               std::unordered_set<std::string>& seen,
+                               std::vector<std::string>& names) {
+    if (name.empty() || depth > 16) return;
+    if (!seen.insert(name).second) return;
+    for (const CompilationUnit* unit : units) {
+        if (unit == nullptr || unit->ast == nullptr) continue;
+        for (const StmtPtr& statement : unit->ast->body) {
+            if (statement == nullptr || !statement->span.valid()) continue;
+            if (unit->file != nullptr && statement->span.file != unit->file) {
+                continue;  // a prelude tail riding in this unit
+            }
+            // `export class Store { ... }` is wrapped in an ExportDeclaration.
+            const Stmt* declared = statement.get();
+            if (statement->kind == NodeKind::ExportDeclaration) {
+                const auto& declaration =
+                    static_cast<const ExportDeclaration&>(*statement);
+                if (declaration.declaration == nullptr) continue;
+                declared = declaration.declaration.get();
+            }
+            if (declared->kind == NodeKind::ClassDeclaration) {
+                const auto& declaration =
+                    static_cast<const ClassDeclaration&>(*declared);
+                if (declaration.name != name) continue;
+                appendClassMemberKeys(names, declaration);
+                appendImportedTypeMembers(units, baseNameOf(declaration),
+                                          depth + 1, seen, names);
+                return;
+            }
+            if (declared->kind == NodeKind::InterfaceDeclaration) {
+                const auto& declaration =
+                    static_cast<const InterfaceDeclaration&>(*declared);
+                if (declaration.name != name) continue;
+                appendInterfaceMemberKeys(names, declaration);
+                for (const TypePtr& base : declaration.extendsTypes) {
+                    if (base == nullptr || base->kind != NodeKind::NamedType) {
+                        continue;
+                    }
+                    appendImportedTypeMembers(
+                        units, static_cast<const NamedType&>(*base).name,
+                        depth + 1, seen, names);
+                }
+                return;
+            }
+        }
+    }
+}
+
 // Shape fields the receiver's own declaration carries: object literal keys and
 // `: Interface` members for variables, plus class/interface members when the
 // receiver names the type itself.
@@ -200,6 +326,17 @@ void appendShapeFields(const AnalyzedDocument& document,
             }
         }
     }
+    // An imported nominal type is not declared in this file at all
+    // (`new Store()`, `x: P`), and a class may inherit its members from an
+    // imported base. Resolve the receiver's declared type name and walk the
+    // analyzed import closure for both.
+    const std::vector<const CompilationUnit*> units = reachableUnitsFor(document);
+    std::unordered_set<std::string> seen;
+    const std::string declared = declaredTypeNameOfLocal(program, receiver);
+    if (!declared.empty()) {
+        appendImportedTypeMembers(units, declared, 0, seen, names);
+    }
+    appendImportedTypeMembers(units, receiver, 0, seen, names);
 }
 
 // The receiver node can be absent or have no type while the user is midway
@@ -222,6 +359,86 @@ const Type* receiverTypeForCompletion(const AnalyzedDocument& document,
 bool isAmbientSurface(const Type* type) {
     return type != nullptr && type->kind == TypeKind::Object &&
            type->name == "$ambient";
+}
+
+// --- union receivers -------------------------------------------------------
+// The checker keeps union member reads permissive by design (a member missing
+// on one arm is ambient, not an error), so the probe analysis cannot tell
+// which arm a candidate came from. A union or `T | null | undefined` receiver
+// therefore offers only the members every non-nullish part carries: the
+// intersection of the part surfaces, deduplicated in first-seen order. A part
+// whose surface the tables cannot decode contributes nothing, which is how
+// foreign members stay off the list (`string | number` has no provable common
+// member and offers nothing).
+
+std::vector<std::string> surfaceNamesForPart(const AnalyzedDocument& document,
+                                             const Type& part) {
+    switch (part.kind) {
+        case TypeKind::String:
+            return stdStringMemberNames();
+        case TypeKind::Number:
+            return stdInstanceMemberNames("Number");
+        case TypeKind::Boolean:
+            return stdInstanceMemberNames("Boolean");
+        case TypeKind::Array:
+            return stdArrayMemberNames();
+        case TypeKind::Class: {
+            std::vector<std::string> names =
+                part.name.empty() ? std::vector<std::string>{}
+                                  : stdInstanceMemberNames(part.name);
+            if (!part.name.empty()) {
+                const std::vector<const CompilationUnit*> units =
+                    reachableUnitsFor(document);
+                std::unordered_set<std::string> seen;
+                appendImportedTypeMembers(units, part.name, 0, seen, names);
+            }
+            return names;
+        }
+        case TypeKind::TypeParam:
+            return part.parts.empty()
+                       ? std::vector<std::string>{}
+                       : surfaceNamesForPart(document, part.parts.front());
+        case TypeKind::Nullable:
+        case TypeKind::Union: {
+            std::vector<const Type*> members;
+            std::function<void(const Type&)> collect =
+                [&members, &collect](const Type& t) {
+                    if (t.kind == TypeKind::Union ||
+                        t.kind == TypeKind::Nullable) {
+                        for (const Type& inner : t.parts) collect(inner);
+                        return;
+                    }
+                    if (t.isNullish()) return;
+                    members.push_back(&t);
+                };
+            collect(part);
+            if (members.empty()) return {};
+            std::vector<std::string> common =
+                surfaceNamesForPart(document, *members.front());
+            for (std::size_t i = 1; i < members.size() && !common.empty(); ++i) {
+                const std::vector<std::string> other =
+                    surfaceNamesForPart(document, *members[i]);
+                std::vector<std::string> next;
+                for (const std::string& name : common) {
+                    for (const std::string& candidate : other) {
+                        if (candidate == name) {
+                            next.push_back(name);
+                            break;
+                        }
+                    }
+                }
+                common.swap(next);
+            }
+            return common;
+        }
+        case TypeKind::Literal:
+            return surfaceNamesForPart(document, part.literalBaseType());
+        default:
+            // An enum, a function, a tuple or record shape, an ambient
+            // placeholder: nothing the tables can prove, so contribute
+            // nothing and let the intersection drop the name.
+            return {};
+    }
 }
 
 // A useful fail-closed completion result when the probe analysis could not
@@ -467,6 +684,23 @@ std::vector<lsp::CompletionCandidate> memberCandidates(
     if (names.empty()) return candidates;
     const Type* sourceReceiverType =
         receiverTypeForCompletion(document, receiver, context.dot);
+    // A union (or `T | null | undefined`) receiver offers only the members
+    // every non-nullish part carries; the probe analysis is permissive for
+    // unions by design, so the intersection is decided here instead.
+    if (sourceReceiverType != nullptr &&
+        (sourceReceiverType->kind == TypeKind::Union ||
+         sourceReceiverType->kind == TypeKind::Nullable)) {
+        std::vector<lsp::CompletionCandidate> result;
+        for (const std::string& name :
+             surfaceNamesForPart(document, *sourceReceiverType)) {
+            lsp::CompletionCandidate candidate;
+            candidate.label = name;
+            candidate.kind = 5;
+            candidate.detail = "";
+            result.push_back(std::move(candidate));
+        }
+        return result;
+    }
     // A number, an array or a string has an exact member table in the
     // compiler, and that table IS the candidate list: no probe needed (a
     // generic method - `map`, `reduce` - has no type until it is called).
@@ -651,6 +885,8 @@ bool memberSpanEquals(const SourceSpan& span, const SourceSpan& other) {
 }
 
 // Fresh analysis of `unit` (the entry borrows the already-analyzed document).
+// Prefers the sibling sema the document analysis already produced (the import
+// wiring keeps it around); falls back to a fresh per-unit analysis.
 struct MemberUnitAnalysis {
     CompilationUnit* unit = nullptr;
     const Program* program = nullptr;
@@ -667,6 +903,13 @@ MemberUnitAnalysis memberAnalyzeUnit(AnalyzedDocument& document, CompilationUnit
     view.file = unit != nullptr ? unit->file : nullptr;
     if (unit != nullptr && unit->isEntry) {
         view.sema = &document.sema;
+        return view;
+    }
+    const auto cached =
+        unit != nullptr ? document.unitSemas.find(unit->id) : document.unitSemas.end();
+    if (cached != document.unitSemas.end()) {
+        view.owned = std::make_unique<SemaResult>(cached->second);
+        view.sema = view.owned.get();
         return view;
     }
     view.owned = std::make_unique<SemaResult>();

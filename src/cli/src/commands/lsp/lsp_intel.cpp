@@ -15,6 +15,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cctype>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -46,6 +47,13 @@ bool beforePos(std::uint32_t line, std::uint32_t column, const SourcePos& pos) {
 
 }  // namespace
 
+bool belongsToEntry(const SourceSpan& span, const SourceFile& file) {
+    // A span-less diagnostic is whole-program: keep it.
+    if (!span.valid()) return true;
+    if (span.file == &file) return true;
+    return span.file->canonicalPath == file.canonicalPath;
+}
+
 std::unique_ptr<AnalyzedDocument> analyzeDocument(const std::string& path,
                                                   const std::string& text) {
     auto document = std::make_unique<AnalyzedDocument>();
@@ -64,11 +72,25 @@ std::unique_ptr<AnalyzedDocument> analyzeDocument(const std::string& path,
             }
             compile.nativeBindings = document->graph->nativeBindings();
             document->typeSystem = compile.typeSystem;
-            analyzeProgram(*document->entry->ast, document->sema, sink,
-                           compile);
+            // The same wiring `cp3c check` applies: analyze every reachable
+            // unit in dependency order, with the import bindings between
+            // units, so import-scoped diagnostics (unused imports) fire in
+            // the entry exactly like the batch check.
+            analyzeProgramGraph(*document->graph, document->sema,
+                                document->unitSemas, sink, compile);
         }
     }
-    document->diagnostics = sink.diagnostics();
+    // Diagnostics for other files (an imported module, an injected prelude)
+    // are outside this document's answer; the server publishes its own
+    // diagnostics only.
+    std::vector<Diagnostic> diagnostics;
+    diagnostics.reserve(sink.diagnostics().size());
+    for (const Diagnostic& diagnostic : sink.diagnostics()) {
+        if (belongsToEntry(diagnostic.span, *document->file)) {
+            diagnostics.push_back(diagnostic);
+        }
+    }
+    document->diagnostics = std::move(diagnostics);
     return document;
 }
 
@@ -136,14 +158,34 @@ const SymbolInfo* nearestSymbolAt(const SemaResult& sema, const std::string& nam
 SourceSpan nameSpanIn(const SourceSpan& span, const std::string& name) {
     if (!span.valid() || name.empty()) return span;
     const std::string_view text = span.file->slice(span);
-    const std::size_t at = text.find(name);
-    if (at == std::string_view::npos) return span;
-    const std::uint32_t begin = span.begin.offset + static_cast<std::uint32_t>(at);
-    SourceSpan found;
-    found.file = span.file;
-    found.begin = span.file->positionAt(begin);
-    found.end = span.file->positionAt(begin + static_cast<std::uint32_t>(name.size()));
-    return found;
+    // The first occurrence of `name` as a whole word: a declaration whose
+    // statement starts with the same letters the name does (`function f`)
+    // must not carve its keyword's `f`. Mirrors memberCarveName
+    // (lsp_intel_members.cpp) for in-span carves.
+    const auto isIdentByte = [](unsigned char c) {
+        return std::isalnum(c) != 0 || c == '_' || c == '$';
+    };
+    std::size_t at = 0;
+    for (;;) {
+        at = text.find(name, at);
+        if (at == std::string_view::npos) return span;
+        const std::size_t end = at + name.size();
+        const bool leftOk = at == 0 ||
+            !isIdentByte(static_cast<unsigned char>(text[at - 1]));
+        const bool rightOk = end >= text.size() ||
+            !isIdentByte(static_cast<unsigned char>(text[end]));
+        if (leftOk && rightOk) {
+            const std::uint32_t begin =
+                span.begin.offset + static_cast<std::uint32_t>(at);
+            SourceSpan found;
+            found.file = span.file;
+            found.begin = span.file->positionAt(begin);
+            found.end = span.file->positionAt(
+                begin + static_cast<std::uint32_t>(name.size()));
+            return found;
+        }
+        at = end;
+    }
 }
 
 std::string keyName(const Expr* key) {

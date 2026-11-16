@@ -773,6 +773,10 @@ private:
     // declarations by name (hover, definition fallback, ...) see interface
     // declarations the same way they see class declarations.
     void publishInterfaceSymbol(InterfaceDeclaration& i);
+    // Publishes a type alias's SymbolInfo, like publishInterfaceSymbol: name
+    // queries (hover, definition fallback, ...) see the alias the same way
+    // they see an interface.
+    void publishTypeAliasSymbol(TypeAliasDeclaration& t);
     void publishFunction(const FuncSig& sig, const std::string& name);
     void updateFunctionReturnType(std::uint32_t nodeId, const Type& ret);
     // Publishes the doc comment that documents the declaration starting at

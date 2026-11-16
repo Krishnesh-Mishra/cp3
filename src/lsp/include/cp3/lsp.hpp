@@ -109,6 +109,10 @@ struct HierarchyEntry {
     std::string path;
     std::uint32_t line = 1, column = 1, endLine = 1, endColumn = 1;   // the declaration span
     std::uint32_t nameLine = 1, nameColumn = 1, nameEndLine = 1, nameEndColumn = 1;  // the name span
+    // Call hierarchy edges only: the call sites (callee expression spans) this
+    // entry covers, in compiler coordinates. The server turns these into the
+    // LSP `fromRanges` of an incoming/outgoing call. Empty everywhere else.
+    std::vector<SourceTarget> callRanges;
 };
 
 // One document-symbol (outline) entry in compiler coordinates.

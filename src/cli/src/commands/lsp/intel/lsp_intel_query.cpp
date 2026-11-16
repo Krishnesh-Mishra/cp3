@@ -73,6 +73,20 @@ std::string nameOfNode(const Node& node) {
             }
             return std::string();
         }
+        case NodeKind::ImportSpecifier: {
+            const auto& specifier = static_cast<const ImportSpecifier&>(node);
+            // The token of the binding the specifier declares, either the
+            // renamed one (`import { x as y }`, the cursor sits on `y`) or
+            // the imported one.
+            return specifier.local.empty() ? specifier.imported
+                                           : specifier.local;
+        }
+        case NodeKind::ExportSpecifier: {
+            const auto& specifier = static_cast<const ExportSpecifier&>(node);
+            // Either token refers to the same declaration chain from the
+            // editor's point of view; hover renders the chain's owner.
+            return specifier.exported;
+        }
         case NodeKind::MethodDeclaration: {
             const auto& method = static_cast<const MethodDeclaration&>(node);
             return keyName(method.key.get());
@@ -985,6 +999,62 @@ bool neverType(const Type& type) {
     return type.kind == TypeKind::Union && type.parts.empty();
 }
 
+// The type a hover prints for a value. The compiler's own describe() prints
+// a class/enum without the type arguments sema attached (`Promise` instead of
+// `Promise<number>`), which hides exactly the inner type a hover is asked
+// about. This renderer mirrors describe() and adds the argument list for the
+// named kinds; shapes without arguments and the remaining kinds fall back to
+// describe().
+std::string describeHoverType(const Type& t) {
+    switch (t.kind) {
+        case TypeKind::Function: {
+            std::string out = "(";
+            for (std::size_t i = 0; i + 1 < t.parts.size(); ++i) {
+                if (i != 0) out += ", ";
+                out += describeHoverType(t.parts[i]);
+            }
+            out += ") => ";
+            out += t.parts.empty() ? std::string("unknown")
+                                   : describeHoverType(t.parts.back());
+            return out;
+        }
+        case TypeKind::Class:
+        case TypeKind::Enum: {
+            std::string out = t.name.empty()
+                                  ? std::string(typeKindName(t.kind))
+                                  : t.name;
+            if (t.parts.empty()) return out;
+            out += "<";
+            for (std::size_t i = 0; i < t.parts.size(); ++i) {
+                if (i != 0) out += ", ";
+                out += describeHoverType(t.parts[i]);
+            }
+            return out + ">";
+        }
+        case TypeKind::Array:
+            return t.parts.empty() ? std::string("array")
+                                   : describeHoverType(t.parts.front()) + "[]";
+        case TypeKind::Union: {
+            if (t.parts.empty()) return std::string("never");
+            std::string out;
+            for (std::size_t i = 0; i < t.parts.size(); ++i) {
+                if (i != 0) out += " | ";
+                out += describeHoverType(t.parts[i]);
+            }
+            return out;
+        }
+        case TypeKind::Nullable: {
+            std::string out = t.parts.empty()
+                                  ? std::string("unknown")
+                                  : describeHoverType(t.parts.front());
+            out += " | null | undefined";
+            return out;
+        }
+        default:
+            return describe(t);
+    }
+}
+
 // The '(' that opens the call's argument list, scanning over an explicit
 // generics list (`f<number>(...)`) and whitespace.
 std::uint32_t openParenAfter(const std::string& text, std::uint32_t from,
@@ -1051,6 +1121,140 @@ int countArguments(const std::string& text, std::uint32_t open,
     return commas;
 }
 
+// The generic instantiation site a name refers to: `identity<number>(3)`.
+// Hovering the callee shows the instantiation (`identity<number>(x:
+// number): number`, `Box<string>`), not the declaration's bare type
+// parameter list.
+struct CalleeInstantiation {
+    const TypeList* typeArgs = nullptr;
+    bool isNew = false;
+};
+
+CalleeInstantiation enclosingInstantiation(const Program& program,
+                                           const Node& node) {
+    CalleeInstantiation instantiation;
+    forEachNode(program, [&](const Node& candidate) {
+        if (instantiation.typeArgs != nullptr) return;
+        const Expr* callee = nullptr;
+        bool isNew = false;
+        switch (candidate.kind) {
+            case NodeKind::CallExpr:
+                callee = static_cast<const CallExpr&>(candidate).callee.get();
+                break;
+            case NodeKind::NewExpr:
+                callee = static_cast<const NewExpr&>(candidate).callee.get();
+                isNew = true;
+                break;
+            default:
+                return;
+        }
+        if (callee == nullptr || callee != &node) return;
+        const TypeList& args = isNew
+            ? static_cast<const NewExpr&>(candidate).typeArgs
+            : static_cast<const CallExpr&>(candidate).typeArgs;
+        if (args.empty()) return;
+        instantiation.typeArgs = &args;
+        instantiation.isNew = isNew;
+    });
+    return instantiation;
+}
+
+// `t` with the type parameters in `subst` replaced by their explicit
+// arguments. Types are small value objects, so rebuilding the parts that
+// carry the substitution is cheap.
+Type instantiateTypeParams(
+    const Type& t, const std::vector<std::pair<std::string, Type>>& subst) {
+    if (subst.empty()) return t;
+    if (t.kind == TypeKind::TypeParam) {
+        for (const auto& entry : subst) {
+            if (entry.first == t.name) return entry.second;
+        }
+        return t;
+    }
+    if (t.parts.empty()) return t;
+    Type out = t;
+    out.parts.clear();
+    for (const Type& part : t.parts) {
+        out.parts.push_back(instantiateTypeParams(part, subst));
+    }
+    return out;
+}
+
+// The callee hover for a generic instantiation site, or an empty string when
+// the position is not one. The class-construction case renders the
+// qualified name (`Box<string>`); a generic callable declared in this file
+// renders its signature with the type arguments substituted into the
+// declared type parameters, the way signature help renders it.
+std::string instantiatedCalleeHover(const AnalyzedDocument& document,
+                                    const Node& node) {
+    const CalleeInstantiation instantiation =
+        enclosingInstantiation(*document.entry->ast, node);
+    if (instantiation.typeArgs == nullptr) return std::string();
+    const std::string name = nameOfNode(node);
+    if (name.empty()) return std::string();
+    std::string suffix = "<";
+    std::vector<Type> args;
+    bool first = true;
+    for (const TypePtr& argument : *instantiation.typeArgs) {
+        if (argument == nullptr) continue;
+        if (!first) suffix += ", ";
+        first = false;
+        suffix += describeTypeSyntax(*argument);
+        const Type* resolved = document.sema.typeOf(argument->nodeId);
+        args.push_back(resolved != nullptr ? *resolved : Type::unknown());
+    }
+    suffix += ">";
+    if (instantiation.isNew) {
+        return name + ": " + name + suffix;
+    }
+    std::uint32_t declNodeId = 0;
+    const auto resolvedIt = document.sema.resolvedBindings.find(node.nodeId);
+    if (resolvedIt != document.sema.resolvedBindings.end()) {
+        declNodeId = resolvedIt->second;
+    }
+    // The binding table only resolves identifier uses; a member callee keeps
+    // the ordinary hover.
+    if (declNodeId == 0 && node.kind == NodeKind::Identifier) {
+        const SymbolInfo* symbol = nearestSymbolAt(document.sema, name,
+                                                   *document.file,
+                                                   node.span.begin.offset);
+        if (symbol != nullptr) declNodeId = symbol->declNodeId;
+    }
+    const auto fit = document.sema.functions.find(declNodeId);
+    if (fit == document.sema.functions.end() || fit->second.typeParams.empty()) {
+        return std::string();
+    }
+    const Node* declaration = findNodeById(*document.entry->ast, declNodeId);
+    const ParamList* params =
+        declaration != nullptr ? paramsOfDeclaration(*declaration) : nullptr;
+    std::vector<std::pair<std::string, Type>> subst;
+    const std::size_t count = fit->second.typeParams.size() < args.size()
+                                  ? fit->second.typeParams.size()
+                                  : args.size();
+    for (std::size_t i = 0; i < count; ++i) {
+        if (fit->second.typeParams[i].name.empty()) continue;
+        subst.emplace_back(fit->second.typeParams[i].name, args[i]);
+    }
+    if (subst.empty()) return std::string();
+    std::string out = name + suffix + "(";
+    bool firstParam = true;
+    for (std::size_t i = 0; i < fit->second.paramTypes.size(); ++i) {
+        const Type substituted = instantiateTypeParams(fit->second.paramTypes[i], subst);
+        if (!firstParam) out += ", ";
+        firstParam = false;
+        const Parameter* parameter =
+            params != nullptr && i < params->size() ? (*params)[i].get()
+                                                     : nullptr;
+        if (parameter != nullptr) {
+            out += describeParameter(*parameter, &substituted);
+        } else {
+            out += describe(substituted);
+        }
+    }
+    out += "): " + describe(instantiateTypeParams(fit->second.returnType, subst));
+    return out;
+}
+
 }  // namespace
 
 const Type* expectedArgumentTypeAt(const AnalyzedDocument& document,
@@ -1091,8 +1295,155 @@ const Type* expectedArgumentTypeAt(const AnalyzedDocument& document,
     return expected;
 }
 
+// --- substituting a generic call's bindings -------------------------------
+// A generic callee's declared parameter is a TypeParam, which is not what
+// the hover should say about the argument. The bindings are formed the same
+// way the checker forms them: explicit `<...>` type arguments first, then
+// structural unification of the declared parameter types against the argument
+// types (widened), mirroring unifyParam for the shapes a signature nests.
+// A parameter no argument binds stays unbound and the hover falls back to
+// the raw parameter type.
+
+void unifyExpectedArgument(const Type& param, const Type& arg,
+                           std::vector<std::pair<std::string, Type>>& subst) {
+    if (param.kind == TypeKind::TypeParam) {
+        if (arg.isUnknown() || arg.isError() || isPlaceholderType(arg)) {
+            return;
+        }
+        for (const auto& entry : subst) {
+            if (entry.first == param.name) return;
+        }
+        subst.emplace_back(param.name, arg);
+        return;
+    }
+    if (param.kind == TypeKind::Array && arg.kind == TypeKind::Array &&
+        !param.parts.empty() && !arg.parts.empty()) {
+        unifyExpectedArgument(param.parts.front(), arg.parts.front(), subst);
+        return;
+    }
+    if (param.kind == TypeKind::Class && arg.kind == TypeKind::Class &&
+        param.name == arg.name) {
+        const std::size_t count = param.parts.size() < arg.parts.size()
+                                      ? param.parts.size()
+                                      : arg.parts.size();
+        for (std::size_t i = 0; i < count; ++i) {
+            unifyExpectedArgument(param.parts[i], arg.parts[i], subst);
+        }
+        return;
+    }
+    if (param.kind == TypeKind::Nullable && !param.parts.empty()) {
+        unifyExpectedArgument(param.parts.front(), arg, subst);
+        return;
+    }
+    if (param.kind == TypeKind::Function && arg.kind == TypeKind::Function) {
+        const std::size_t count = param.parts.size() < arg.parts.size()
+                                      ? param.parts.size()
+                                      : arg.parts.size();
+        for (std::size_t i = 0; i < count; ++i) {
+            unifyExpectedArgument(param.parts[i], arg.parts[i], subst);
+        }
+        return;
+    }
+}
+
+Type widenLiteralType(const Type& t) {
+    return t.isLiteral() ? t.literalBaseType() : t;
+}
+
+std::optional<Type> substitutedArgumentTypeAt(const AnalyzedDocument& document,
+                                              std::uint32_t cursor) {
+    const CallExpr* best = nullptr;
+    forEachNode(*document.entry->ast, [&](const Node& node) {
+        if (node.kind != NodeKind::CallExpr || !node.span.valid() ||
+            node.span.file != document.file || cursor < node.span.begin.offset ||
+            cursor > node.span.end.offset) {
+            return;
+        }
+        const auto& call = static_cast<const CallExpr&>(node);
+        if (call.callee == nullptr || !call.callee->span.valid() ||
+            cursor < call.callee->span.end.offset) {
+            return;
+        }
+        if (best == nullptr || call.span.length() < best->span.length()) {
+            best = &call;
+        }
+    });
+    if (best == nullptr || best->callee == nullptr) return std::nullopt;
+    const Expr& callee = *best->callee;
+    const std::uint32_t open = openParenAfter(
+        document.file->text, callee.span.end.offset, cursor);
+    if (open == kNoOffset) return std::nullopt;
+    const int argument = countArguments(document.file->text, open, cursor);
+    if (argument < 0) return std::nullopt;
+    // The callee declaration, as the binding table reports it (an identifier
+    // callee declared in this file); a callee the table cannot place keeps
+    // the plain hover.
+    std::uint32_t declNodeId = 0;
+    if (callee.kind == NodeKind::Identifier) {
+        const auto resolvedIt = document.sema.resolvedBindings.find(callee.nodeId);
+        if (resolvedIt != document.sema.resolvedBindings.end()) {
+            declNodeId = resolvedIt->second;
+        }
+        if (declNodeId == 0) {
+            const SymbolInfo* symbol = nearestSymbolAt(
+                document.sema, static_cast<const Identifier&>(callee).name,
+                *document.file, callee.span.begin.offset);
+            if (symbol != nullptr) declNodeId = symbol->declNodeId;
+        }
+    }
+    const auto fit = document.sema.functions.find(declNodeId);
+    if (fit == document.sema.functions.end() || fit->second.typeParams.empty()) {
+        return std::nullopt;
+    }
+    const FunctionInfo& info = fit->second;
+    std::vector<std::pair<std::string, Type>> subst;
+    auto bind = [&subst](const std::string& name, const Type& value) {
+        for (const auto& entry : subst) {
+            if (entry.first == name) return;
+        }
+        subst.emplace_back(name, value);
+    };
+    for (std::size_t i = 0; i < best->typeArgs.size() &&
+                               i < info.typeParams.size(); ++i) {
+        if (best->typeArgs[i] == nullptr) continue;
+        const Type* resolved = document.sema.typeOf(best->typeArgs[i]->nodeId);
+        if (resolved == nullptr) continue;
+        bind(info.typeParams[i].name, *resolved);
+    }
+    for (std::size_t i = 0; i < best->arguments.size() &&
+                            i < info.paramTypes.size(); ++i) {
+        const ExprPtr& item = best->arguments[i];
+        if (item == nullptr || item->kind == NodeKind::SpreadElement) continue;
+        const Type* argType = document.sema.typeOf(item->nodeId);
+        if (argType == nullptr) continue;
+        unifyExpectedArgument(info.paramTypes[i], widenLiteralType(*argType),
+                              subst);
+    }
+    if (info.hasRest && !info.paramTypes.empty()) {
+        for (std::size_t i = info.paramTypes.size();
+             i < best->arguments.size(); ++i) {
+            const ExprPtr& item = best->arguments[i];
+            if (item == nullptr || item->kind == NodeKind::SpreadElement) continue;
+            const Type* argType = document.sema.typeOf(item->nodeId);
+            if (argType == nullptr) continue;
+            unifyExpectedArgument(info.paramTypes.back(),
+                                  widenLiteralType(*argType), subst);
+        }
+    }
+    if (subst.empty()) return std::nullopt;
+    const std::size_t index = static_cast<std::size_t>(argument);
+    if (index < info.paramTypes.size()) {
+        return instantiateTypeParams(info.paramTypes[index], subst);
+    }
+    if (info.hasRest && !info.paramTypes.empty()) {
+        return instantiateTypeParams(info.paramTypes.back(), subst);
+    }
+    return std::nullopt;
+}
+
 // The declaration an import binds, in the imported module: the export the
-// import names. Null when the name is not imported from a local module.
+// import names (resolving re-export chains through barrels). Null when the
+// name is not imported from a local module.
 const Node* importedDeclarationFor(const AnalyzedDocument& document,
                                    const std::string& name) {
     if (document.entry == nullptr || document.entry->ast == nullptr ||
@@ -1123,7 +1474,42 @@ const Node* importedDeclarationFor(const AnalyzedDocument& document,
         break;
     }
     if (!matched) return nullptr;
-    return findExported(*unit->ast, importedName, wantDefault).node;
+    // A re-export chain (`export { combine as merge } from "./a.cp3"`,
+    // `export * from "./a.cp3"`) lands on the declaring module.
+    const std::optional<ExportedDeclaration> hit = resolveExportChain(
+        *document.graph, unit, importedName, wantDefault);
+    return hit.has_value() ? hit->declaration : nullptr;
+}
+
+// The visible type of an unannotated `const X = <literal>` declaration: the
+// literal's base primitive. Anything else (a call, a reference to another
+// binding) carries no declarable type in the source, so the hover keeps the
+// bare name.
+std::string literalTypeOf(const std::string& name,
+                          const VariableDeclarator& declarator) {
+    const Expr* init = declarator.init.get();
+    if (init == nullptr) return name;
+    std::string shown;
+    switch (init->kind) {
+        case NodeKind::NumberLiteral:
+            shown = "number";
+            break;
+        case NodeKind::StringLiteral:
+            shown = "string";
+            break;
+        case NodeKind::BoolLiteral:
+            shown = "boolean";
+            break;
+        case NodeKind::NullLiteral:
+            shown = "null";
+            break;
+        case NodeKind::UndefinedLiteral:
+            shown = "undefined";
+            break;
+        default:
+            break;
+    }
+    return shown.empty() ? name : name + ": " + shown;
 }
 
 // The hover's text for a declaration that lives in another module: the
@@ -1176,7 +1562,21 @@ std::string describeImportedDeclaration(const Node& declaration,
                 if (declarator->type != nullptr) {
                     return name + ": " + describeTypeSyntax(*declarator->type);
                 }
-                return name;
+                return literalTypeOf(name, *declarator);
+            }
+            return name;
+        }
+        // A simple `export const X = ...` lands here: findDirect reports the
+        // declarator, not the statement. The annotation names the type when
+        // there is one; otherwise the initializer's literal kind does.
+        case NodeKind::VariableDeclarator: {
+            const auto& declarator =
+                static_cast<const VariableDeclarator&>(declaration);
+            if (declarator.type != nullptr) {
+                return name + ": " + describeTypeSyntax(*declarator.type);
+            }
+            if (declarator.init != nullptr) {
+                return literalTypeOf(name, declarator);
             }
             return name;
         }
@@ -1185,9 +1585,10 @@ std::string describeImportedDeclaration(const Node& declaration,
     }
 }
 
-// The hover's text for a member of a class or interface, in this file or in
-// an imported module.
-std::string describeMemberOf(const Node& owner, const std::string& member) {
+// The `member` of one declaration, or nothing when the declaration does not
+// carry it. The interface and class branches of describeMemberOf share this.
+std::string describeMemberInDeclaration(const Node& owner,
+                                        const std::string& member) {
     if (owner.kind == NodeKind::ClassDeclaration) {
         const auto& cls = static_cast<const ClassDeclaration&>(owner);
         for (const ClassMemberPtr& declaration : cls.members) {
@@ -1217,7 +1618,7 @@ std::string describeMemberOf(const Node& owner, const std::string& member) {
                 return out;
             }
         }
-        return member;
+        return std::string();
     }
     if (owner.kind == NodeKind::InterfaceDeclaration) {
         const auto& interface = static_cast<const InterfaceDeclaration&>(owner);
@@ -1247,7 +1648,53 @@ std::string describeMemberOf(const Node& owner, const std::string& member) {
                 return out;
             }
         }
-        return member;
+        return std::string();
+    }
+    return std::string();
+}
+
+// The hover's text for a member of a class or interface, in this file or in
+// an imported module. An interface may extend several bases; the bases are
+// walked transitively (the member a base declares renders as that base's own
+// line).
+std::string describeMemberOf(const AnalyzedDocument& document,
+                             const Node& owner, const std::string& member) {
+    if (const std::string found = describeMemberInDeclaration(owner, member);
+        !found.empty()) {
+        return found;
+    }
+    if (owner.kind != NodeKind::InterfaceDeclaration) return member;
+    std::vector<const InterfaceDeclaration*> worklist;
+    std::vector<std::string> seen;
+    auto pushBases = [&](const InterfaceDeclaration& declaration) {
+        for (const TypePtr& base : declaration.extendsTypes) {
+            if (base == nullptr || base->kind != NodeKind::NamedType) continue;
+            const std::string name =
+                static_cast<const NamedType&>(*base).name;
+            if (name.empty()) continue;
+            bool known = false;
+            for (const std::string& mark : seen) {
+                if (mark == name) { known = true; break; }
+            }
+            if (known) continue;
+            seen.push_back(name);
+            if (const InterfaceDeclaration* found =
+                    findInterfaceByName(document, name)) {
+                worklist.push_back(found);
+            }
+        }
+    };
+    const auto& interface = static_cast<const InterfaceDeclaration&>(owner);
+    pushBases(interface);
+    int guard = 0;
+    while (!worklist.empty() && guard++ < 32) {
+        const InterfaceDeclaration* current = worklist.back();
+        worklist.pop_back();
+        if (const std::string found = describeMemberInDeclaration(*current, member);
+            !found.empty()) {
+            return found;
+        }
+        pushBases(*current);
     }
     return member;
 }
@@ -1265,9 +1712,12 @@ std::string declaredTypeNameOf(const Program& program,
         if (node.kind == NodeKind::Parameter) {
             const auto& parameter = static_cast<const Parameter&>(node);
             if (parameterBindingName(parameter) != name) return;
-            if (parameter.type != nullptr &&
-                parameter.type->kind == NodeKind::NamedType) {
-                found = static_cast<const NamedType&>(*parameter.type).name;
+            if (parameter.type != nullptr) {
+                if (parameter.type->kind == NodeKind::NamedType) {
+                    found = static_cast<const NamedType&>(*parameter.type).name;
+                } else {
+                    found = describeTypeSyntax(*parameter.type);
+                }
             }
             return;
         }
@@ -1278,9 +1728,12 @@ std::string declaredTypeNameOf(const Program& program,
             return;
         }
         if (static_cast<const Identifier&>(*declarator.id).name != name) return;
-        if (declarator.type != nullptr &&
-            declarator.type->kind == NodeKind::NamedType) {
-            found = static_cast<const NamedType&>(*declarator.type).name;
+        if (declarator.type != nullptr) {
+            if (declarator.type->kind == NodeKind::NamedType) {
+                found = static_cast<const NamedType&>(*declarator.type).name;
+            } else {
+                found = describeTypeSyntax(*declarator.type);
+            }
             return;
         }
         if (declarator.init != nullptr &&
@@ -1426,9 +1879,17 @@ std::optional<lsp::HoverAnswer> hoverAt(const std::string& path,
     // can show is the type the call expects at this position - and nothing at
     // all when the position has no expected type.
     if (isLiteralNode(*node)) {
+        // A generic call binds its type parameters from the explicit type
+        // arguments and the arguments, and the hover reports the bound type,
+        // not the parameter's TypeParam.
+        if (const std::optional<Type> substituted =
+                substitutedArgumentTypeAt(*document, offset)) {
+            answer.contents = describeHoverType(*substituted);
+            return answer;
+        }
         const Type* expected = expectedArgumentTypeAt(*document, offset);
         if (expected != nullptr) {
-            answer.contents = describe(*expected);
+            answer.contents = describeHoverType(*expected);
             return answer;
         }
         const std::string syntax =
@@ -1454,11 +1915,29 @@ std::optional<lsp::HoverAnswer> hoverAt(const std::string& path,
     // The documentation: the std surface's own description, or the doc
     // comment of the declaration the name refers to.
     const DocAnswer doc = documentationAt(*document, *node, name, symbol);
+    // A generic instantiation site (`identity<number>(3)`, `new Box<string>()`):
+    // the hover shows the instantiation, not the declaration's bare type
+    // parameter list.
+    if (const std::string instantiated =
+            instantiatedCalleeHover(*document, *node);
+        !instantiated.empty()) {
+        answer.contents = instantiated;
+        answer.documentation = doc.signature.empty()
+                                   ? doc.body
+                                   : renderStdDoc(doc.signature, doc.body);
+        return answer;
+    }
     // A structural value (an interface, an object literal) has no nominal
     // type to show - the resolved type is only an internal shape label. The
     // members are what the hover prints instead.
     const std::string members =
         describeValueMembers(*document, name, offset);
+    // An imported-typed variable (`const config: Config = ...`) carries the
+    // shape label sema synthesizes for the interface, not the annotation's
+    // own name; surface the annotation when it names a type.
+    const std::string annotated = !name.empty()
+        ? declaredTypeNameOf(*document->entry->ast, name)
+        : std::string();
     // The engine answers only from the checker's own inference: a type worth
     // showing is not unknown, error, the internal placeholder behind an
     // unresolved import, or `never`.
@@ -1467,15 +1946,19 @@ std::optional<lsp::HoverAnswer> hoverAt(const std::string& path,
         if (!name.empty()) {
             // An identifier (or a named member): the declaration-site format
             // this editor has always shown - `name: type`.
-            answer.contents = name + ": " +
-                              (members.empty() ? describe(*type) : members);
+            const std::string shown =
+                (!annotated.empty() && type != nullptr &&
+                 isPlaceholderType(*type))
+                    ? annotated
+                    : (members.empty() ? describeHoverType(*type) : members);
+            answer.contents = name + ": " + shown;
         } else {
             // A value expression: the described type on its own line, no
             // prefix. A literal widens to its base primitive (`describe()`
             // prints the literal's value, which would only echo the source).
             const Type& shown = type->isLiteral() ? type->literalBaseType()
                                                   : *type;
-            answer.contents = members.empty() ? describe(shown) : members;
+            answer.contents = members.empty() ? describeHoverType(shown) : members;
         }
         answer.documentation = doc.signature.empty()
                                    ? doc.body
@@ -1488,6 +1971,14 @@ std::optional<lsp::HoverAnswer> hoverAt(const std::string& path,
     if (!name.empty()) {
         if (const Node* imported = importedDeclarationFor(*document, name)) {
             answer.contents = describeImportedDeclaration(*imported, name);
+            answer.documentation = doc.body;
+            return answer;
+        }
+        // A placeholder-typed binding whose declared annotation names a type
+        // (an interface from another module, say) reports the annotation:
+        // the name is the most the hover can honestly show at this position.
+        if (!annotated.empty()) {
+            answer.contents = name + ": " + annotated;
             answer.documentation = doc.body;
             return answer;
         }
@@ -1507,13 +1998,13 @@ std::optional<lsp::HoverAnswer> hoverAt(const std::string& path,
         if (!ownerName.empty()) {
             if (const ClassDeclaration* owner =
                     findClassByName(*document, ownerName)) {
-                answer.contents = describeMemberOf(*owner, name);
+                answer.contents = describeMemberOf(*document, *owner, name);
                 answer.documentation = doc.body;
                 return answer;
             }
             if (const InterfaceDeclaration* owner =
                     findInterfaceByName(*document, ownerName)) {
-                answer.contents = describeMemberOf(*owner, name);
+                answer.contents = describeMemberOf(*document, *owner, name);
                 answer.documentation = doc.body;
                 return answer;
             }

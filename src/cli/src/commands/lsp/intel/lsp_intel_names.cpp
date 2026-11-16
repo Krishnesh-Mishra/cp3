@@ -834,6 +834,15 @@ std::vector<std::string> legalKeywords(CompletionPosition position,
             return out;
     }
     for (const char* word : kStatementKeywords) out.push_back(word);
+    // A statement may start with `await` inside an async function (and at the
+    // top level, where CP3 supports await). The table above does not carry it
+    // because it is contextual, not always legal: offer it only when the
+    // cursor sits where await is allowed.
+    if (awaitAllowed && (position == CompletionPosition::StatementStart ||
+                         position == CompletionPosition::TryBlock ||
+                         position == CompletionPosition::SwitchBlock)) {
+        out.push_back("await");
+    }
     return out;
 }
 

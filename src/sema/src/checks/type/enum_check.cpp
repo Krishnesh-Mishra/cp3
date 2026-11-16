@@ -416,6 +416,8 @@ void Analyzer::registerEnum(EnumDeclaration& e) {
                        BindingSpec{.isConst = true, .declNodeId = e.nodeId});
         enums_[e.name] = std::move(info);
     }
+    // A doc comment above the declaration is hover documentation.
+    publishDoc(e.nodeId, e.span);
     setType(e, enumType);
 }
 

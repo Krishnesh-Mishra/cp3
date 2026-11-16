@@ -5,11 +5,13 @@
 // and renameAt (detail/lsp_intel.hpp).
 //
 // The three answers come out of one resolution pipeline:
-//   * the cursor must sit on an Identifier (a binding use or a declared name)
-//     or on the NAME inside a declaration statement node whose name is a plain
-//     string (function/class/interface/enum/type alias); member keys,
-//     object-literal keys, specifier strings and type references are not
-//     identifiers and are refused;
+//   * the cursor must sit on an Identifier (a binding use or a declared name),
+//     on a type-position spelling (a NamedType whose carved name covers the
+//     position), on an import specifier, or on the NAME inside a declaration
+//     statement node whose name is a plain string (function/class/interface/
+//     enum/type alias); member keys, object-literal keys and keywords are how
+//     the binding machinery refuses and hands the position to the member
+//     fallback;
 //   * the binding is resolved through `SemaResult::resolvedBindings` for uses,
 //     or to the declaration node for declaration cursors (shadowing is the
 //     compiler's own answer);
@@ -27,7 +29,7 @@
 //   * when any step cannot prove the binding, the whole answer is empty -
 //     an empty rename is safe, a wrong rename is data loss.
 // Type-position references (`x: combine`) carry no identifier node and are
-// deliberately not collected.
+// collected by a name match on type-ref nodes.
 // =============================================================================
 #include "detail/lsp/lsp_intel.hpp"
 
@@ -161,103 +163,6 @@ const ModuleDependency* findDependency(const ModuleGraph& graph,
         }
     }
     return nullptr;
-}
-
-// The declaration node for `name` directly inside `program`, or nullptr.
-// Returns the statement for Function/Class/Interface/Enum/TypeAlias, the
-// declarator for a variable binding.
-const Node* directHitIn(const Program& program, const std::string& name) {
-    const auto hitInStatement = [&name](const Stmt& statement) -> const Node* {
-        switch (statement.kind) {
-            case NodeKind::FunctionDeclaration:
-            case NodeKind::ClassDeclaration:
-            case NodeKind::InterfaceDeclaration:
-            case NodeKind::EnumDeclaration:
-            case NodeKind::TypeAliasDeclaration:
-                return declarationNameOf(statement) == name ? &statement : nullptr;
-            case NodeKind::VariableDeclaration: {
-                const auto& declaration =
-                    static_cast<const VariableDeclaration&>(statement);
-                for (const VariableDeclaratorPtr& declarator :
-                     declaration.declarations) {
-                    if (declarator == nullptr || declarator->id == nullptr) continue;
-                    if (declarator->id->kind != NodeKind::Identifier) continue;
-                    if (static_cast<const Identifier&>(*declarator->id).name !=
-                        name) {
-                        continue;
-                    }
-                    return declarator.get();
-                }
-                return nullptr;
-            }
-            default:
-                return nullptr;
-        }
-    };
-    for (const StmtPtr& statement : program.body) {
-        if (statement == nullptr) continue;
-        const Node* hit = hitInStatement(*statement);
-        if (hit != nullptr) return hit;
-        if (statement->kind != NodeKind::ExportDeclaration) continue;
-        const auto& declaration = static_cast<const ExportDeclaration&>(*statement);
-        if (declaration.declaration == nullptr) continue;
-        hit = hitInStatement(*declaration.declaration);
-        if (hit != nullptr) return hit;
-    }
-    return nullptr;
-}
-
-// The terminal declaration for `name` exported by `unit`, following re-export
-// chains (`export { x } from "./m"`). std/package/native/unknown hops refuse.
-struct ChainTarget {
-    CompilationUnit* unit = nullptr;
-    const Node* declaration = nullptr;
-    std::string name;
-};
-
-std::optional<ChainTarget> resolveExportedChain(const ModuleGraph& graph,
-                                                CompilationUnit* unit,
-                                                std::string name) {
-    const std::vector<CompilationUnit*>& units = graph.units();
-    for (std::size_t hops = 0; hops <= units.size(); ++hops) {
-        if (unit == nullptr || unit->ast == nullptr) return std::nullopt;
-        if (const Node* hit = directHitIn(*unit->ast, name)) {
-            return ChainTarget{unit, hit, name};
-        }
-        // An alias over a local declaration (`export { combine as x }`) in the
-        // same unit.
-        bool followed = false;
-        for (const StmtPtr& statement : unit->ast->body) {
-            if (statement == nullptr ||
-                statement->kind != NodeKind::ExportDeclaration) {
-                continue;
-            }
-            const auto& declaration =
-                static_cast<const ExportDeclaration&>(*statement);
-            for (const ExportSpecifierPtr& specifier : declaration.specifiers) {
-                if (specifier == nullptr || specifier->exported != name) continue;
-                if (declaration.source.empty()) {
-                    if (const Node* hit = directHitIn(*unit->ast, specifier->local)) {
-                        return ChainTarget{unit, hit, specifier->local};
-                    }
-                    return std::nullopt;
-                }
-                const ModuleDependency* dependency = findDependency(
-                    graph, unit->id, declaration.source);
-                if (dependency == nullptr || !dependency->resolved ||
-                    dependency->resolution != ModuleResolution::Local) {
-                    return std::nullopt;
-                }
-                unit = graph.unit(dependency->imported);
-                name = specifier->local;
-                followed = true;
-                break;
-            }
-            if (followed) break;
-        }
-        if (!followed) return std::nullopt;
-    }
-    return std::nullopt;  // hop bound exceeded: refuse
 }
 
 // Which names a declaration is exported under from its own unit.
@@ -558,7 +463,11 @@ CompileOptions compileOptionsFor(const AnalyzedDocument& document,
     return compile;
 }
 
-// Every identifier in `view` that resolved to `declNodeId`.
+// Every identifier in `view` that resolved to `declNodeId`. A `new C()`
+// callee records no resolvedBindings edge (the construct walk reads the
+// class binding directly), so those are bound by name, the same shadowing
+// answer the value side gets: the nearest declaration at or before the
+// use, matched by the symbol table.
 void collectBoundUses(const Program& program, const SourceFile& file,
                       const SemaResult& sema, std::uint32_t declNodeId,
                       std::vector<Occurrence>& out) {
@@ -567,6 +476,66 @@ void collectBoundUses(const Program& program, const SourceFile& file,
         if (!node.span.valid() || node.span.file != &file) return;
         const auto it = sema.resolvedBindings.find(node.nodeId);
         if (it == sema.resolvedBindings.end() || it->second != declNodeId) return;
+        addOccurrence(out, node.span, /*isDeclaration=*/false);
+    });
+    forEachNode(program, [&](const Node& node) {
+        if (node.kind != NodeKind::NewExpr) return;
+        const auto& construct = static_cast<const NewExpr&>(node);
+        if (construct.callee == nullptr ||
+            construct.callee->kind != NodeKind::Identifier) {
+            return;
+        }
+        const Node& callee = *construct.callee;
+        if (!callee.span.valid() || callee.span.file != &file) return;
+        if (sema.resolvedBindings.find(callee.nodeId) !=
+            sema.resolvedBindings.end()) {
+            return;  // already collected through the binding
+        }
+        const auto& id = static_cast<const Identifier&>(callee);
+        const SymbolInfo* symbol =
+            nearestSymbolAt(sema, id.name, file, callee.span.begin.offset);
+        if (symbol == nullptr || symbol->declNodeId != declNodeId) return;
+        addOccurrence(out, callee.span, /*isDeclaration=*/false);
+    });
+}
+
+// True for the declarations that can be named in type positions without an
+// identifier node (interfaces, classes, enums and type aliases).
+bool isTypeBindingDeclaration(const Node* declaration) {
+    if (declaration == nullptr) return false;
+    switch (declaration->kind) {
+        case NodeKind::InterfaceDeclaration:
+        case NodeKind::ClassDeclaration:
+        case NodeKind::EnumDeclaration:
+        case NodeKind::TypeAliasDeclaration:
+            return true;
+        default:
+            return false;
+    }
+}
+
+// Kinds that spell a (possibly parameterized) type; anything beyond this
+// range is not a type position.
+bool isTypeRefKind(NodeKind kind) {
+    return kind >= NodeKind::NamedType && kind <= NodeKind::ParenthesizedType;
+}
+
+// Type positions (`: Sized`, `implements Sized`, `extends Sized`,
+// `type Ref = Sized | Other`) spell the declaration's name without
+// producing an identifier node or a binding edge, so the pass above never
+// sees them. Any type-kind node whose whole span spells `name` is an
+// occurrence of the declaration of that name - shadowing cannot occur in a
+// type-only name space segment shared with imports of the same name.
+void collectTypeOccurrences(const Program& program, const SourceFile& file,
+                            const std::string& name,
+                            std::vector<Occurrence>& out) {
+    if (name.empty()) return;
+    forEachNode(program, [&](const Node& node) {
+        if (!isTypeRefKind(node.kind)) return;
+        if (!node.span.valid() || node.span.file != &file) return;
+        if (node.span.length() != name.size()) return;
+        if (file.text.compare(node.span.begin.offset, name.size(), name) != 0)
+            return;
         addOccurrence(out, node.span, /*isDeclaration=*/false);
     });
 }
@@ -732,33 +701,134 @@ std::optional<ResolvedTarget> resolveTarget(AnalyzedDocument& document,
     if (node == nullptr) return std::nullopt;
 
     ResolvedTarget target;
-    if (node->kind != NodeKind::Identifier) {
+    // A cursor on an export specifier (`export { x as y } from "./m"`): the
+    // positions bind to the declaration the chain resolves to. The local
+    // position resolves to the sourced export directly (or to the local
+    // declaration for a plain alias); the exported position resolves within
+    // the exporting unit's own chain.
+    if (node->kind == NodeKind::ExportSpecifier) {
+        if (document.graph == nullptr) return std::nullopt;
+        const auto& specifier = static_cast<const ExportSpecifier&>(*node);
+        const ExportDeclaration* declaration = nullptr;
+        for (const StmtPtr& statement : program.body) {
+            if (statement == nullptr ||
+                statement->kind != NodeKind::ExportDeclaration) {
+                continue;
+            }
+            const auto& exporting =
+                static_cast<const ExportDeclaration&>(*statement);
+            if (spanCovers(exporting.span, specifier.span)) {
+                declaration = &exporting;
+                break;
+            }
+        }
+        if (declaration == nullptr) return std::nullopt;
+        const std::uint32_t cursor = offsetOf(file, line, column);
+        SourceSpan carve;
+        bool onLocal = true;
+        if (!specifier.local.empty() &&
+            carveName(specifier.span, specifier.local, &carve) &&
+            cursor >= carve.begin.offset && cursor < carve.end.offset) {
+            onLocal = true;
+        } else if (!specifier.exported.empty() &&
+                   carveName(specifier.span, specifier.exported, &carve) &&
+                   cursor >= carve.begin.offset && cursor < carve.end.offset) {
+            onLocal = false;
+        } else {
+            return std::nullopt;  // a punct or keyword: no binding to prove
+        }
+        CompilationUnit* seedUnit = entry;
+        if (!declaration->source.empty() && onLocal) {
+            const ModuleDependency* dependency =
+                findDependency(*document.graph, entry->id,
+                               declaration->source);
+            if (dependency == nullptr || !dependency->resolved ||
+                dependency->resolution != ModuleResolution::Local) {
+                return std::nullopt;
+            }
+            seedUnit = document.graph->unit(dependency->imported);
+            if (seedUnit == nullptr || seedUnit->ast == nullptr) {
+                return std::nullopt;
+            }
+        }
+        const std::string seedName =
+            onLocal ? specifier.local : specifier.exported;
+        const std::optional<ExportedDeclaration> chain =
+            resolveExportChain(*document.graph, seedUnit, seedName,
+                               /*wantDefault=*/false);
+        if (!chain.has_value()) return std::nullopt;
+        target.name = chain->name;
+        target.declaringUnit = chain->unit;
+        target.declaration = chain->declaration;
+        target.declNodeId = chain->declaration->nodeId;
+        if (!finishDeclaringUnit(target, *chain->declaration,
+                                 *chain->unit->ast)) {
+            return std::nullopt;
+        }
+        return target;
+    }
+    std::string name;
+    const SymbolInfo* symbol = nullptr;
+    std::uint32_t declNodeId = 0;
+    if (node->kind == NodeKind::NamedType) {
+        // A cursor on a type-position spelling (`implements Sized`,
+        // `: Sized`, `type Ref = Sized`): there is no identifier node and
+        // no binding edge, so the name is matched at the node itself and
+        // resolved by name - the nearest declaration at or before the
+        // cursor, the same shadowing answer the value side gives.
+        const auto& typeName = static_cast<const NamedType&>(*node);
+        if (typeName.name.empty()) return std::nullopt;
+        SourceSpan nameSpan;
+        if (!carveName(typeName.span, typeName.name, &nameSpan)) {
+            return std::nullopt;
+        }
+        if (!spanContains(nameSpan, file, line, column)) return std::nullopt;
+        name = typeName.name;
+        symbol = nearestSymbolAt(document.sema, name, file, offset);
+        if (symbol == nullptr) return std::nullopt;
+        declNodeId = symbol->declNodeId;
+    } else if (node->kind == NodeKind::ImportSpecifier) {
+        // A cursor on the import's own specifier: the binding the import
+        // introduces (resolves through the import exactly like a use of the
+        // local binding, including re-export chains).
+        const auto& spec = static_cast<const ImportSpecifier&>(*node);
+        if (!spec.local.empty() && spec.local != spec.imported) {
+            // Aliased: the marker alone cannot say which side binds where,
+            // refuse rather than guess.
+            return std::nullopt;
+        }
+        name = spec.local.empty() ? spec.imported : spec.local;
+        if (name.empty()) return std::nullopt;
+        const auto it = document.sema.symbols.find(spec.nodeId);
+        if (it == document.sema.symbols.end()) return std::nullopt;
+        symbol = &it->second;
+        declNodeId = spec.nodeId;
+    } else if (node->kind != NodeKind::Identifier) {
         // A declaration node whose name is a plain string: the cursor is on
         // the declared name when the carved occurrence covers the position.
-        const std::string name = declarationNameOf(*node);
-        if (name.empty()) return std::nullopt;
+        const std::string declaredName = declarationNameOf(*node);
+        if (declaredName.empty()) return std::nullopt;
         SourceSpan nameSpan;
-        if (!carveName(node->span, name, &nameSpan)) return std::nullopt;
+        if (!carveName(node->span, declaredName, &nameSpan)) {
+            return std::nullopt;
+        }
         if (!spanContains(nameSpan, file, line, column)) return std::nullopt;
-        target.name = name;
+        target.name = declaredName;
         target.declaringUnit = entry;
         target.declNodeId = node->nodeId;
         if (!finishDeclaringUnit(target, *node, program)) return std::nullopt;
         return target;
-    }
-
+    } else {
     const Identifier& identifier = static_cast<const Identifier&>(*node);
     if (isKeySpan(keySpans, identifier.span)) return std::nullopt;  // member/key name
     const bool inPattern = insidePatternBinding(patternSpans, identifier.span);
-    const std::string& name = identifier.name;
+    name = identifier.name;
 
     // Resolve the binding: resolvedBindings for uses (the compiler's own
     // shadowing answer), else the nearest declaration at or before the cursor.
     // Inside a binding pattern the symbol entry is keyed by the declarator id
     // and holds one binder (the last published), so a name+span match is the
     // only way to prove which one the cursor is on.
-    const SymbolInfo* symbol = nullptr;
-    std::uint32_t declNodeId = 0;
     if (inPattern) {
         const Node* binding = enclosingBinding(program, identifier.span);
         if (binding == nullptr) return std::nullopt;
@@ -792,6 +862,7 @@ std::optional<ResolvedTarget> resolveTarget(AnalyzedDocument& document,
         symbol = nearestSymbolAt(document.sema, name, file, offset);
         if (symbol != nullptr) declNodeId = symbol->declNodeId;
     }
+    }
     if (symbol == nullptr && declNodeId == 0) return std::nullopt;
 
     // Import binding?
@@ -823,13 +894,20 @@ std::optional<ResolvedTarget> resolveTarget(AnalyzedDocument& document,
     const bool localModule = dependency != nullptr && dependency->resolved &&
                              dependency->resolution == ModuleResolution::Local;
 
-    if (site.isNamed && !site.isAliased && localModule) {
-        // Through-resolution: rename the declaration in the providing unit.
-        const std::string imported = site.specifier->imported;
-        const std::optional<ChainTarget> chain =
-            resolveExportedChain(*document.graph,
-                                 document.graph->unit(dependency->imported),
-                                 imported);
+    // Default imports from local modules are through-resolvable like named
+    // ones (the default binding carries the declaration); an aliased
+    // namespace/native binding binds a unit-local name.
+    const bool through = (site.isNamed && !site.isAliased) || site.isDefault;
+    if (through && localModule) {
+        // Through-resolution: rename the declaration in the providing unit,
+        // following re-export chains (`export { x as y } from "./m"`,
+        // `export * from "./m"`).
+        const bool wantDefault = site.isDefault;
+        const std::string imported =
+            wantDefault ? std::string() : site.specifier->imported;
+        CompilationUnit* start = document.graph->unit(dependency->imported);
+        const std::optional<ExportedDeclaration> chain =
+            resolveExportChain(*document.graph, start, imported, wantDefault);
         if (!chain.has_value()) return std::nullopt;
         target.name = chain->name;
         target.declaringUnit = chain->unit;
@@ -891,17 +969,6 @@ std::optional<ResolvedTarget> resolveTarget(AnalyzedDocument& document,
     return target;
 }
 
-bool fileContainsAny(const SourceFile* file, const std::vector<std::string>& names) {
-    if (file == nullptr) return false;
-    for (const std::string& name : names) {
-        if (!name.empty() &&
-            file->text.find(name) != std::string::npos) {
-            return true;
-        }
-    }
-    return false;
-}
-
 // All occurrences of the target, including cross-unit import/export strings.
 // `analyze` provides per-unit sema for units other than the entry.
 std::vector<Occurrence> collectOccurrences(AnalyzedDocument& document,
@@ -909,19 +976,32 @@ std::vector<Occurrence> collectOccurrences(AnalyzedDocument& document,
                                            const ResolvedTarget& target) {
     std::vector<Occurrence> occurrences = target.occurrences;
     const CompileOptions compile = compileOptionsFor(document, path);
-    const std::unordered_map<std::uint32_t, SemaResult> unitSemas =
-        analyzeGraphUnits(document, compile);
+    std::unordered_map<std::uint32_t, SemaResult> localSemas;
+    const std::unordered_map<std::uint32_t, SemaResult>* unitSemas = nullptr;
+    if (!document.unitSemas.empty()) {
+        // The document already analyzed the closure with the import wiring;
+        // reuse it instead of analyzing the graph again.
+        unitSemas = &document.unitSemas;
+    } else {
+        localSemas = analyzeGraphUnits(document, compile);
+        unitSemas = &localSemas;
+    }
 
     // Uses in the declaring unit.
+    const bool typeTarget = isTypeBindingDeclaration(target.declaration);
     {
         CompilationUnit* declaring = target.declaringUnit;
         const Program* program =
             declaring != nullptr ? declaring->ast.get() : nullptr;
         if (program != nullptr) {
-            UnitView view = analyzeUnitFor(document, declaring, compile, &unitSemas);
+            UnitView view = analyzeUnitFor(document, declaring, compile, unitSemas);
             if (view.sema != nullptr) {
                 collectBoundUses(*program, *view.file, *view.sema,
                                 target.declNodeId, occurrences);
+                if (typeTarget) {
+                    collectTypeOccurrences(*program, *view.file, target.name,
+                                           occurrences);
+                }
             }
         }
     }
@@ -930,28 +1010,111 @@ std::vector<Occurrence> collectOccurrences(AnalyzedDocument& document,
         return occurrences;  // unit-local: no cross-file rewrite
     }
 
-    // Uses and import/export strings in every other unit that could bind the
-    // exported names.
+    // The names each unit in the import closure exports under (pre-rename
+    // state), keyed by unit id. The declaring unit contributes `target.follows`;
+    // a unit that re-exports a followed name re-exports it under the exported
+    // specifier name (`export *` forwards every followed name verbatim). The
+    // module loader orders dependencies before their importers, so a unit's
+    // own export table is final by the time its importers visit it; one extra
+    // pass covers import cycles.
+    std::unordered_map<std::uint32_t, std::vector<std::string>> exportsOf;
+    if (document.graph != nullptr) {
+        if (target.declaringUnit != nullptr) {
+            exportsOf[target.declaringUnit->id] = target.follows;
+        }
+        for (std::size_t pass = 0; pass < 2; ++pass) {
+            for (CompilationUnit* unit : document.graph->compilationOrder()) {
+                if (unit == nullptr || unit->isPrelude || unit->ast == nullptr) {
+                    continue;
+                }
+                if (unit == target.declaringUnit) continue;
+                std::vector<std::string> added;
+                for (const ModuleDependency& dependency :
+                     document.graph->dependencies()) {
+                    if (dependency.importer != unit->id) continue;
+                    if (!dependency.resolved ||
+                        dependency.resolution != ModuleResolution::Local) {
+                        continue;
+                    }
+                    const auto followedIt = exportsOf.find(dependency.imported);
+                    if (followedIt == exportsOf.end()) continue;
+                    const std::vector<std::string>& followed = followedIt->second;
+                    if (followed.empty()) continue;
+                    for (const StmtPtr& statement : unit->ast->body) {
+                        if (statement == nullptr ||
+                            statement->kind != NodeKind::ExportDeclaration) {
+                            continue;
+                        }
+                        const auto& exporter =
+                            static_cast<const ExportDeclaration&>(*statement);
+                        if (exporter.kind != ExportKind::ReExportNamed &&
+                            exporter.kind != ExportKind::ReExportAll) {
+                            continue;
+                        }
+                        if (exporter.source != dependency.specifier) continue;
+                        if (exporter.kind == ExportKind::ReExportAll) {
+                            for (const std::string& name : followed) {
+                                if (std::find(added.begin(), added.end(), name) !=
+                                    added.end()) {
+                                    continue;
+                                }
+                                added.push_back(name);
+                            }
+                            continue;
+                        }
+                        for (const ExportSpecifierPtr& specifier :
+                             exporter.specifiers) {
+                            if (specifier == nullptr) continue;
+                            if (std::find(followed.begin(), followed.end(),
+                                          specifier->local) == followed.end()) {
+                                continue;
+                            }
+                            const std::string exported =
+                                specifier->exported.empty() ? specifier->local
+                                                            : specifier->exported;
+                            if (std::find(added.begin(), added.end(), exported) !=
+                                added.end()) {
+                                continue;
+                            }
+                            added.push_back(exported);
+                        }
+                    }
+                }
+                if (!added.empty()) {
+                    auto& slot = exportsOf[unit->id];
+                    for (const std::string& name : added) {
+                        if (std::find(slot.begin(), slot.end(), name) != slot.end()) {
+                            continue;
+                        }
+                        slot.push_back(name);
+                    }
+                }
+            }
+        }
+    }
+
+    // Uses and import/export tokens in every unit that has a Local edge to a
+    // unit whose export table carries a followed name.
     for (CompilationUnit* unit : document.graph->units()) {
         if (unit == nullptr) continue;
         if (unit == target.declaringUnit) continue;
         if (unit->isPrelude) continue;
         if (unit->ast == nullptr) continue;
-        // Every importer binding we rewrite is named after an exported name,
-        // so a unit that spells none of them cannot match.
-        if (!fileContainsAny(unit->file, target.follows)) continue;
+        // A unit that could bind none of the followed names cannot match.
         bool hasEdge = false;
         for (const ModuleDependency& dependency : document.graph->dependencies()) {
-            if (dependency.importer == unit->id && dependency.resolved &&
-                dependency.resolution == ModuleResolution::Local &&
-                dependency.imported == target.declaringUnit->id) {
+            if (dependency.importer != unit->id) continue;
+            if (!dependency.resolved) continue;
+            if (dependency.resolution != ModuleResolution::Local) continue;
+            const auto followedIt = exportsOf.find(dependency.imported);
+            if (followedIt != exportsOf.end() && !followedIt->second.empty()) {
                 hasEdge = true;
                 break;
             }
         }
         if (!hasEdge) continue;
 
-        UnitView view = analyzeUnitFor(document, unit, compile, &unitSemas);
+        UnitView view = analyzeUnitFor(document, unit, compile, unitSemas);
         if (view.sema == nullptr || unit->file == nullptr) continue;
         const Program& program = *unit->ast;
         const SourceFile& file = *unit->file;
@@ -959,7 +1122,10 @@ std::vector<Occurrence> collectOccurrences(AnalyzedDocument& document,
             if (dependency.importer != unit->id) continue;
             if (!dependency.resolved) continue;
             if (dependency.resolution != ModuleResolution::Local) continue;
-            if (dependency.imported != target.declaringUnit->id) continue;
+            const auto followedIt = exportsOf.find(dependency.imported);
+            if (followedIt == exportsOf.end()) continue;
+            const std::vector<std::string>& followed = followedIt->second;
+            if (followed.empty()) continue;
             for (const StmtPtr& statement : program.body) {
                 if (statement == nullptr) continue;
                 if (statement->kind == NodeKind::ImportDeclaration) {
@@ -969,8 +1135,8 @@ std::vector<Occurrence> collectOccurrences(AnalyzedDocument& document,
                     for (const ImportSpecifierPtr& specifier : import.specifiers) {
                         if (specifier == nullptr) continue;
                         const bool importedFollows =
-                            std::find(target.follows.begin(), target.follows.end(),
-                                      specifier->imported) != target.follows.end();
+                            std::find(followed.begin(), followed.end(),
+                                      specifier->imported) != followed.end();
                         if (!importedFollows) continue;
                         SourceSpan carve;
                         if (carveName(specifier->span, specifier->imported, &carve)) {
@@ -979,24 +1145,21 @@ std::vector<Occurrence> collectOccurrences(AnalyzedDocument& document,
                         }
                         const bool aliased = !specifier->local.empty() &&
                                              specifier->local != specifier->imported;
-                        if (aliased) continue;  // the alias is this unit's binding
+                        if (aliased) {
+                            // The alias is this unit's binding; the
+                            // type-position scan matches on text alone and
+                            // cannot prove it names this import.
+                            continue;
+                        }
                         const std::string local = specifier->local.empty()
                                                       ? specifier->imported
                                                       : specifier->local;
-                        forEachNode(program, [&](const Node& node) {
-                            if (node.kind != NodeKind::Identifier) return;
-                            if (!node.span.valid() || node.span.file != &file) return;
-                            const std::string& idName =
-                                static_cast<const Identifier&>(node).name;
-                            if (idName != local) return;
-                            const auto it = view.sema->resolvedBindings.find(node.nodeId);
-                            if (it == view.sema->resolvedBindings.end() ||
-                                it->second != specifier->nodeId) {
-                                return;
-                            }
-                            addOccurrence(occurrences, node.span,
-                                          /*isDeclaration=*/false);
-                        });
+                        if (typeTarget) {
+                            collectTypeOccurrences(program, file, local,
+                                                   occurrences);
+                        }
+                        collectBoundUses(program, file, *view.sema, specifier->nodeId,
+                                         occurrences);
                     }
                     continue;
                 }
@@ -1011,13 +1174,31 @@ std::vector<Occurrence> collectOccurrences(AnalyzedDocument& document,
                          exporter.specifiers) {
                         if (specifier == nullptr) continue;
                         const bool localFollows =
-                            std::find(target.follows.begin(), target.follows.end(),
-                                      specifier->local) != target.follows.end();
-                        if (!localFollows) continue;
-                        SourceSpan carve;
-                        if (carveName(specifier->span, specifier->local, &carve)) {
-                            addOccurrence(occurrences, carve,
-                                          /*isDeclaration=*/false);
+                            std::find(followed.begin(), followed.end(),
+                                      specifier->local) != followed.end();
+                        if (localFollows) {
+                            SourceSpan carve;
+                            if (carveName(specifier->span, specifier->local,
+                                          &carve)) {
+                                addOccurrence(occurrences, carve,
+                                              /*isDeclaration=*/false);
+                            }
+                        }
+                        const bool exportedFollows =
+                            !specifier->exported.empty() &&
+                            std::find(followed.begin(), followed.end(),
+                                      specifier->exported) != followed.end();
+                        // A re-export hop renames the binding itself - an
+                        // alias in the middle of a chain is part of the
+                        // symbol too, so an unrenamed alias would leave the
+                        // importers of this unit dangling.
+                        if (exportedFollows) {
+                            SourceSpan carve;
+                            if (carveName(specifier->span, specifier->exported,
+                                          &carve)) {
+                                addOccurrence(occurrences, carve,
+                                              /*isDeclaration=*/false);
+                            }
                         }
                     }
                     continue;

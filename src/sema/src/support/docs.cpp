@@ -96,6 +96,35 @@ BlockDoc blockDocEndingAt(const std::string& text, std::size_t after) {
     return doc;
 }
 
+// The modifier tokens an exported declaration may carry between its doc
+// comment and itself (`export`, `export default`, `export abstract`,
+// `declare`): the doc comment above the export documents the inner
+// declaration. Walks back over them; the caller still skips the whitespace
+// between the comment and the tokens to find the comment's end. An ordinary
+// declaration is returned unchanged.
+std::size_t exportAntecedentOf(const std::string& text, std::size_t start) {
+    std::size_t at = start;
+    for (;;) {
+        if (at >= 7 && text.compare(at - 7, 7, "export ") == 0) {
+            at -= 7;
+            continue;
+        }
+        if (at >= 8 && text.compare(at - 8, 8, "default ") == 0) {
+            at -= 8;
+            continue;
+        }
+        if (at >= 8 && text.compare(at - 8, 8, "declare ") == 0) {
+            at -= 8;
+            continue;
+        }
+        if (at >= 9 && text.compare(at - 9, 9, "abstract ") == 0) {
+            at -= 9;
+            continue;
+        }
+        return at;
+    }
+}
+
 // The text of a `///` line doc comment, or "" when the line is not one.
 std::string lineDocText(std::string_view line) {
     std::size_t at = 0;
@@ -194,10 +223,12 @@ DocComment readDocComment(const SourceFile& file, std::uint32_t offset) {
     const std::string& text = file.text;
     if (offset > text.size()) return DocComment();
     const std::size_t start = offset;
-    const std::uint32_t declLine = file.positionAt(offset).line;
+    // A doc comment above the `export` documents the inner declaration.
+    const std::size_t antecedent = exportAntecedentOf(text, start);
+    const std::uint32_t declLine = file.positionAt(antecedent).line;
 
     // --- the block form: `/** ... */` ---------------------------------------
-    const std::size_t after = skipSpaceBack(text, start);
+    const std::size_t after = skipSpaceBack(text, antecedent);
     const BlockDoc block = blockDocEndingAt(text, after);
     if (block.found) {
         const bool opensItsLine = atLineStart(text, block.open);
@@ -217,7 +248,7 @@ DocComment readDocComment(const SourceFile& file, std::uint32_t offset) {
     }
 
     // --- the line form: a run of `///` lines --------------------------------
-    if (!atLineStart(text, start)) return DocComment();
+    if (!atLineStart(text, antecedent)) return DocComment();
     std::vector<std::string> lines;
     for (std::uint32_t line = declLine; line > 1; --line) {
         const std::string doc = lineDocText(file.lineText(line - 1));

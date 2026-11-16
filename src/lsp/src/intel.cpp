@@ -540,6 +540,25 @@ Json prepareCallHierarchyResult(const DocumentView& document, std::uint32_t line
     return typeHierarchyItemsJson(document, intel, entries);
 }
 
+// The `fromRanges` of a call-hierarchy edge: every call site the compiler
+// attached to the entry, as document ranges. Ranges resolve against the
+// file the call site sits in (an empty or unresolvable path falls back to
+// the entry's own file, then to the queried document's text).
+Json callRangesJson(const DocumentView& document, const IntelHooks& intel,
+                    const HierarchyEntry& entry) {
+    Json ranges = jsonArray();
+    for (const SourceTarget& target : entry.callRanges) {
+        const std::string& path =
+            !target.path.empty() ? target.path : entry.path;
+        std::optional<std::string> fetched;
+        const std::string* text = targetTextFor(path, document, fetched, intel);
+        if (text == nullptr) continue;
+        ranges.push(rangeJson(*text, target.line, target.column,
+                              target.endLine, target.endColumn));
+    }
+    return ranges;
+}
+
 // The item the client rounded back, as the compiler's entry.
 HierarchyEntry entryOfItem(const DocumentView& document,
                             std::uint32_t itemLine, std::uint32_t itemColumn,
@@ -589,8 +608,7 @@ Json callHierarchyIncomingResult(const DocumentView& document,
         if (!item.has_value()) continue;
         Json call = jsonObject();
         call.set("from", std::move(*item));
-        Json ranges = jsonArray();
-        call.set("fromRanges", std::move(ranges));
+        call.set("fromRanges", callRangesJson(document, intel, caller));
         calls.push(std::move(call));
     }
     return calls;
@@ -620,8 +638,7 @@ Json callHierarchyOutgoingResult(const DocumentView& document,
         if (!item.has_value()) continue;
         Json call = jsonObject();
         call.set("to", std::move(*item));
-        Json ranges = jsonArray();
-        call.set("fromRanges", std::move(ranges));
+        call.set("fromRanges", callRangesJson(document, intel, callee));
         calls.push(std::move(call));
     }
     return calls;

@@ -379,6 +379,52 @@ std::vector<std::string> parameterDocs(const AnalyzedDocument& document,
 // =============================================================================
 // The answers
 // =============================================================================
+// The doc comment of a declaration that lives in another module: an import
+// binding's declaration is published in the importing module
+// (`document.sema.docs` only knows this file), so look the declaration up in
+// its own unit's sema - the entries share the unit's nodeIds.
+const DocComment* importedDocCommentOf(const AnalyzedDocument& document,
+                                       const std::string& name) {
+    if (name.empty() || document.file == nullptr ||
+        document.entry == nullptr || document.graph == nullptr ||
+        document.entry->ast == nullptr) {
+        return nullptr;
+    }
+    const ImportDeclaration* import =
+        importForName(*document.entry->ast, name, *document.file);
+    if (import == nullptr) return nullptr;
+    const ModuleDependency* dependency = dependencyFor(
+        *document.graph, document.entry->id, import->source);
+    if (dependency == nullptr || !dependency->resolved ||
+        dependency->resolution != ModuleResolution::Local) {
+        return nullptr;
+    }
+    CompilationUnit* unit = document.graph->unit(dependency->imported);
+    if (unit == nullptr || unit->ast == nullptr) return nullptr;
+    const bool wantDefault = import->defaultBinding == name;
+    std::string importedName;
+    bool matched = wantDefault;
+    for (const ImportSpecifierPtr& specifier : import->specifiers) {
+        if (specifier == nullptr) continue;
+        const std::string& local =
+            specifier->local.empty() ? specifier->imported : specifier->local;
+        if (local != name) continue;
+        importedName = specifier->imported;
+        matched = true;
+        break;
+    }
+    if (!matched) return nullptr;
+    // Follow re-export chains (`export { x as y } from "./m"`): the doc lives
+    // with the declaration the import ultimately binds.
+    const std::optional<ExportedDeclaration> hit =
+        resolveExportChain(*document.graph, unit, importedName, wantDefault);
+    if (!hit.has_value() || hit->declaration == nullptr) return nullptr;
+    const auto found = document.unitSemas.find(hit->unit->id);
+    if (found == document.unitSemas.end()) return nullptr;
+    const auto doc = found->second.docs.find(hit->declaration->nodeId);
+    return doc == found->second.docs.end() ? nullptr : &doc->second;
+}
+
 DocAnswer stdMemberDocAt(const AnalyzedDocument& document,
                           const MemberExpr& member) {
     DocAnswer answer;
@@ -481,6 +527,11 @@ DocAnswer documentationAt(const AnalyzedDocument& document, const Node& node,
     }
     if (doc == nullptr && !name.empty() && document.file != nullptr) {
         doc = docCommentAt(document, name, node.span.begin.offset);
+    }
+    if (doc == nullptr) {
+        // An import binding: the declaring module's own sema carries the
+        // doc comment, not this file's.
+        doc = importedDocCommentOf(document, name);
     }
     if (doc != nullptr) answer.body = renderDocComment(*doc);
     return answer;
