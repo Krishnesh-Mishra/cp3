@@ -259,7 +259,12 @@ export async function completionLabels(
     if (internal === undefined) {
         return undefined;
     }
-    const items = internal.suggestions ?? (internal as unknown as vscode.CompletionList).items ?? [];
+    const items = (internal.suggestions ?? (internal as unknown as vscode.CompletionList).items ?? [])
+        // The built-in snippet provider ships the extension's own snippet
+        // catalog as member completions; its labels arrive as objects
+        // ({label, description}), unlike every other item, so it is dropped
+        // here. The extension's entries and the server's carry string labels.
+        .filter((item) => typeof (item as { label?: unknown }).label === "string");
     // The internal command returns the provider's full list; VS Code's editor
     // filters it by the current-word prefix client-side. Emulate that so
     // expectations match what the user actually sees.
@@ -1696,6 +1701,7 @@ export function autoImportCases(suiteName: string, cases: readonly AutoImportCas
                     // (it is in scope); what must not happen is an import
                     // edit for it.
                     const item = offeredItems.find((candidate) => labelOf(candidate) === spec.expectOffered);
+                    console.log(`[cp3-neg] ${spec.name}: item=${JSON.stringify(item)}`);
                     const carriesImport = (item?.additionalTextEdits ?? []).some((edit) =>
                         (edit.text ?? edit.newText ?? "").includes("import"),
                     );
