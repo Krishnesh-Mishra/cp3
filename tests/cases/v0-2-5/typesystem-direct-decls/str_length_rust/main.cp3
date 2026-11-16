@@ -1,0 +1,9 @@
+import console from "std/console";
+
+// In a Rust project `String.prototype.length` is a `usize`, not an f64.
+const s = "hello world";
+const n: usize = s.length;
+console.log(n.toString());
+
+const lit: usize = "abc".length;
+console.log(lit.toString());

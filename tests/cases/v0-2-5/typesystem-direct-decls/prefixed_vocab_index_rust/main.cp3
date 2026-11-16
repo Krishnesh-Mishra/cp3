@@ -1,0 +1,9 @@
+import console from "std/console";
+
+// Mixed-vocabulary number family in subscripts: a ts-vocabulary `number`
+// and a native rust `i64` in the same source are both numeric.
+const arr = [10, 20, 30, 40];
+const c: ts_'number' = 1.0;
+const other: ts_'number' = 2.0;
+const a: i64 = 3;
+console.log(`${arr[c]} ${arr[other]} ${arr[a]}`);

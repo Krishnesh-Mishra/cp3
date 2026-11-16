@@ -1,0 +1,10 @@
+import console from "std/console";
+
+// `arr.length` is a `usize` in a Rust project.
+const arr = [10, 20, 30, 40];
+const n: usize = arr.length;
+console.log(n.toString());
+
+const nested = [[1], [2, 3]];
+const m: usize = nested.length;
+console.log(m.toString());

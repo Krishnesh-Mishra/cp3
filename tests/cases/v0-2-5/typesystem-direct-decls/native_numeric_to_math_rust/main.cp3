@@ -1,0 +1,19 @@
+import console from "std/console";
+import Math from "std/math";
+
+// Internal APIs that take numbers accept the full numeric family: native
+// rust integers, cpp vocabulary spellings, f32 and ts-vocabulary number
+// all flow in without an explicit `as number` cast.
+const n: i64 = 9;
+const two: i64 = 2;
+console.log(Math.sin(two) > 0.8 ? "sin-ok" : "sin-bad");
+console.log(`${Math.sqrt(n).toFixed(2)}`);
+
+const ll: c_'long long' = 16;
+const lng: c_'long' = 25;
+const d: c_'double' = 2.0;
+const ts: ts_'number' = 3.0;
+const fl: f32 = 4.0;
+console.log(`${Math.min(ll, lng)}`);
+console.log(`${Math.floor(d)} ${Math.floor(ts)} ${Math.floor(fl)}`);
+console.log(`${Math.pow(n, 2)}`);

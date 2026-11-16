@@ -1,0 +1,19 @@
+import console from "std/console";
+
+// A TypeScript project (no typeSystem in package.json) keeps cp3 `number`
+// for every direct declaration that the rust and cpp projects see as
+// usize / size_t / ptrdiff_t. Per-typesystem lowering must not change the
+// default surface.
+const s = "hello world";
+const n: number = s.length;
+const idx: number = s.indexOf("w");
+
+const arr = [1, 2, 3];
+const alen: number = arr.length;
+const found: number = arr.findIndex((x) => x === 2);
+const pushed: number = arr.push(4);
+
+console.log(`${n} ${idx} ${alen} ${found} ${pushed}`);
+
+const total: number = parallel.reduce(1..5, 0, (sum, i) => sum + i);
+console.log(`${total}`);

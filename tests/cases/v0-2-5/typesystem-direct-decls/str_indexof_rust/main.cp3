@@ -1,0 +1,13 @@
+import console from "std/console";
+
+// `str.indexOf` / `str.lastIndexOf` return an isize-style index in a Rust
+// project: they yield -1 on miss, so a `usize` cannot model them.
+const s = "hello world";
+const first: i64 = s.indexOf("o");
+const where: i64 = s.indexOf("world");
+const last: i64 = s.lastIndexOf("o");
+console.log(`${first} ${where} ${last}`);
+
+// The isize spelling resolves to the same id.
+const viaAlias: isize = s.lastIndexOf("w");
+console.log(viaAlias.toString());

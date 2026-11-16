@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "cp3/diag/diagnostic_codes.hpp"
+#include "cp3/host/std_integer.hpp"
 
 namespace cp3 {
 
@@ -31,8 +32,11 @@ bool isCallbackMethod(const std::string& prop) {
 
 // The JS callback shape: the element, its index, and the receiver. A callback
 // may declare any prefix of it; the runtime adapters select the matching call.
-std::vector<Type> arrayCallbackContext(const Type& elem) {
-    return {elem, Type::number(), Type::array(elem)};
+// The index slot carries the typesystem's index width (`usize` for a Rust
+// project), the same width `arr.keys()` produces.
+std::vector<Type> arrayCallbackContext(const Type& elem, TypeSystem ts) {
+    return {elem, stdIntegerType(StdIntegerKind::Index, ts),
+            Type::array(elem)};
 }
 
 // The inferred signature of a callback arrow: the parameter types the body
@@ -79,6 +83,8 @@ bool Analyzer::tryInferArrayCall(CallExpr& call, MemberExpr& m, Type& out) {
     }
     if (!isCallbackMethod(prop)) return false;
     const Type elem = elemOf(recv);
+    const Type indexType =
+        stdIntegerType(StdIntegerKind::Index, options_.typeSystem);
 
     // The same arity wording `checkArgs` uses (call_check.cpp).
     auto arity = [&](std::size_t required, std::size_t maxArgs) {
@@ -129,7 +135,7 @@ bool Analyzer::tryInferArrayCall(CallExpr& call, MemberExpr& m, Type& out) {
             checkAssign(acc, fnType.parts[0], call.span, false);
             checkAssign(elem, fnType.parts[1], call.span, false);
             if (paramCount > 2) {
-                checkAssign(Type::number(), fnType.parts[2], call.span, false);
+                checkAssign(indexType, fnType.parts[2], call.span, false);
             }
             if (paramCount > 3) {
                 checkAssign(Type::array(elem), fnType.parts[3], call.span, false);
@@ -141,7 +147,7 @@ bool Analyzer::tryInferArrayCall(CallExpr& call, MemberExpr& m, Type& out) {
         }
         checkAssign(elem, fnType.parts[0], call.span, false);
         if (paramCount > 1) {
-            checkAssign(Type::number(), fnType.parts[1], call.span, false);
+            checkAssign(indexType, fnType.parts[1], call.span, false);
         }
         if (paramCount > 2) {
             checkAssign(Type::array(elem), fnType.parts[2], call.span, false);
@@ -175,7 +181,8 @@ bool Analyzer::tryInferArrayCall(CallExpr& call, MemberExpr& m, Type& out) {
         else if (prop == "find" || prop == "findLast") {
             out = withType(call, Type::unionOf({elem, Type::undefined()}));
         } else if (prop == "findIndex" || prop == "findLastIndex") {
-            out = withType(call, Type::number());
+            out = withType(call, stdIntegerType(StdIntegerKind::SignedIndex,
+                                       options_.typeSystem));
         } else out = withType(call, Type::boolean());
         return true;
     }
@@ -191,7 +198,7 @@ bool Analyzer::tryInferArrayCall(CallExpr& call, MemberExpr& m, Type& out) {
         arrowSigs_[arrow.nodeId] = std::move(as);
     };
 
-    std::vector<Type> context = arrayCallbackContext(elem);
+    std::vector<Type> context = arrayCallbackContext(elem, options_.typeSystem);
     if (prop == "map") {
         Type ret = widen(inferArrowReturn(arrow, context));
         publishArrow(context, ret);
@@ -232,7 +239,7 @@ bool Analyzer::tryInferArrayCall(CallExpr& call, MemberExpr& m, Type& out) {
         if (given == 2 && call.arguments[1]) {
             acc = widen(inferExpr(*call.arguments[1]));
         }
-        std::vector<Type> reduceContext = {acc, elem, Type::number(),
+        std::vector<Type> reduceContext = {acc, elem, indexType,
                                            Type::array(elem)};
         Type ret = widen(inferArrowReturn(arrow, reduceContext));
         publishArrow(reduceContext, ret);
@@ -253,7 +260,8 @@ bool Analyzer::tryInferArrayCall(CallExpr& call, MemberExpr& m, Type& out) {
     else if (prop == "find" || prop == "findLast") {
         out = withType(call, Type::unionOf({elem, Type::undefined()}));
     } else if (prop == "findIndex" || prop == "findLastIndex") {
-        out = withType(call, Type::number());
+        out = withType(call, stdIntegerType(StdIntegerKind::SignedIndex,
+                                            options_.typeSystem));
     } else out = withType(call, Type::boolean());
     return true;
 }

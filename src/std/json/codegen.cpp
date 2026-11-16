@@ -575,11 +575,18 @@ std::string builderText(const std::string& name,
 // `depth` uniquifies the temporaries of nested array loops. Returns false when
 // the type has no spelling in the value tree (a class/interface handle, an
 // `undefined`-flavored optional, a function, ...).
+// Numeric D65 values (Shape::Native) classify exactly like cp3 `number`
+// for every consumer that only distinguishes "a number" in JSON emission.
+bool isJsonNumeric(Shape s) {
+    return s == Shape::Number || s == Shape::Native;
+}
+
 bool jsonValueForType(const Type& t, const std::string& text, std::string& out,
                       int depth) {
     const CppInfo ci = classify(t);
     switch (ci.shape) {
         case Shape::Number:
+        case Shape::Native:
         case Shape::String:
         case Shape::Bool:
             out = "::cp3::runtime::json::value(" + text + ")";
@@ -613,7 +620,7 @@ bool jsonValueForType(const Type& t, const std::string& text, std::string& out,
             const CppInfo ec = classify(elem);
             // A primitive (or nested primitive) array already has a direct
             // `value(Array<E>)` conversion.
-            if (ec.shape == Shape::Number || ec.shape == Shape::String ||
+            if (isJsonNumeric(ec.shape) || ec.shape == Shape::String ||
                 ec.shape == Shape::Bool || ec.shape == Shape::Array) {
                 out = "::cp3::runtime::json::value(" + text + ")";
                 return true;
@@ -848,7 +855,7 @@ std::string Generator::stringifyFastValue(const Expr& arg,
     }
     const Type argType = effectiveType(arg);
     const Shape shape = info(arg).shape;
-    if (shape == Shape::Number || shape == Shape::String ||
+    if (isJsonNumeric(shape) || shape == Shape::String ||
         shape == Shape::Bool || shape == Shape::Null) {
         needsJson_ = true;
         return "::cp3::runtime::json::stringify(" + expr(arg) + ")";
@@ -858,7 +865,7 @@ std::string Generator::stringifyFastValue(const Expr& arg,
     if (shape == Shape::Array && argType.kind == TypeKind::Array &&
         !argType.parts.empty()) {
         const CppInfo elem = classify(argType.parts.front());
-        if (elem.shape == Shape::Number || elem.shape == Shape::String ||
+        if (isJsonNumeric(elem.shape) || elem.shape == Shape::String ||
             elem.shape == Shape::Bool || elem.shape == Shape::Array) {
             needsJson_ = true;
             return "::cp3::runtime::json::stringify(" + expr(arg) + ")";
@@ -896,7 +903,7 @@ std::string Generator::emitJsonStringify(const CallExpr& c) {
         if (secondArg->kind == NodeKind::NullLiteral ||
             secondArg->kind == NodeKind::UndefinedLiteral) {
             second = Second::Nullish;  // nullish replacer = no replacer
-        } else if (shape == Shape::Number) {
+        } else if (isJsonNumeric(shape)) {
             second = Second::Indent;
         } else if (shape == Shape::String) {
             second = Second::Space;
@@ -922,7 +929,7 @@ std::string Generator::emitJsonStringify(const CallExpr& c) {
             // shapes reach the allowlist path below.
             if (const Expr* third = c.arguments[2].get()) {
                 const Shape thirdShape = info(*third).shape;
-                if (thirdShape != Shape::Number && thirdShape != Shape::String) {
+                if (!isJsonNumeric(thirdShape) && thirdShape != Shape::String) {
                     return std::string();
                 }
             }
@@ -949,7 +956,7 @@ std::string Generator::emitJsonStringify(const CallExpr& c) {
     } else if (c.arguments.size() >= 3) {
         const Expr* third = c.arguments[2].get();
         const Shape shape = info(*third).shape;
-        if (shape != Shape::Number && shape != Shape::String) {
+        if (!isJsonNumeric(shape) && shape != Shape::String) {
             return std::string();
         }
         gap = "::cp3::runtime::json::normalizeSpace(" + expr(*third) + ")";
@@ -1092,7 +1099,7 @@ std::string Generator::jsonValueText(const Expr& e) {
         return "::cp3::runtime::json::value(" + expr(e) + ")";
     }
     const Shape shape = info(e).shape;
-    if (shape != Shape::Number && shape != Shape::String && shape != Shape::Bool &&
+    if (!isJsonNumeric(shape) && shape != Shape::String && shape != Shape::Bool &&
         shape != Shape::Null && shape != Shape::Array) {
         return std::string();
     }

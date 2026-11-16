@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "cp3/diag/diagnostic_codes.hpp"
+#include "cp3/host/std_integer.hpp"
 
 namespace cp3 {
 
@@ -40,10 +41,11 @@ FuncSig arrowSigOf(const ArrowFunction& arrow, const std::vector<Type>& ctx,
 
 }  // namespace
 
-// The typed call forms: `parallel.for(range, (i) => body)` binds `i` to
-// `number`, `parallel.reduce(range, init, (acc, i) => body)` binds `acc` to
-// the initializer's value type (widened) and `i` to `number`, then checks the
-// body against those parameters. Returns true for any member call this hook
+// The typed call forms: `parallel.for(range, (i) => body)` binds `i` to the
+// typesystem's index width (`usize` in a Rust project, `size_t` in a C++ one,
+// `number` in a TypeScript one), and `parallel.reduce(range, init,
+// (acc, i) => body)` binds `acc` to the initializer's value type (widened)
+// with the same induction width. Returns true for any member call this hook
 // typed; false when it is not a known `parallel.*` shape.
 bool Analyzer::tryInferParallelMemberCall(CallExpr& call, MemberExpr& m,
                                           Type& out) {
@@ -63,13 +65,18 @@ bool Analyzer::tryInferParallelMemberCall(CallExpr& call, MemberExpr& m,
             return true;
         }
         auto& arrow = static_cast<ArrowFunction&>(*bodyExpr);
+        // The runtime hand the closure a `std::int64_t` induction variable,
+        // so the signed index kind is the exact match (Rust `isize`,
+        // C++ `ptrdiff_t`, cp3 `number` in a TypeScript project).
+        const Type indexType =
+            stdIntegerType(StdIntegerKind::SignedIndex, options_.typeSystem);
         std::vector<Type> ctx;
-        Type acc = Type::number();
+        Type acc = indexType;
         if (prop == "reduce") {
             acc = widen(inferExpr(*call.arguments[1]));
-            ctx = {acc, Type::number()};
+            ctx = {acc, indexType};
         } else {
-            ctx = {Type::number()};
+            ctx = {indexType};
         }
         Type ret = widen(inferArrowReturn(arrow, ctx));
         if (arrow.nodeId != 0) {

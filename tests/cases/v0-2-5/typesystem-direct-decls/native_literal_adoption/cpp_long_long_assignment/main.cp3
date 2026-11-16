@@ -1,0 +1,4 @@
+// cpp project: an integral literal adopts the declared long long width
+// (the direct-declaration table maps long long onto i64).
+let i: long long = 0;
+i = i + 1;

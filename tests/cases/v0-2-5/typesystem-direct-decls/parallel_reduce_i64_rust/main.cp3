@@ -1,0 +1,8 @@
+import console from "std/console";
+
+// `parallel.reduce` returns the accumulator's value type. With a native
+// seed in a Rust project the induction index is a `usize`, so the whole
+// operation stays in native integers instead of widening to `number`.
+const seed: i64 = 10;
+const total: i64 = parallel.reduce(1..5, seed, (sum, i) => sum + i);
+console.log(total.toString());

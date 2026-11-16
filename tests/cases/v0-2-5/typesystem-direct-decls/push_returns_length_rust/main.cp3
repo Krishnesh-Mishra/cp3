@@ -1,0 +1,7 @@
+import console from "std/console";
+
+// push and unshift return the new length: a `usize` in a rust project.
+const arr = [1, 2, 3];
+const n: usize = arr.push(4);
+const m: usize = arr.unshift(0);
+console.log(`${n} ${m}`);

@@ -16,6 +16,7 @@
 
 #include "cp3/diag/diagnostic_codes.hpp"
 #include "cp3/host/native_types.hpp"
+#include "cp3/host/std_integer.hpp"
 #include "cp3/std_surface.hpp"
 
 namespace cp3 {
@@ -360,9 +361,15 @@ Type Analyzer::memberOfProbe(const Type& ot, const std::string& prop,
 
 Type Analyzer::arrayMember(const Type& arr, const std::string& prop) {
     Type elem = elemOf(arr);
-    if (prop == "length") return Type::number();
+    const Type indexType =
+        stdIntegerType(StdIntegerKind::Index, options_.typeSystem);
+    if (prop == "length") {
+        return stdIntegerType(StdIntegerKind::Length, options_.typeSystem);
+    }
     if (prop == "push" || prop == "unshift") {
-        Type f = Type::function({elem}, Type::number());
+        Type f = Type::function({elem},
+                                stdIntegerType(StdIntegerKind::Length,
+                                               options_.typeSystem));
         f.name = kVariadicLabel;
         return f;
     }
@@ -401,7 +408,8 @@ Type Analyzer::arrayMember(const Type& arr, const std::string& prop) {
         prop == "every") {
         Type pred = Type::function({elem}, Type::boolean());
         Type ret = (prop == "findIndex" || prop == "findLastIndex")
-                       ? Type::number()
+                       ? stdIntegerType(StdIntegerKind::SignedIndex,
+                                        options_.typeSystem)
                        : Type::boolean();
         return Type::function({pred}, ret);
     }
@@ -423,8 +431,10 @@ Type Analyzer::arrayMember(const Type& arr, const std::string& prop) {
         return withOptionalTail(Type::function({cmp}, Type::array(elem)));
     }
     if (prop == "indexOf" || prop == "lastIndexOf") {
-        return withOptionalTail(
-            Type::function({elem, Type::number()}, Type::number()));
+        return withOptionalTail(Type::function(
+            {elem, Type::number()},
+            stdIntegerType(StdIntegerKind::SignedIndex,
+                           options_.typeSystem)));
     }
     if (prop == "splice") {
         Type f = Type::function({Type::number(), Type::number(), elem},
@@ -452,15 +462,19 @@ Type Analyzer::arrayMember(const Type& arr, const std::string& prop) {
     }
     if (prop == "reverse") return Type::function({}, arr);
     if (prop == "reduceRight") return ambient();
-    if (prop == "keys") return Type::function({}, Type::array(Type::number()));
+    if (prop == "keys") {
+        return Type::function({}, Type::array(indexType));
+    }
     if (prop == "values") return Type::function({}, arr);
     if (prop == "entries") {
         // `[index, value]` pairs, as `Object.entries` spells its tuples.
-        Type entry = makeObjectType({}, false, true, {Type::number(), elem});
+        Type entry = makeObjectType({}, false, true, {indexType, elem});
         return Type::function({}, Type::array(entry));
     }
     if (prop == "binarySearch") {
-        return Type::function({elem}, Type::number());
+        return Type::function(
+            {elem}, stdIntegerType(StdIntegerKind::SignedIndex,
+                                   options_.typeSystem));
     }
     if (prop == "slice") {
         return withOptionalTail2(
@@ -482,7 +496,9 @@ Type Analyzer::arrayMember(const Type& arr, const std::string& prop) {
 }
 
 Type Analyzer::stringMember(const std::string& prop) {
-    if (prop == "length") return Type::number();
+    if (prop == "length") {
+        return stdIntegerType(StdIntegerKind::Length, options_.typeSystem);
+    }
     if (prop == "charAt" || prop == "at") {
         return Type::function({Type::number()}, Type::string());
     }
@@ -509,8 +525,10 @@ Type Analyzer::stringMember(const std::string& prop) {
         return Type::function({}, Type::string());
     }
     if (prop == "indexOf" || prop == "lastIndexOf") {
-        return withOptionalTail(
-            Type::function({Type::string(), Type::number()}, Type::number()));
+        return withOptionalTail(Type::function(
+            {Type::string(), Type::number()},
+            stdIntegerType(StdIntegerKind::SignedIndex,
+                           options_.typeSystem)));
     }
     if (prop == "slice" || prop == "substring") {
         // TS `slice(start?, end?)`: both parameters are optional. `substring`

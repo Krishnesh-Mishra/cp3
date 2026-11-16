@@ -408,10 +408,11 @@ std::vector<Field> routeChainFields() {
 }
 
 // Errors agent (pasted from sema_errors.cpp): HttpError fields.
-std::vector<Field> httpErrorFields() {
+std::vector<Field> httpErrorFields(TypeSystem ts) {
+    const Type status = stdIntegerType(StdIntegerKind::Status, ts);
     return {
-        Field{"status", Type::number(), false},
-        Field{"statusCode", Type::number(), false},
+        Field{"status", status, false},
+        Field{"statusCode", status, false},
         Field{"expose", Type::boolean(), false},
         Field{"message", Type::string(), false},
         Field{"code", Type::string(), false},
@@ -478,7 +479,10 @@ std::vector<Field> tcpSocketFields(TypeSystem ts) {
         Field{"isPaused", Type::function({}, Type::boolean()), false},
         Field{"isClosed", Type::function({}, Type::boolean()), false},
         Field{"isConnected", Type::function({}, Type::boolean()), false},
-        Field{"bufferedBytes", Type::function({}, Type::number()), false},
+        Field{"bufferedBytes",
+              Type::function(
+                  {}, stdIntegerType(StdIntegerKind::FileSize, ts)),
+              false},
         Field{"remoteAddress", Type::function({}, Type::string()), false},
         Field{"localAddress", Type::function({}, Type::string()), false},
         Field{"remotePort",
@@ -502,7 +506,10 @@ std::vector<Field> tcpServerFields(TypeSystem ts) {
         Field{"listening", Type::function({}, Type::boolean()), false},
         Field{"addressPort",
               Type::function({}, stdIntegerType(StdIntegerKind::Port, ts)), false},
-        Field{"connectionCount", Type::function({}, Type::number()), false},
+        Field{"connectionCount",
+              Type::function(
+                  {}, stdIntegerType(StdIntegerKind::Count, ts)),
+              false},
     };
 }
 std::vector<Field> udpSocketFields(TypeSystem ts) {
@@ -579,8 +586,14 @@ std::vector<Field> tlsSocketFields(TypeSystem ts) {
               Type::function({}, stdIntegerType(StdIntegerKind::Port, ts)), false},
         Field{"localPort",
               Type::function({}, stdIntegerType(StdIntegerKind::Port, ts)), false},
-        Field{"bytesRead", Type::function({}, Type::number()), false},
-        Field{"bytesWritten", Type::function({}, Type::number()), false},
+        Field{"bytesRead",
+              Type::function(
+                  {}, stdIntegerType(StdIntegerKind::FileSize, ts)),
+              false},
+        Field{"bytesWritten",
+              Type::function(
+                  {}, stdIntegerType(StdIntegerKind::FileSize, ts)),
+              false},
         Field{"authorized", Type::function({}, Type::boolean()), false},
         Field{"encrypted", Type::function({}, Type::boolean()), false},
         Field{"alpnProtocol", Type::function({}, Type::string()), false},
@@ -589,9 +602,15 @@ std::vector<Field> tlsSocketFields(TypeSystem ts) {
         Field{"getCipher", Type::function({}, ambient()), false},
         Field{"getPeerCertificate",
               withOptionalTail(Type::function({Type::boolean()}, ambient())), false},
-        Field{"setMaxSendFragment", Type::function({Type::number()}, Type::voidType()),
+        Field{"setMaxSendFragment",
+              Type::function(
+                  {stdIntegerType(StdIntegerKind::Length, ts)},
+                  Type::voidType()),
               false},
-        Field{"getMaxSendFragment", Type::function({}, Type::number()), false},
+        Field{"getMaxSendFragment",
+              Type::function(
+                  {}, stdIntegerType(StdIntegerKind::Length, ts)),
+              false},
     };
 }
 std::vector<Field> tlsServerFields(TypeSystem ts) {
@@ -688,7 +707,7 @@ std::vector<Field> networkFieldsFor(const std::string& name, TypeSystem ts) {
     if (name == kRoute) return routeFields();
     if (name == kRouteChain) return routeChainFields();
     if (name == kwebserverApp) return routerFields(ts);
-    if (name == kHttpError) return httpErrorFields();
+    if (name == kHttpError) return httpErrorFields(ts);
     if (name == kTlsOptions) return tlsOptionsFields();
     return {};
 }
@@ -990,7 +1009,10 @@ std::optional<Type> Analyzer::networkMember(const std::string& prop) {
         return Type::function({ambient()}, networkObjectType(kwebserverApp));
     }
     if (prop == "httpError") {
-        return Type::function({Type::number(), Type::string()}, networkObjectType(kHttpError));
+        return Type::function(
+            {stdIntegerType(StdIntegerKind::Status, options_.typeSystem),
+             Type::string()},
+            networkObjectType(kHttpError));
     }
     // Raw-socket families (src/std/network/{tcp,udp,tls}).
     if (prop == "createTcpServer") {
@@ -1002,7 +1024,9 @@ std::optional<Type> Analyzer::networkMember(const std::string& prop) {
     }
     if (prop == "TcpSocket") {
         return withOptionalTail(Type::function(
-            {Type::string(), Type::number(), Type::number()},
+            {Type::string(),
+             stdIntegerType(StdIntegerKind::Port, options_.typeSystem),
+             Type::number()},
             networkObjectType(kTcpSocket)));
     }
     if (prop == "TcpServer") {

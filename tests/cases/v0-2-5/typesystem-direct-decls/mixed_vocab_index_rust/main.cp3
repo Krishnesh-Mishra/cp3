@@ -1,0 +1,17 @@
+import console from "std/console";
+
+// Mixed-vocabulary numerics: every numeric spelling cp3 accepts is a valid
+// subscript or argument for the internal number-taking APIs, no matter
+// which typesystem's spelling produced it.
+const arr = [10, 20, 30, 40, 50];
+const a: i64 = 2;
+const b: c_'double' = 1.0;
+const c: ts_'number' = 3.0;
+const f: f32 = 0.0;
+const ll: c_'long long' = 4;
+const lng: c_'long' = 0;
+console.log(`${arr[a]} ${arr[b]} ${arr[c]} ${arr[f]} ${arr[ll]} ${arr[lng]}`);
+
+// The same spellings work in string subscripts and in String operations.
+const s = "hello";
+console.log(`${s[a]} ${s[c]}`);

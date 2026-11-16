@@ -1,0 +1,8 @@
+import console from "std/console";
+
+// Rust project: an integral literal adopts the declared i64 width on
+// assignment, so the reassignment stays native end to end.
+let i: i64 = 0;
+i = 1;
+i = i + 1;
+console.log(i.toString());

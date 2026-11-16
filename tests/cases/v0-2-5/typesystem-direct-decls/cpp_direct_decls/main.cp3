@@ -1,0 +1,16 @@
+import console from "std/console";
+
+// In a cpp project the direct declarations lower to the C++ spelling the
+// project declared: size_t for lengths, ptrdiff_t for signed indices.
+const s = "hello world";
+const n: c_'size_t' = s.length;
+const at: c_'ptrdiff_t' = s.indexOf("w");
+
+const arr = [1, 2, 3];
+const alen: c_'size_t' = arr.length;
+const ai: c_'ptrdiff_t' = arr.indexOf(2);
+
+// push and unshift return the new length.
+const pushed: c_'size_t' = arr.push(4);
+
+console.log(`${n} ${at} ${alen} ${ai} ${pushed}`);

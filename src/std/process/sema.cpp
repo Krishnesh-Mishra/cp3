@@ -193,11 +193,13 @@ Type Analyzer::processObjectType(const std::string& name) {
             Field{"write", Type::function({Type::string()}, Type::voidType()), false});
         fields.push_back(Field{"kill", Type::function({}, Type::voidType()), false});
     } else if (name == kMemoryUsage) {
-        fields.push_back(Field{"rss", Type::number(), false});
-        fields.push_back(Field{"heapTotal", Type::number(), false});
-        fields.push_back(Field{"heapUsed", Type::number(), false});
-        fields.push_back(Field{"external", Type::number(), false});
-        fields.push_back(Field{"arrayBuffers", Type::number(), false});
+        const Type bytes =
+            stdIntegerType(StdIntegerKind::FileSize, options_.typeSystem);
+        fields.push_back(Field{"rss", bytes, false});
+        fields.push_back(Field{"heapTotal", bytes, false});
+        fields.push_back(Field{"heapUsed", bytes, false});
+        fields.push_back(Field{"external", bytes, false});
+        fields.push_back(Field{"arrayBuffers", bytes, false});
     } else if (name == kStdioStream) {
         fields.push_back(Field{"write",
                                Type::function({Type::string()}, Type::voidType()),

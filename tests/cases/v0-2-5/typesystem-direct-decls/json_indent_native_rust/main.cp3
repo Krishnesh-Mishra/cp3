@@ -1,0 +1,17 @@
+import console from "std/console";
+import JSON from "std/json";
+
+// `JSON.stringify`'s inner numeric arguments (the legacy indent form and
+// the numeric arm of the `space: number | string` union) accept any
+// numeric spelling, including exact rust integers.
+const indent: i64 = 2;
+const text = JSON.stringify("abc", undefined, indent);
+console.log("indent-ok");
+
+const repl: i64 = 1;
+const legacy = JSON.stringify("abc", repl);
+console.log("replacer-ok");
+
+const space: ts_'number' = 2.0;
+const tsIndent = JSON.stringify("abc", undefined, space);
+console.log("ts-indent-ok");

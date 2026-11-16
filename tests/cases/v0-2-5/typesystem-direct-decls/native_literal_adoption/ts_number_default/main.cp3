@@ -1,0 +1,4 @@
+// TypeScript default (no typeSystem in package.json): bare literals keep
+// cp3 `number`, and a + b stays `number`.
+let a: number = 2, b = 3;
+const c = a + b;

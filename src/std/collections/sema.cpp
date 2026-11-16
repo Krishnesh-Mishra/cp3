@@ -589,8 +589,9 @@ bool Analyzer::tryInferCollectionsStaticCall(CallExpr& call, MemberExpr& m,
     Expr* cb = call.arguments[1] ? call.arguments[1].get() : nullptr;
     if (cb != nullptr && cb->kind == NodeKind::ArrowFunction) {
         auto& arrow = static_cast<ArrowFunction&>(*cb);
-        const std::vector<Type> context = {elem, Type::number(),
-                                           Type::array(elem)};
+        const std::vector<Type> context = {
+        elem, stdIntegerType(StdIntegerKind::Index, options_.typeSystem),
+        Type::array(elem)};
         key = widen(inferArrowReturn(arrow, context));
         // Publish the inferred signature for codegen's parameter types.
         if (arrow.nodeId != 0) {
@@ -623,8 +624,9 @@ bool Analyzer::tryInferCollectionsStaticCall(CallExpr& call, MemberExpr& m,
     // (The array callback methods in src/language/arrays/sema_methods.cpp follow
     // the same pattern: inferArrowReturn + publish, then return.)
     if (cb != nullptr && cb->kind == NodeKind::ArrowFunction) {
-        const std::vector<Type> context = {elem, Type::number(),
-                                           Type::array(elem)};
+        const std::vector<Type> context = {
+        elem, stdIntegerType(StdIntegerKind::Index, options_.typeSystem),
+        Type::array(elem)};
         withType(*cb, Type::function(context, key));
     }
     if (key.isVoid()) {

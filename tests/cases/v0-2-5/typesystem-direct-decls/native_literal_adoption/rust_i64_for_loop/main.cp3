@@ -1,0 +1,4 @@
+// Rust project: a native-typed induction variable in a for header keeps
+// its width across the increment (literal adoption in the update).
+for (let i: i64 = 0; i < 1; i++) {
+}

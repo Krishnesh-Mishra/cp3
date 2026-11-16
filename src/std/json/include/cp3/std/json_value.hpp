@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -72,6 +73,19 @@ inline Value value(double v) {
     out.kind = Value::Kind::Number;
     out.number = v;
     return out;
+}
+
+// Every C++ numeric type cp3 accepts for a `number`-like argument
+// (the whole rust/cpp native numeric family: f32/float, i64/long long,
+// ...) is a valid `value()` argument: JSON numbers are doubles, so the
+// conversion is the documented one and the call sites need not spell it.
+template <typename T>
+inline std::enable_if_t<(std::is_integral_v<T> &&
+                         !std::is_same_v<T, bool>) ||
+                        std::is_floating_point_v<T>,
+                    Value>
+value(T v) {
+    return value(static_cast<double>(v));
 }
 
 inline Value value(bool v) {

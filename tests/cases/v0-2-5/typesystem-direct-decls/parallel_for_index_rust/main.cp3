@@ -1,0 +1,10 @@
+import console from "std/console";
+
+// `parallel.for`'s induction variable is a signed `isize` in a Rust
+// project (the runtime's `std::int64_t`), the same signed-index kind
+// `str.indexOf` returns.
+parallel.for(1..10, (i) => {
+    const exact: isize = i;
+    if (exact === 3) return;
+});
+console.log("ok");

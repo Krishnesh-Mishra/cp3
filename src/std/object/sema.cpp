@@ -33,6 +33,7 @@
 #include <vector>
 
 #include "cp3/diag/diagnostic_codes.hpp"
+#include "cp3/host/std_integer.hpp"
 
 namespace cp3 {
 
@@ -470,8 +471,9 @@ bool Analyzer::tryInferObjectCall(CallExpr& call, MemberExpr& m, Type& out) {
         Expr* cb = call.arguments[1] ? call.arguments[1].get() : nullptr;
         if (cb != nullptr && cb->kind == NodeKind::ArrowFunction) {
             auto& arrow = static_cast<ArrowFunction&>(*cb);
-            const std::vector<Type> context = {elem, Type::number(),
-                                               Type::array(elem)};
+            const std::vector<Type> context = {
+                elem, stdIntegerType(StdIntegerKind::Index, options_.typeSystem),
+                Type::array(elem)};
             key = widen(inferArrowReturn(arrow, context));
             // Publish the inferred signature for codegen's parameter types
             // (mirrors Map.groupBy in src/std/collections/sema.cpp).
@@ -500,8 +502,9 @@ bool Analyzer::tryInferObjectCall(CallExpr& call, MemberExpr& m, Type& out) {
         // re-infer the callback with ambient parameters and overwrite the
         // signature published above (see Map.groupBy).
         if (cb != nullptr && cb->kind == NodeKind::ArrowFunction) {
-            const std::vector<Type> context = {elem, Type::number(),
-                                               Type::array(elem)};
+            const std::vector<Type> context = {
+                elem, stdIntegerType(StdIntegerKind::Index, options_.typeSystem),
+                Type::array(elem)};
             withType(*cb, Type::function(context, key));
         }
         if (key.isVoid()) {

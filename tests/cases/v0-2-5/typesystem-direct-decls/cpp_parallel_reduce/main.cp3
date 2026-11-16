@@ -1,0 +1,7 @@
+import console from "std/console";
+
+// In a cpp project the parallel reducer's seed and accumulator keep the
+// C++ spelling of the integer the author wrote.
+const seed: c_'long long' = 0;
+const total: c_'long long' = parallel.reduce(1..5, seed, (sum, i) => sum + i);
+console.log(total.toString());

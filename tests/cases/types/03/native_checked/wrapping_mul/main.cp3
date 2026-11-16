@@ -5,7 +5,7 @@ import console from "std/console";
 let hash: u64 = 14695981039346656037;
 let prime: u64 = 1099511628211;
 const text = "abc";
-for (let i = 0; i < text.length; i++) {
+for (let i: number = 0; i < text.length; i++) {
   hash = hash ^ (text.charCodeAt(i) as u64);
   hash = hash.wrappingMul(prime);
 }

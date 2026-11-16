@@ -135,6 +135,12 @@ std::optional<Type> Analyzer::cryptoMember(const std::string& prop) {
         member->parts[0] =
             stdIntegerType(StdIntegerKind::Length, options_.typeSystem);
     }
+    // The version nibble is a byte: `u8` in a Rust project, `std::uint8_t`
+    // in a C++ one, `number` in a TypeScript one.
+    if (prop == "uuidVersion" && member->parts.size() >= 2) {
+        member->parts.back() =
+            stdIntegerType(StdIntegerKind::ByteValue, options_.typeSystem);
+    }
     return member;
 }
 
