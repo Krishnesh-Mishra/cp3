@@ -305,6 +305,11 @@ std::string completionMemberDoc(const AnalyzedDocument& document,
         if (!doc.empty()) return renderStdDoc(doc.signature, doc.body);
         return missingDocText("array." + member);
     }
+    if (receiverType->kind == TypeKind::Number) {
+        const StdMemberDoc doc = stdInstanceMemberDoc("Number", member);
+        if (!doc.empty()) return renderStdDoc(doc.signature, doc.body);
+        return missingDocText("number." + member);
+    }
     if (receiverType->kind == TypeKind::String) {
         const StdMemberDoc doc = stdStringMemberDoc(member);
         if (!doc.empty()) return renderStdDoc(doc.signature, doc.body);

@@ -488,18 +488,15 @@ def main(argv=None) -> int:
           bool(definition(session, uri, MEMBER_NAV, "this.count", 5, 1)))
 
     # ---- report item 5: member completion is not type-constrained -------------
-    check("item5 action: member completion on a number receiver offers toFixed",
+    check("item5 guard: member completion on a number receiver offers toFixed",
           "toFixed" in completion(session, uris["number_completion.cp3"],
                                   NUMBER_COMPLETION, ".", 1))
     check("item5 action: member completion on a number receiver offers no array/sequence members",
           not any(x in completion(session, uris["number_completion.cp3"],
                                   NUMBER_COMPLETION, ".", 1) for x in ("push", "toUpperCase")))
-    check("item5 guard: member completion on a boolean receiver offers toString",
-          "toString" in completion(session, uris["boolean_completion.cp3"],
-                                   BOOLEAN_COMPLETION, ".", 1))
-    check("item5 action: member completion on a boolean receiver offers no array/sequence members",
-          not any(x in completion(session, uris["boolean_completion.cp3"],
-                                  BOOLEAN_COMPLETION, ".", 1) for x in ("push", "toUpperCase")))
+    check("item5 action: member completion on a boolean receiver offers no members (cp3 defines no boolean surface)",
+          completion(session, uris["boolean_completion.cp3"],
+                     BOOLEAN_COMPLETION, ".", 1) == [])
     check("item5 guard: member completion on a class receiver offers its members",
           set(completion(session, uris["class_completion.cp3"],
                          CLASS_COMPLETION, ".", 1)) == {"id", "label"})

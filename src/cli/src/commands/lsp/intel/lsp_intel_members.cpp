@@ -249,6 +249,13 @@ std::vector<lsp::CompletionCandidate> knownReceiverCandidates(
                  networkObjectMemberNames(receiverType->name)) {
                 appendUnique(names, name);
             }
+        } else if (receiverType->kind == TypeKind::Number) {
+            // `number` has a closed std cast surface (toFixed, toPrecision,
+            // toExponential, toString); it decides the list like every other
+            // exact receiver.
+            for (const std::string& name : stdInstanceMemberNames("Number")) {
+                appendUnique(names, name);
+            }
         } else if (receiverType->kind == TypeKind::Class) {
             for (const std::string& name :
                  stdInstanceMemberNames(receiverType->name)) {
@@ -283,6 +290,9 @@ std::vector<lsp::CompletionCandidate> knownReceiverCandidates(
         } else if (receiverType != nullptr &&
                    receiverType->kind == TypeKind::Class) {
             signature = stdInstanceMemberDoc(receiverType->name, name).signature;
+        } else if (receiverType != nullptr &&
+                   receiverType->kind == TypeKind::Number) {
+            signature = stdInstanceMemberDoc("Number", name).signature;
         } else if (receiverType != nullptr &&
                    receiverType->kind == TypeKind::Array) {
             signature = stdArrayMemberDoc(name).signature;
@@ -333,11 +343,15 @@ std::vector<std::string> candidateNames(const AnalyzedDocument& document,
         }
         appendShapeFields(document, receiverType->name, names);
     }
-    // The array and string surfaces have their own tables in the compiler:
-    // they are the authoritative list, so an editor cannot hide a documented
-    // member (the universe below is only the fallback for a receiver whose
-    // type the checker could not resolve).
-    if (receiverType != nullptr && receiverType->kind == TypeKind::Array) {
+    // The number, array and string surfaces have their own tables in the
+    // compiler: they are the authoritative list, so an editor cannot hide a
+    // documented member (the universe below is only the fallback for a
+    // receiver whose type the checker could not resolve).
+    if (receiverType != nullptr && receiverType->kind == TypeKind::Number) {
+        for (const std::string& name : stdInstanceMemberNames("Number")) {
+            appendUnique(names, name);
+        }
+    } else if (receiverType != nullptr && receiverType->kind == TypeKind::Array) {
         for (const std::string& name : stdArrayMemberNames()) {
             appendUnique(names, name);
         }
@@ -439,12 +453,13 @@ std::vector<lsp::CompletionCandidate> memberCandidates(
     if (names.empty()) return candidates;
     const Type* sourceReceiverType =
         receiverTypeForCompletion(document, receiver, context.dot);
-    // An array or a string has an exact member table in the compiler, and
-    // that table IS the candidate list: a probe cannot decide a generic
-    // method (`map`, `reduce`), whose type only exists once it is called.
+    // A number, an array or a string has an exact member table in the
+    // compiler, and that table IS the candidate list: no probe needed (a
+    // generic method - `map`, `reduce` - has no type until it is called).
     if (sourceReceiverType != nullptr &&
         (sourceReceiverType->kind == TypeKind::Array ||
-         sourceReceiverType->kind == TypeKind::String)) {
+         sourceReceiverType->kind == TypeKind::String ||
+         sourceReceiverType->kind == TypeKind::Number)) {
         return knownReceiverCandidates(document, receiver, sourceReceiverType);
     }
     std::string probe = text;    probe.replace(context.receiverBegin, offset - context.receiverBegin,
