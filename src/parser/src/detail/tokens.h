@@ -104,6 +104,9 @@ private:
 
     // --- diagnostics / recovery (tokens.cpp) --------------------------------
     void report(const std::string& code, const std::string& message);
+    // Same as report(), but anchored at `span` instead of the statement anchor.
+    void reportAt(const SourceSpan& span, const std::string& code,
+                  const std::string& message);
     bool expect(TokenKind k, std::string what);
     std::string expectName(std::string what);
     // `>` handling for nested generics: `Box<Box<number>>` lexes `>>` as one

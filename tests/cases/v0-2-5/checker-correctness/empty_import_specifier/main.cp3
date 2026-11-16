@@ -1,0 +1,7 @@
+// Pins the desired ERROR behavior for an empty import specifier list:
+// the parser must reject `import {} from "..."`, but today's compiler
+// accepts it silently. This case documents that `cp3c check` should
+// fail with a diagnostic mentioning the import.
+import console from "std/console";
+import {} from "std/math";
+console.log("ok");

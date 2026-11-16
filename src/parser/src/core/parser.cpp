@@ -190,6 +190,7 @@ StmtPtr ParserImpl::parseDecoratedStatement() {
 // Imports / exports
 // =============================================================================
 void ParserImpl::parseImportSpecifiers(ImportDeclaration& decl) {
+    const Token braceStart = prev();  // the '{' this list was entered from
     while (!check(TokenKind::RBrace) && !atEnd()) {
         Token specStart = peek();
         auto spec = std::make_unique<ImportSpecifier>(specStart.span);
@@ -199,6 +200,14 @@ void ParserImpl::parseImportSpecifiers(ImportDeclaration& decl) {
         spec->span = spanFrom(specStart);
         decl.specifiers.push_back(std::move(spec));
         if (!match(TokenKind::Comma)) break;
+    }
+    if (decl.specifiers.empty()) {
+        // `import {} from "..."` binds nothing; reject it instead of
+        // accepting it silently. Report at the braces, like the missing-
+        // token siblings, and continue so the declaration still parses.
+        const SourceSpan braces = SourceSpan::merge(braceStart.span, peek().span);
+        reportAt(braces, diagcode::kEmptyImportSpecifier,
+                 "import {} has no import specifier");
     }
     (void)expect(TokenKind::RBrace, "expected '}' to close named imports");
 }

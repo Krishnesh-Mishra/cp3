@@ -45,6 +45,9 @@ inline constexpr const char* kMissingSemicolon  = "CP3207";
 // Ledger K (docs/design/remove-void-unknown.md): `JSON.parse` without an
 // explicit type argument. Interim parser-side check.
 inline constexpr const char* kJsonParseMissingTypeArgument = "CP3208";
+// An empty named import list: `import {} from "..."` binds nothing, so the
+// parser rejects it instead of accepting it silently.
+inline constexpr const char* kEmptyImportSpecifier = "CP3209";
 
 // --- name resolution (sema) ---------------------------------------------------
 inline constexpr const char* kUndefinedIdentifier = "CP3301";

@@ -7,7 +7,7 @@
 //   * ParserImpl diagnostic/recovery primitives (`report`, `expect`,
 //     `expectName`, `expectGreater`, `synchronize`, `consumeSemicolon`).
 //
-// Diagnostics use codes CP3201-CP3207 (cp3/diagnostic_codes.hpp) and are
+// Diagnostics use codes CP3201-CP3209 (cp3/diagnostic_codes.hpp) and are
 // emitted through the DiagnosticSink; the parser never throws (STYLE.md §1/§6).
 // =============================================================================
 #include "detail/tokens.h"
@@ -106,7 +106,12 @@ bool isTypeNameKeyword(TokenKind k) {
 // suite's diagnostics convention) and always carries the word "syntax".
 void ParserImpl::report(const std::string& code, const std::string& message) {
     const SourceSpan& sp = anchor_ ? anchor_->span : peek().span;
-    sink_->error(code, sp, "syntax error: " + message);
+    reportAt(sp, code, message);
+}
+
+void ParserImpl::reportAt(const SourceSpan& span, const std::string& code,
+                          const std::string& message) {
+    sink_->error(code, span, "syntax error: " + message);
 }
 
 bool ParserImpl::expect(TokenKind k, std::string what) {
