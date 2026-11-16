@@ -29,10 +29,12 @@ harness (`tests/runner/run_tests.py`) discovers them with no extra wiring:
 python tests/runner/run_tests.py --filter v0-2-5 --verbose --no-bench
 ```
 
-## Status (2026-11-15, `cp3c` 0.2.4 + the v0.2.5 dev tree)
+## Status (2026-11-16, `cp3c` 0.2.4 + the v0.2.5 dev tree)
 
-`ok` = passes today (regression guard). `FAIL` = the desired behaviour is not
+`ok` = passes (regression guard). `FAIL` = the desired behaviour is not
 implemented yet; the case goes green when the defect is fixed.
+`fixed in <sha>` = went green as part of the 2026-11-16 defect-correction
+pass; kept here so the history stays readable.
 
 ### `type-resolution-and-imports/`
 
@@ -53,7 +55,7 @@ implemented yet; the case goes green when the defect is fixed.
 
 | case | pins | status |
 | --- | --- | --- |
-| `object_field_in_dep_check` | `cp3 check` reports a codegen error that lives in a **dependency** module (today only the entry module's codegen is checked) | FAIL (check exits 0) |
+| `object_field_in_dep_check` | `cp3 check` reports a codegen error that lives in a **dependency** module (was: only the entry module's codegen was checked) | fixed in a2548cb3 |
 | `object_field_in_entry_check` | `cp3 check` reports the entry module's codegen error | ok |
 | `object_field_in_entry_build` | the same program fails the build with the same diagnostic | ok |
 | `imported_member_write_check` | a member write on an imported class type-checks | ok |
@@ -65,11 +67,11 @@ implemented yet; the case goes green when the defect is fixed.
 
 | case | pins | status |
 | --- | --- | --- |
-| `empty_array_literal_field_initializer` | `items: number[] = [];` - the field type is the literal's context | FAIL (CP3401 "unknown[]") |
-| `empty_array_literal_assignment` | `this.items = [];` - the field type is the literal's context | FAIL (CP3401 "unknown[]") |
-| `resolver_assignment_to_member` | the `Promise.withResolvers<T>()` resolver is assignable to a `(value: T) => undefined` member | FAIL (C++ step: "no viable overloaded '='") |
-| `object_to_alias_array_cast` | a cast with no C++ conversion is diagnosed by the checker instead of failing in the C++ step | FAIL (check exits 0) |
-| `typeof_mixed_scalar_nullish` | `typeof v === "string"` narrows `number \| string \| undefined` | FAIL (CP3401 "no static answer") |
+| `empty_array_literal_field_initializer` | `items: number[] = [];` - the field type is the literal's context | fixed in 2c85498f |
+| `empty_array_literal_assignment` | `this.items = [];` - the field type is the literal's context | fixed in 2c85498f |
+| `resolver_assignment_to_member` | the `Promise.withResolvers<T>()` resolver is assignable to a `(value: T) => undefined` member | fixed in 4ddb0b13 |
+| `object_to_alias_array_cast` | a cast with no C++ conversion is diagnosed by the checker instead of failing in the C++ step | fixed in 10067bbc |
+| `typeof_mixed_scalar_nullish` | `typeof v === "string"` narrows `number \| string \| undefined` | fixed in 0dd511ac |
 | `imported_unknown_member` | a member the imported class does not declare is reported (the imported class is not opaque) | ok |
 
 ## Notes for whoever fixes these
@@ -77,10 +79,12 @@ implemented yet; the case goes green when the defect is fixed.
 * A case that fails in a **dependency's** codegen can leave build artifacts
   behind; a later run in the same folder may then fail in the C++ step
   instead of with the CP diagnostic. Delete the case folder's `.cp3/`
-  directory (gitignored) to get the diagnostic back.
-* `tests/cases/v0-2-2/empty_literal_cast` and `tests/cases/v0-2-2/return_empty_array`
-  pin the same empty-array-literal defect from the v0.2.2 angle; they are red
-  today too.
+  directory (gitignored) to get the diagnostic back. The corpus runner does
+  not clean `.cp3/` between runs, so stale caches can also produce false
+  failures (empty stdout, link mismatches against an older object set); wipe
+  the folder's `.cp3/` before trusting them.
+* `tests/cases/v0-2-2/empty_literal_cast` pins the same empty-array-literal
+  defect from the v0.2.2 angle; it is green as of 2c85498f.
 * The packaging half of this work (the `.cp3pak` route, the installer and the
   native-backend selection) lives in `tests/v0.2.5/package-test/`, which has
   its own runner because those cases need several commands per scenario.
