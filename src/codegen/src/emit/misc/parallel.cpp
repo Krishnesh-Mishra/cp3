@@ -13,8 +13,9 @@
 //
 // The range bounds lower to `static_cast<std::int64_t>(expr)`; the closures
 // lower through `emitParallelClosure`, which declares the closure's parameters
-// with the cp3 types the callee hands them (a number index; the accumulator's
-// type for a reduce) before lowering the arrow itself. A reduce body that is one
+// with the cp3 types the callee hands them (a `number` index on TypeScript,
+// a native i64 index otherwise; the accumulator's type for a reduce) before
+// lowering the arrow itself. A reduce body that is one
 // of the associative shapes (`acc + <expr>` from 0 where the expression never
 // reads the accumulator, `acc * <expr>` from 1, the max/min conditional) gets
 // the chunked 5-argument lowering with a synthesized combine op, but only when
@@ -213,6 +214,27 @@ bool Generator::parallelClosureShape(const ArrowFunction& a,
     return !closureFault(a, count, "parallel.*", "the index").faulty;
 }
 
+// -----------------------------------------------------------------------------
+// The induction parameter of a `parallel.*` closure
+// -----------------------------------------------------------------------------
+// Sema types the induction variable as `SignedIndex`
+// (`stdIntegerType(StdIntegerKind::SignedIndex, ts)`): a `number` on
+// TypeScript, a native i64 on the native targets. The closure's C++ spelling
+// follows the same rule.
+namespace {
+
+struct ParallelIndexParam {
+    Type type;
+    std::string cpp;
+};
+
+ParallelIndexParam parallelIndexParam(TypeSystem ts) {
+    if (ts == TypeSystem::TypeScript) return {Type::number(), "double"};
+    return {Type::native("i64"), "std::int64_t"};
+}
+
+}  // namespace
+
 std::string Generator::emitParallelFor(const CallExpr& c) {
     if (c.arguments.size() != 2 || !c.arguments[0] || !c.arguments[1]) {
         reportCodegenError(c, diagcode::kArityMismatch,
@@ -242,8 +264,9 @@ std::string Generator::emitParallelFor(const CallExpr& c) {
                            "be a range: parallel.for(0..n, (i) => body)");
         return "0.0";
     }
+    const ParallelIndexParam index = parallelIndexParam(options_.typeSystem);
     const std::string closure =
-        emitParallelClosure(body, {Type::number()}, {"double"});
+        emitParallelClosure(body, {index.type}, {index.cpp});
     return "::cp3::runtime::parallelFor(" + begin + ", " + end + ", " + closure +
            ")";
 }
@@ -294,8 +317,9 @@ std::string Generator::emitParallelReduce(const CallExpr& c) {
         return "0.0";
     }
     const std::string init = expr(*c.arguments[1]);
+    const ParallelIndexParam index = parallelIndexParam(options_.typeSystem);
     const std::string closure = emitParallelClosure(
-        body, {initInfo.type, Type::number()}, {initInfo.cpp, "double"});
+        body, {initInfo.type, index.type}, {initInfo.cpp, index.cpp});
     std::string out = "::cp3::runtime::parallelReduce";
     if (auto combine = parallelReduceCombine(body, *c.arguments[1],
                                              functionDecls_, sema_,

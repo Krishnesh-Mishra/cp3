@@ -152,7 +152,7 @@ std::string Generator::emitWhile(const WhileStatement& w,
         finishFastLoop();
         return continueLabel;
     }
-    const std::string condition = w.condition ? cond(*w.condition) : "false";
+    const std::string condition = w.condition ? condCondition(*w.condition) : "false";
     if (fastLoop && fast->second.exactReduction) {
         line(out, indent, "#if defined(__clang__)");
         line(out, indent, "#pragma clang loop vectorize(enable)");
@@ -188,7 +188,7 @@ std::string Generator::emitDoWhile(const DoWhileStatement& d,
         line(out, indent + 1, "}");
     }
     line(out, indent + 1, continueLabel + ": ;");
-    const std::string condition = d.condition ? cond(*d.condition) : "false";
+    const std::string condition = d.condition ? condCondition(*d.condition) : "false";
     line(out, indent, "} while (" + condition + ");");
     popFlowFrame();
     line(out, indent, breakLabel + ": ;");
@@ -211,7 +211,7 @@ std::string Generator::emitFor(const ForStatement& f,
             init = expr(*exp);
         }
     }
-    const std::string condition = f.condition ? cond(*f.condition) : "";
+    const std::string condition = f.condition ? condCondition(*f.condition) : "";
     const std::string update = f.update ? expr(*f.update) : "";
     line(out, indent, "for (" + init + "; " + condition + "; " + update + ") {");
     if (f.body) {

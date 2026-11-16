@@ -1,0 +1,19 @@
+// Pins that a block-local fresh empty array literal, filled with push and
+// then read and written by index, lowers to the owned Array<T> form rather
+// than a stack std::vector plus raw pointer. Not the empty-literal infer rule.
+import console from "std/console";
+
+function fill(): number {
+    // Block-local fresh empty array literal built with push and read and
+    // written by index afterwards: pins that a function-local fresh literal
+    // lowers to the owned Array<T> form, not a stack std::vector plus a raw
+    // pointer handed into arrayWriteAt(Array<T>, ...) / arrayAt(...).
+    const dist: number[] = [];
+    let di: number = 0;
+    while (di < 3) { dist.push(-1); di = di + 1; }
+    dist[0] = 10;
+    dist[1] = 20;
+    return dist[0] + dist[1];
+}
+
+console.log(fill());

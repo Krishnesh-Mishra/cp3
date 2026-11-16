@@ -371,6 +371,10 @@ Type asyncValueType(const MethodDeclaration& md) const;
     std::string emitTemplate(const TemplateLiteral& tl);
     std::string tsCall(const Expr& e);
     std::string cond(const Expr& e);
+    // The condition for a parenthesizing test site (an if/while/do-while/for
+    // header): cond() minus one redundant paren pair around the whole
+    // comparison, so `if (depth == 0)` prints instead of `if ((depth == 0))`.
+    std::string condCondition(const Expr& e);
     // A whole array in a formatter/truthiness test pulls the arr family (D69).
     void noteFamilyUse(const Expr& e);
     std::string emitBinary(const BinaryExpr& b);
@@ -618,6 +622,12 @@ Type asyncValueType(const MethodDeclaration& md) const;
     // unknown (nothing says what the elements are) or it has no C++ spelling.
     void reportArrayElementType(const Type& elem, const Node& site,
                                 const std::string& what);
+    // `push`/`unshift` of a freshly constructed element into a stack value
+    // array (escape analysis): the storage is `Array<T>` of pointee structs,
+    // so the factory handle the shared array lowering would pass by reference
+    // does not type-check; unwraps it to the pointee value instead. "" when
+    // the shape does not apply (the shared lowering handles it).
+    std::string emitValueArrayPush(const CallExpr& c, const MemberExpr& m);
     std::string typedCtorText(const std::string& cls, const ExprList& args, const Node& site);
     // `new Int8Array([1, 2])` / `new Int8Array([...a, 1])`: the element list
     // becomes the view's values.

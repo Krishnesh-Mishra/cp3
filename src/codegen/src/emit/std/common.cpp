@@ -21,6 +21,7 @@
 
 #include "detail/int/builtin_tables.h"
 #include "detail/generator/cpp_writer.h"
+#include "detail/generator/family.h"
 #include "detail/generator/type_map.h"
 #include "cp3/diag/diagnostic_codes.hpp"
 
@@ -106,6 +107,105 @@ std::vector<std::string> Generator::emitPlainArgs(const CallExpr& c) {
 // -----------------------------------------------------------------------------
 // Dispatch
 // -----------------------------------------------------------------------------
+
+// `push`/`unshift` into a compiler-proven stack value array (escape analysis):
+// the storage is `Array<T>` (module scope) or the matching owned handle
+// spelling, holding pointee structs by value, while the shared array lowering
+// spells the element as a `Ref<T>`/`LocalRef<T>` handle. A fresh `new C(...)`
+// handle pushed into value storage does not type-check against it, so the
+// handle is unwrapped to the pointee constructor call. The value-array
+// proof admits only this call shape (one NewExpr argument of the element
+// class). Returns "" when the shape does not apply; the shared lowering then
+// handles the call.
+std::string Generator::emitValueArrayPush(const CallExpr& c,
+                                          const MemberExpr& m) {
+    if (!m.object || (m.property != "push" && m.property != "unshift")) {
+        return std::string();
+    }
+    // The value-array proof only admits pushes on the binding itself; an
+    // indexed receiver (`a[i].push(...)`) is not a fresh-element push.
+    if (m.object->kind != NodeKind::Identifier) return std::string();
+    if (!isStackValueArray(*m.object)) return std::string();
+    if (c.arguments.size() != 1 || !c.arguments.front() ||
+        c.arguments.front()->kind != NodeKind::NewExpr) {
+        return std::string();
+    }
+    const NewExpr& fresh = static_cast<const NewExpr&>(*c.arguments.front());
+    const Type constructed = effectiveType(fresh);
+    if (constructed.kind != TypeKind::Class) return std::string();
+    const Type elementType = arrayElemOf(effectiveType(*m.object));
+    if (elementType.kind != TypeKind::Class ||
+        elementType.name != constructed.name) {
+        return std::string();
+    }
+    const detail::ClassModel* model =
+        detail::ModelRegistry::get().classByName(constructed.name);
+    if (model == nullptr || model->builtin) return std::string();
+    // The storage element spelling: the handle classify gives, with the
+    // Ref-ABI prefix stripped (the same spelling the value-array
+    // declarations use).
+    const CppInfo valueInfo = info(fresh);
+    if (!valueInfo.representable || valueInfo.shape != Shape::ClassRef) {
+        return std::string();
+    }
+    constexpr const char* refPrefixes[] = {
+        "::cp3::runtime::Ref<", "::cp3::runtime::LocalRef<",
+        "::cp3::runtime::CycleRef<"};
+    std::size_t prefixSize = 0;
+    for (const char* prefix : refPrefixes) {
+        const std::size_t size = std::char_traits<char>::length(prefix);
+        if (valueInfo.cpp.rfind(prefix, 0) == 0) {
+            prefixSize = size;
+            break;
+        }
+    }
+    if (prefixSize == 0 || valueInfo.cpp.size() <= prefixSize + 1 ||
+        valueInfo.cpp.back() != '>') {
+        return std::string();
+    }
+    const std::string element = valueInfo.cpp.substr(
+        prefixSize, valueInfo.cpp.size() - prefixSize - 1);
+    const std::string recvText =
+        familyReceiverText(*m.object, elementType, m);
+    // `expr(new C(...))` spells `::cp3::runtime::makeTypedRef<Self>(<id>u,
+    // <ctor args>)`: the type-id stamp is a factory artefact, not a
+    // constructor parameter, so the value form drops it.
+    const std::string refText = expr(fresh);
+    constexpr const char* runtimeNs = "::cp3::runtime::";
+    constexpr std::size_t nsSize =
+        std::char_traits<char>::length("::cp3::runtime::");
+    if (refText.rfind(runtimeNs, 0) != 0) return std::string();
+    const std::size_t angle = refText.find('<', nsSize);
+    if (angle == std::string::npos) return std::string();
+    const std::string factory = refText.substr(nsSize, angle - nsSize);
+    const bool typed = factory == "makeTypedRef" ||
+                       factory == "makeLocalTypedRef" ||
+                       factory == "makeCycleRef";
+    const bool untyped = factory == "makeRef" || factory == "makeLocalRef";
+    if (!typed && !untyped) return std::string();
+    const std::size_t close = refText.find(">(", angle);
+    if (close == std::string::npos || refText.back() != ')') {
+        return std::string();
+    }
+    std::string payload =
+        refText.substr(close + 2, refText.size() - close - 3);
+    if (typed) {
+        const std::string stamp = std::to_string(model->typeId) + "u";
+        if (payload == stamp) {
+            payload.clear();
+        } else if (payload.rfind(stamp + ", ", 0) == 0) {
+            payload = payload.substr(stamp.size() + 2);
+        } else {
+            // A stamp this lowering did not spell: keep the shared lowering
+            // rather than guess at a constructor call.
+            return std::string();
+        }
+    }
+    needsTypedArray_ = true;
+    return std::string("::cp3::runtime::") +
+           (m.property == "push" ? "arrayPush" : "arrayUnshift") + "<" +
+           element + ">(" + recvText + ", " + element + "(" + payload + "))";
+}
 
 std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
     // `Math.min/max(...xs)` with a runtime array. The family lowers the
@@ -333,6 +433,11 @@ std::string Generator::emitBuiltinCall(const CallExpr& c, const MemberExpr& m) {
     // `forEach(...)`): src/std/collections/codegen.cpp.
     if (std::string coll = emitCollectionsMemberCall(c, m); !coll.empty()) {
         return coll;
+    }
+    // A compiler-proven stack value array of pointee structs stores its
+    // elements by value; the shared array lowering cannot see that proof.
+    if (std::string value = emitValueArrayPush(c, m); !value.empty()) {
+        return value;
     }
     // The regular-array method surface (src/language/arrays/codegen_methods.cpp):
     // push/pop, map/filter/reduce/find/..., indexOf/includes/binarySearch,

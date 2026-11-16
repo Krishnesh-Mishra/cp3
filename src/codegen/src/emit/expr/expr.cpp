@@ -675,6 +675,32 @@ std::string Generator::cond(const Expr& e) {
     return "cp3_truthy(" + expr(e) + ")";
 }
 
+// The condition text for a parenthesizing test site (an if/while/do-while/for
+// header): cond() with one redundant paren pair around a comparison dropped,
+// so a bare comparison prints as `if (depth == 0)` instead of `if ((depth == 0))`
+// (-Wparentheses-equality). The embedded text cannot escape its context: the
+// pair dropped here is the pair the comparison emitter put around the whole
+// comparison. String literals inside the comparison may carry unmatched
+// parens, which only keeps the parens, never breaks the drop.
+std::string Generator::condCondition(const Expr& e) {
+    std::string text = cond(e);
+    if (e.kind != NodeKind::BinaryExpr) return text;
+    if (!isComparisonOp(static_cast<const BinaryExpr&>(e).op)) return text;
+    const std::size_t size = text.size();
+    if (size < 2 || text.front() != '(' || text.back() != ')') return text;
+    int depth = 0;
+    for (std::size_t i = 0; i < size; ++i) {
+        const char ch = text[i];
+        if (ch == '(') {
+            ++depth;
+        } else if (ch == ')') {
+            --depth;
+            if (depth == 0 && i + 1 != size) return text;
+        }
+    }
+    return text.substr(1, size - 2);
+}
+
 std::string Generator::emitBinary(const BinaryExpr& b) {
     if (b.op == BinaryOp::Instanceof) return emitInstanceof(b);
     // A comparison may lower a `%` operand without the `-0.0` bail (exprCmp).

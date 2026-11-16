@@ -1,0 +1,15 @@
+// Pins that pushes of fresh instances into value-typed class arrays lower
+// to the value ABI (arrayPush<Cell>(recv, Cell(...))), not to a Ref<Cell>
+// against an Array<Cell> (which failed to compile).
+import console from "std/console";
+
+class Cell {
+    value: number;
+    constructor(v: number) {
+        this.value = v;
+    }
+}
+const kept: Cell[] = [];
+kept.push(new Cell(1));
+kept.push(new Cell(2));
+console.log(kept.length, kept[0].value, kept[1].value);

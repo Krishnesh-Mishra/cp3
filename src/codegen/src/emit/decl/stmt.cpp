@@ -284,7 +284,7 @@ void Generator::emitBranch(const Stmt& s, std::string& out, int indent) {
 
 void Generator::emitWhile(const WhileStatement& ws, std::string& out,
                           int indent) {
-    const std::string condition = ws.condition ? cond(*ws.condition) : "false";
+    const std::string condition = ws.condition ? condCondition(*ws.condition) : "false";
     line(out, indent, "while (" + condition + ") {");
     if (ws.body) emitBranch(*ws.body, out, indent + 1);
     line(out, indent, "}");
@@ -294,7 +294,7 @@ void Generator::emitDoWhile(const DoWhileStatement& dw, std::string& out,
                             int indent) {
     line(out, indent, "do {");
     if (dw.body) emitBranch(*dw.body, out, indent + 1);
-    const std::string condition = dw.condition ? cond(*dw.condition) : "false";
+    const std::string condition = dw.condition ? condCondition(*dw.condition) : "false";
     line(out, indent, "} while (" + condition + ");");
 }
 
@@ -310,7 +310,7 @@ void Generator::emitIf(const IfStatement& is, std::string& out, int indent) {
     if (fact && is.thenBranch && !factStableBranch(*is.thenBranch)) {
         fact.reset();
     }
-    const std::string condition = is.condition ? cond(*is.condition) : "false";
+    const std::string condition = is.condition ? condCondition(*is.condition) : "false";
     std::size_t factDepth = 0;
     if (fact) {
         factDepth = intMode_->divisible.size();
@@ -385,9 +385,17 @@ void Generator::emitDeclaratorStmt(const VariableDeclarator& d, VarKind kind,
                                 prefixSize, elementCpp.size() - prefixSize - 1);
                         }
                     }
-                    line(out, indent, "std::vector<" + elementCpp + "> " +
-                                          local + "{};");
-                    line(out, indent, "auto* const " + name + " = &" + local + ";");
+                    // The owned Array<T> form keeps the lowered calls on the
+                    // Array<T> runtime ABI; a stack std::vector plus a raw
+                    // pointer left arrayWriteAt with no matching callee.
+                    needsTypedArray_ = true;
+                    const std::string cv =
+                        kind == VarKind::Const ? "const " : "";
+                    line(out, indent,
+                         cv + "::cp3::runtime::Array<" + elementCpp + "> " +
+                         name +
+                         " = ::cp3::runtime::makeArray<" + elementCpp +
+                         ">(std::vector<" + elementCpp + ">{});");
                     declareBinding(d);
                     return;
                 }
