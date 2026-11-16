@@ -62,12 +62,14 @@ void visitCallChildren(const Node& node, const Visit& visit) {
         case NodeKind::CallExpr: {
             const auto& call = static_cast<const CallExpr&>(node);
             visitSubtree(call.callee.get(), visit);
+            visitTypes(call.typeArgs, visit);
             visitExprs(call.arguments, visit);
             return;
         }
         case NodeKind::NewExpr: {
             const auto& construct = static_cast<const NewExpr&>(node);
             visitSubtree(construct.callee.get(), visit);
+            visitTypes(construct.typeArgs, visit);
             visitExprs(construct.arguments, visit);
             return;
         }

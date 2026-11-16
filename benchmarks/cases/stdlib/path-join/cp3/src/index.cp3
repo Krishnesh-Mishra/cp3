@@ -16,7 +16,7 @@ import path from "std/path";
 // has no explicit number -> i64 cast. MOD stays `number` to match.
 
 const ITERATIONS: i64 = 170000;
-const MOD = 1000003;
+const MOD: number = 1000003;
 
 function pathChecksum(iterations: i64): number {
   let checksum: number = 0;

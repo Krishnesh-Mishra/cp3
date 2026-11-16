@@ -21,7 +21,7 @@ import path from "std/path";
 
 const ITERATIONS: i64 = 200;
 const FILE_BYTES: i64 = 4096;
-const MOD = 1000003;
+const MOD: number = 1000003;
 
 function payload(): string {
   const seed = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";

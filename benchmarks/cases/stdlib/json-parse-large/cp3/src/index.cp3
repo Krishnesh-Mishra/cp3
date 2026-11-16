@@ -22,7 +22,7 @@ import Math from "std/math";
 const NUMBERS = 50000;
 const TAGS = 1000;
 const ITERATIONS: i64 = 20;
-const MOD = 1000003;
+const MOD: number = 1000003;
 
 interface Payload {
   id: number;
@@ -73,10 +73,10 @@ while (iter < ITERATIONS) {
     j = j + 1;
   }
 
-  j = 0;
-  while (j < p.tags.length) {
-    field = field + p.tags[j].length;
-    j = j + 1;
+  let k: i64 = 0;
+  while (k < p.tags.length) {
+    field = field + p.tags[k].length;
+    k = k + 1;
   }
 
   checksum = (checksum * 31 + field + TEXT.length) % MOD;

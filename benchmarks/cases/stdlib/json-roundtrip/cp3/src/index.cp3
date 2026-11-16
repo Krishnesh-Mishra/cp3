@@ -42,9 +42,9 @@ interface User {
 
 const TEXT = '{"id":48271,"name":"Ada Lovelace","email":"ada.lovelace@example.com","active":true,"score":93.5,"title":"Principal Engineer","company":"Analytical Engines Ltd","city":"London","country":"GB","tags":["analyst","engineer","pioneer","mathematician","compiler","runtime"],"samples":[12,17,23,29,31,37,41,43,47,53]}';
 const ITERATIONS: i64 = 20000;
-const MOD = 1000003;
+const MOD: number = 1000003;
 
-let checksum = 0;
+let checksum: number = 0;
 for (let i: i64 = 0; i < ITERATIONS; i++) {
   let u = JSON.parse<User>(TEXT);
   let out = JSON.stringify({

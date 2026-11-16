@@ -34,30 +34,30 @@ while (i < KEYS) {
 let checksum: i64 = 0;
 let r: i64 = 0;
 while (r < ROUNDS) {
-  i = 0;
-  while (i < KEYS) {
-    m.delete(i);
-    i = i + 10;
+  let j: i64 = 0;
+  while (j < KEYS) {
+    m.delete(j);
+    j = j + 10;
   }
 
-  i = 0;
-  while (i < KEYS) {
-    m.set(i, i * 5 + r + 2);
-    i = i + 10;
+  let k: i64 = 0;
+  while (k < KEYS) {
+    m.set(k, k * 5 + r + 2);
+    k = k + 10;
   }
 
-  i = 0;
-  while (i < KEYS) {
-    const current: i64 = m.get(i) ?? ZERO;
-    m.set(i, current + 1);
-    i = i + 7;
+  let l: i64 = 0;
+  while (l < KEYS) {
+    const current: i64 = m.get(l) ?? ZERO;
+    m.set(l, current + 1);
+    l = l + 7;
   }
 
-  i = 0;
-  while (i < KEYS) {
-    const v: i64 = m.get(i) ?? ZERO;
+  let q: i64 = 0;
+  while (q < KEYS) {
+    const v: i64 = m.get(q) ?? ZERO;
     checksum = (checksum * 31 + v) % MOD;
-    i = i + 1;
+    q = q + 1;
   }
 
   r = r + 1;

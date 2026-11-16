@@ -7,7 +7,7 @@ let b: u64[] = [];
 let r: u64 = 12345;
 let i: u64 = 0;
 while (i < W * W) { r = xs_next(r); a.push(r % 256); b.push(0); i = i + 1; }
-function blur(src: u64[], dst: u64[]): void {
+function blur(src: u64[], dst: u64[]): undefined {
   let y: u64 = 1;
   while (y < W - 1) {
     let x: u64 = 1;

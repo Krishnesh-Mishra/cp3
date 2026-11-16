@@ -5,71 +5,73 @@
 <!-- latest-by-test:start -->
 <!-- test:health-server:start -->
 ### health-server
-_Updated 2026-11-13T12:15:20 by `python benchmarks/runner/run_benchmark.py`._
+_Updated 2026-11-16T11:27:59 by `python benchmarks/runner/run_benchmark.py --only health-server --reps 1 --cp3c build\windows-release\bin\cp3c.exe`._
 
 ```text
   * health-server  median boot/req/s; pooled latency p50/p95; CV = run-to-run variation %
-  lang        ok/run  boot ms  p50 ms  p95 ms   req/s  RPS CV%  errors         vs cp3  RSS MiB  bin KiB
-  -----------------------------------------------------------------------------------------------------
-  java           1/1   1146.0    0.30    0.55   9,823        -       0   1.23x faster    171.6        4
-  cp3            1/1    545.6    0.29    0.45   7,955        -       0       baseline     17.7     7494
-  go             1/1    537.2    0.13    0.47   7,585        -       0   1.05x slower     70.0    15630
-  rust           1/1    520.8    0.50    0.82   7,122        -       0   1.12x slower      8.9     2154
-  cpp            1/1    101.3    0.17    0.65   7,013        -       0   1.13x slower      6.3       60
-  dotnet         1/1    588.7    0.21    0.64   6,852        -       0   1.16x slower    212.8        8
-  js-fastify     1/1   1563.0    0.16    0.40   5,280        -       0   1.51x slower     69.6        -
-  js             1/1   2572.2    0.27    0.57   3,001        -       0   2.65x slower     65.4        -
-  python         1/1   2087.6    0.60    1.04     502        -       0  15.85x slower      4.1        -
-  goose          0/1        -       -       -  no run        -       0              -        -        -
-
-gate: BIG WARN (fix this): health-server: cp3 7955 req/s is 1.23x slower than java (9823 req/s), tripwire 1.00x
+  lang        ok/run  boot ms  p50 ms  p95 ms   req/s  RPS CV%  errors  vs cp3  RSS MiB  bin KiB
+  ----------------------------------------------------------------------------------------------
+  java           1/1   1150.6    0.42    0.77   9,624        -       0       -    167.3        4
+  go             1/1    524.9    0.17    0.45   8,837        -       0       -     70.1    15630
+  rust           1/1    533.4    0.35    0.45   7,622        -       0       -      7.5     2154
+  cpp            1/1     83.1    0.35    0.45   7,602        -       0       -      5.8       60
+  dotnet         1/1      8.9    0.46    0.91   7,559        -       0       -     50.6        8
+  js-fastify     1/1   2587.3    0.31    0.57   4,966        -       0       -     68.6        -
+  js             1/1   3107.0    0.30    0.54   1,378        -       0       -     62.5        -
+  python         1/1   3160.1    1.38    2.38     490        -       0       -      4.1        -
+  cp3            0/1        -       -       -  no run        -       0       -        -        -
+  goose          0/1        -       -       -  no run        -       0       -        -        -
+    ! cp3  not runnable yet: cp3c: cannot copy 'C:\Users\Krishnesh\dev\cp3\src/std/buffer/include\cp3\std\buffer.hpp' to
+           'C:\Users\Krishnesh\dev\cp3\benchmarks\cases\network\health-server\c
 ```
 <!-- test:health-server:end -->
 
 <!-- test:health-server-multi:start -->
 ### health-server-multi
-_Updated 2026-11-13T12:19:01 by `python benchmarks/runner/run_benchmark.py`._
+_Updated 2026-11-15T21:46:59 by `python benchmarks/runner/run_benchmark.py`._
 
 ```text
   * health-server-multi  median boot/req/s; pooled latency p50/p95; CV = run-to-run variation %
-  lang        ok/run  boot ms  p50 ms  p95 ms   req/s  RPS CV%  errors         vs cp3  RSS MiB  bin KiB
-  -----------------------------------------------------------------------------------------------------
-  cp3            1/1    517.3    0.21    0.47  64,797        -       0       baseline     22.9     7498
-  java           1/1   1121.6    0.35    0.61  60,988        -       0   1.06x slower    362.4        4
-  cpp            1/1    520.8    0.11    0.54  48,085        -      12   1.35x slower      6.4       61
-  js-fastify     1/1   2078.6    0.37    0.56  37,118        -       0   1.75x slower     54.4        -
-  go             1/1    517.6    0.34    0.58  35,556        -       0   1.82x slower     72.5    15630
-  dotnet         1/1    546.9    0.35    0.63  25,361        -       0   2.55x slower    350.1        9
-  js             1/1   1567.3    0.26    0.55  21,288        -       0   3.04x slower     50.3        -
-  rust           1/1    522.9    0.50    0.70  19,225        -      28   3.37x slower     10.0     2154
-  python         1/1   3145.4    1.00    1.63   5,947        -       0  10.90x slower      4.0        -
-  goose          0/1        -       -       -  no run        -       0              -        -        -
+  lang        ok/run  boot ms  p50 ms  p95 ms   req/s  RPS CV%  errors  vs cp3  RSS MiB  bin KiB
+  ----------------------------------------------------------------------------------------------
+  cpp            1/1    544.3    0.09    0.18  90,361        -      12       -      6.5       61
+  dotnet         1/1   1598.0    0.33    0.51  53,059        -       0       -    363.8        9
+  rust           1/1    533.9    0.21    0.42  49,500        -       0       -     10.4     2154
+  go             1/1    517.8    0.31    0.51  42,659        -       0       -     75.3    15630
+  java           1/1   1105.1    0.39    0.60  37,121        -       0       -    345.0        4
+  js-fastify     1/1   2077.7    0.21    0.38  29,556        -       0       -     54.2        -
+  js             1/1   1576.2    0.44    0.76  25,310        -       0       -     51.0        -
+  python         1/1   2629.2    1.11    1.35   5,115        -       0       -      4.1        -
+  cp3            0/1        -       -       -  no run        -       0       -        -        -
+  goose          0/1        -       -       -  no run        -       0       -        -        -
+    ! cp3  not runnable yet: cp3c: cannot copy 'C:\Users\Krishnesh\dev\cp3\src/std/buffer/include\cp3\std\buffer.hpp' to
+           'C:\Users\Krishnesh\dev\cp3\benchmarks\cases\network\health-server-m
 ```
 <!-- test:health-server-multi:end -->
 
 <!-- test:compute-single:start -->
 ### compute-single
-_Updated 2026-11-13T12:25:44 by `python benchmarks/runner/run_benchmark.py`._
+_Updated 2026-11-15T21:51:56 by `python benchmarks/runner/run_benchmark.py`._
 
 ```text
   * compute-single  expected = 131434424 (total Collatz steps for 1..1,000,000) | median/best/p95 ms; CV = variation %
   lang    median ms  best ms   p95 ms   CV%         vs cp3  RSS MiB  bin KiB
   --------------------------------------------------------------------------
-  rust        205.2    193.2    260.6  30.8   2.36x faster      4.5      122
-  cpp         262.7    213.8    321.6  33.7   1.84x faster      5.1       19
-  go          324.0    288.6    501.4  32.0   1.49x faster      6.1     1750
-  java        405.6    388.6    426.6   4.3   1.19x faster     39.2        1
-  cp3         483.3    477.0    642.0  16.7       baseline      5.7      414
-  js         1605.1   1581.2   1676.3   2.4   3.32x slower     38.3        -
-  python    22707.3  20630.6  23571.9   9.2  46.98x slower     10.9        -
+  rust        192.1    183.6    241.8  22.9   2.99x faster      4.2      122
+  cpp         252.4    212.2    330.4  16.1   2.28x faster      4.7       19
+  go          309.5    274.5    380.4  18.4   1.86x faster      5.9     1750
+  java        395.0    379.4    426.4   4.1   1.45x faster     39.1        1
+  cp3         574.8    454.1    732.9  20.8       baseline      5.8      414
+  js         1586.2   1535.2   1637.6   2.3   2.76x slower     45.3        -
+  python    15812.7   9426.1  23179.4  27.5  27.51x slower     11.0        -
   goose           -        -        -     -              -        -        -
     x goose  build failed: cannot open file: C:\Users\Krishnesh\dev\cp3\benchmarks\cases\compute\compute-single\goose\main.goose
     +  output verified: 7/7 match oracle '131434424'
 
-gate: BIG WARN (fix this): compute-single: cp3 483 ms is 1.84x cpp (263 ms), tripwire 1.20x
-gate: BIG WARN (fix this): compute-single: cp3 483 ms is 2.36x rust (205 ms), tripwire 1.20x
-gate: BIG WARN (fix this): compute-single: cp3 483 ms is 1.49x go (324 ms), tripwire 1.00x
-gate: BIG WARN (fix this): compute-single: cp3 483 ms is 1.19x java (406 ms), tripwire 1.00x
+gate: BIG WARN (fix this): compute-single: cp3 575 ms is 2.28x cpp (252 ms), tripwire 1.20x
+gate: BIG WARN (fix this): compute-single: cp3 575 ms is 2.99x rust (192 ms), tripwire 1.20x
+gate: BIG WARN (fix this): compute-single: cp3 575 ms is 1.86x go (310 ms), tripwire 1.00x
+gate: BIG WARN (fix this): compute-single: cp3 575 ms is 1.45x java (395 ms), tripwire 1.00x
 ```
 <!-- test:compute-single:end -->
 

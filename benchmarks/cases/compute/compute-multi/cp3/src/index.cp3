@@ -15,7 +15,9 @@ import console from "std/console";
 // Source: benchmarks/cases/compute-multi/cp3/src/index.cp3
 //
 // Native i64 arithmetic: every intermediate fits in 64 bits and `/2` is exact
-// in the Collatz branch where n is even.
+// in the Collatz branch where n is even. `parallel.reduce` binds the
+// induction variable as `number`, so it is converted at the i64 boundary.
+// The accumulator starts at an i64 zero, which widens the reduce to i64.
 
 function collatzSteps(start: i64): i64 {
   let n: i64 = start;
@@ -31,5 +33,6 @@ function collatzSteps(start: i64): i64 {
   return steps;
 }
 
-const total: i64 = parallel.reduce(1..1000001, 0, (sum, i) => sum + collatzSteps(i));
+let zero: i64 = 0;
+const total = parallel.reduce(1..1000001, zero, (sum, i) => sum + collatzSteps(parseTo<i64>(i)));
 console.log(total);

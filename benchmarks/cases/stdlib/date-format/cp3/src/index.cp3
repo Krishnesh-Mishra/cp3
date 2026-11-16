@@ -22,7 +22,7 @@ import Date from "std/date";
 // no explicit number -> i64 cast.
 
 const ITERATIONS: i64 = 50000;
-const MOD = 1000003;
+const MOD: number = 1000003;
 const HOUR_SECONDS: i64 = 3600;
 
 // '0'..'9' -> 0..9, '-' -> 10, 'T' -> 11, ':' -> 12. The same weights are used

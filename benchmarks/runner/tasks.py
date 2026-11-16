@@ -83,6 +83,30 @@ TASK_OMIT_LANGUAGES = {
     "dev-reload": {
         "goose": "goose entry not authored for this task yet",
     },
+    # Placeholder goose files exist in these tasks (constant-print stubs or an
+    # `import rng` the vendored goose std does not provide), so they are not
+    # working benchmark entries yet. Omit them until they are authored for real.
+    "blur": {
+        "goose": "goose entry not authored for this task yet",
+    },
+    "sum-array": {
+        "goose": "goose entry not authored for this task yet",
+    },
+    "graph-bfs": {
+        "goose": "goose entry not authored for this task yet",
+    },
+    "push": {
+        "goose": "goose entry not authored for this task yet",
+    },
+    "tree-walk": {
+        "goose": "goose entry not authored for this task yet",
+    },
+    "sexp": {
+        "goose": "goose entry not authored for this task yet",
+    },
+    "strlist": {
+        "goose": "goose entry not authored for this task yet",
+    },
     "json-roundtrip": {
         "cpp": "no JSON in the C++ standard library; a dependency-free file would vendor a parser",
         "rust": "no JSON in Rust std without a crate; adding serde_json compares dependencies",
@@ -115,6 +139,7 @@ TASK_OMIT_LANGUAGES = {
     "interp": {
         "rust": "no virtual dispatch in Rust; enum + match is the idiomatic analogue (kept for cross-language comparison but listed here to match exception-cost)",
         "go": "no inheritance in Go; interface + type-switch is the idiomatic analogue",
+        "goose": "goose entry not authored for this task yet",
     },
 }
 

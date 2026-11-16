@@ -18,7 +18,7 @@ import os from "std/os";
 // number -> i64 cast. MOD stays `number` to match the fold.
 
 const ITERATIONS: i64 = 50000;
-const MOD = 1000003;
+const MOD: number = 1000003;
 
 function platformCode(): i64 {
   const name = os.platform();

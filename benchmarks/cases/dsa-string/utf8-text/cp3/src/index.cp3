@@ -19,7 +19,7 @@ import console from "std/console";
 
 const REPEATS: i64 = 4096;
 const ROUNDS: i64 = 32;
-const MOD = 1000000007;
+const MOD: number = 1000000007;
 
 const UNIT = "ASCII-0123456789|日本語テキスト|emoji-😀🚀|café naïve résumé|Ω≈ç√∫˜µ≤≥÷|";
 const TEXT = UNIT.repeat(REPEATS);

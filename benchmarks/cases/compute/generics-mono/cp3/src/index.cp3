@@ -39,7 +39,7 @@ class NumberBox {
 }
 
 const ITERATIONS: i64 = 2000000;
-const MOD = 1000000007;
+const MOD: number = 1000000007;
 
 let totalGeneric: number = 0;
 let i: i64 = 0;
@@ -51,11 +51,11 @@ while (i < ITERATIONS) {
 }
 
 let totalConcrete: number = 0;
-i = 0;
-while (i < ITERATIONS) {
-  const box = new NumberBox(i);
+let j: i64 = 0;
+while (j < ITERATIONS) {
+  const box = new NumberBox(j);
   totalConcrete = (totalConcrete + box.get()) % MOD;
-  i = i + 1;
+  j = j + 1;
 }
 
 console.log(totalGeneric, totalConcrete);

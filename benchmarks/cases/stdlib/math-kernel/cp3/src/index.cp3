@@ -18,7 +18,7 @@ import Math from "std/math";
 // exact.
 
 const COUNT: i64 = 5000000;
-const MOD = 1000000007;
+const MOD: number = 1000000007;
 
 let checksum: number = 0;
 let sqrtTotal: f64 = 0.0;

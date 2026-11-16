@@ -28,7 +28,7 @@ import Math from "std/math";
 
 const SIZE: number = 1000000;
 const ROUNDS: i64 = 32;
-const MOD = 1000000007;
+const MOD: number = 1000000007;
 
 let values = new Float64Array(SIZE);
 let bytes = new Uint8Array(SIZE);
@@ -46,20 +46,20 @@ let total: f64 = 0.0;
 let round: i64 = 0;
 while (round < ROUNDS) {
   let acc: f64 = 0.0;
-  i = 0;
-  while (i < SIZE) {
-    acc = acc + floats.getFloat64(i * 8, true);
-    i = i + 1;
+  let j: i64 = 0;
+  while (j < SIZE) {
+    acc = acc + floats.getFloat64(j * 8, true);
+    j = j + 1;
   }
   total = total + acc;
   round = round + 1;
 }
 
 let byteTotal: number = 0;
-i = 0;
-while (i < SIZE) {
-  byteTotal = byteTotal + octets.getUint8(i);
-  i = i + 1;
+let k: i64 = 0;
+while (k < SIZE) {
+  byteTotal = byteTotal + octets.getUint8(k);
+  k = k + 1;
 }
 
 let scaled = Math.trunc(total * 4.0);

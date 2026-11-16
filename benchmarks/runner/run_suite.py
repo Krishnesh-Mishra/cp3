@@ -856,7 +856,21 @@ def try_cp3_build(entry: Path) -> tuple[bool, str]:
     result = run_command([str(CP3C), "build", "src/index.cp3", "--show-runtime"],
                          cwd=entry)
     if result.returncode != 0:
-        return False, first_diagnostic(result.stderr or result.stdout)
+        # A fresh `cp3c --show-runtime` mirror fails with "cannot copy '...':
+        # File exists" (duplicate include root: a native-package row re-lists
+        # an always-available D72 include tree, so the mirror copies the same
+        # file twice). The mirror is show-only and does not affect the
+        # measured executable, so retry WITHOUT it rather than drop the row;
+        # surface it in the gate notes instead. Compiler bug; remove this
+        # fallback once cp3c de-duplicates include roots in the mirror.
+        combined = f"{result.stderr or ''}\n{result.stdout or ''}"
+        if "cannot copy" in combined and "_runtime" in combined:
+            GATE_NOTES.append(
+                f"note: {entry.parent.name}: `cp3c build --show-runtime` failed "
+                "(duplicate include root in the runtime mirror); measured with a plain build")
+            result = run_command([str(CP3C), "build", "src/index.cp3"], cwd=entry)
+        if result.returncode != 0:
+            return False, first_diagnostic(result.stderr or result.stdout)
     candidates = sorted(
         (entry / ".cp3").rglob(f"*{EXE}") if EXE else (entry / ".cp3").rglob("*"),
         key=lambda p: p.stat().st_mtime,
@@ -2571,9 +2585,15 @@ def main() -> int:
                 expected = _exp
             rows = []
             omitted = TASK_OMIT_LANGUAGES.get(task, {})
+            task_base = _find_task_dir(task) if _REGISTRY_OK else (CASES / task)
             for language in COMPUTE_LANGUAGES:
                 if language in omitted:
                     announce_omit(task, language, omitted[language])
+                    continue
+                if language == "goose" and not (task_base / "goose" / "main.goose").is_file():
+                    # goose entries are authored per task; a task without one
+                    # must not show up as a build failure.
+                    announce_omit(task, language, "goose entry not authored for this task yet")
                     continue
                 if not present(language):
                     announce_skip(language)

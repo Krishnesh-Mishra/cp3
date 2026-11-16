@@ -18,7 +18,7 @@ const MOD: i64 = 1000000007;
 
 function mayThrow(i: i64): i64 {
   if (i % 3 === 0) {
-    throw "boom";
+    throw new Error("boom");
   }
   return i;
 }
@@ -43,15 +43,15 @@ while (i < ITERATIONS) {
 }
 
 let returned: i64 = 0;
-i = 0;
-while (i < ITERATIONS) {
-  const v: i64 = mayReturn(i);
+let j: i64 = 0;
+while (j < ITERATIONS) {
+  const v: i64 = mayReturn(j);
   if (v < 0) {
     returned = (returned * 31 + 1) % MOD;
   } else {
     returned = (returned * 31 + v) % MOD;
   }
-  i = i + 1;
+  j = j + 1;
 }
 
 console.log(thrown, returned);

@@ -21,7 +21,7 @@ import path from "std/path";
 
 const SIZE: i64 = 8388608;
 const ITERATIONS: i64 = 8;
-const MOD = 1000003;
+const MOD: number = 1000003;
 
 const SEED = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 const DATA = SEED.repeat(SIZE / 64);

@@ -19,7 +19,7 @@ import console from "std/console";
 
 const REPEATS: i64 = 5000;
 const ROUNDS: i64 = 8;
-const MOD = 1000000007;
+const MOD: number = 1000000007;
 
 const UNIT = "alpha 123 beta 45 gamma 6789 delta 0 epsilon 42\n";
 const TEXT = UNIT.repeat(REPEATS);

@@ -13,7 +13,7 @@ function build(depth: u64, seed: u64): Node {
   while (i < k) { n.kids.push(build(depth - 1, xs_next(r + i))); i = i + 1; }
   return n;
 }
-function animate(n: Node, phase: u64): void {
+function animate(n: Node, phase: u64): undefined {
   if (n.id % 7 === phase) { n.rot = (n.rot + 1) % 4; n.tx = (n.tx + 1) % 9; }
   let i: u64 = 0;
   while (i < n.kids.length) { animate(n.kids[i], phase); i = i + 1; }
