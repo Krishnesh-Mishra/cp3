@@ -267,7 +267,12 @@ bool ParserImpl::parseParamsBody(ParamList& out) {
 ParamList ParserImpl::parseParamList() {
     ParamList out;
     if (!expect(TokenKind::LParen, "expected '('")) return out;
-    (void)parseParamsBody(out);
+    if (!parseParamsBody(out)) {
+        // parseParamsBody knows whether the close paren was matched; nobody
+        // reported it otherwise. Anchor at the current token, like every
+        // parser expected-token diagnostic.
+        report(diagcode::kExpectedToken, "expected ')'");
+    }
     return out;
 }
 
