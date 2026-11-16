@@ -375,11 +375,58 @@ function identifierReferencedOutside(text: string, name: string, exceptLine: num
     return false;
 }
 
+/** True when the document has at least one line with real code: anything
+ * other than blanks, comments and import lines. In a file without any (a
+ * barrel or scaffold being authored, or an all-import fixture), no binding
+ * can be observed to be unreferenced - offering to delete the whole import
+ * block is noise, not a fix, so no unused-import action is produced. */
+function hasNonImportContent(text: string): boolean {
+    // Strip line comments, block comments and string literals so an import
+    // line that is only quoted or commented out cannot masquerade as code.
+    let code = "";
+    let inLineComment = false;
+    let blockDepth = 0;
+    let inString: string | undefined;
+    let inEscape = false;
+    for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        const next = text[i + 1];
+        if (inLineComment) {
+            if (ch === "\n") { inLineComment = false; code += ch; }
+            continue;
+        }
+        if (blockDepth > 0) {
+            if (ch === "*" && next === "/") { blockDepth = 0; i++; }
+            else if (ch === "\n") code += ch;
+            continue;
+        }
+        if (inString) {
+            if (inEscape) { inEscape = false; continue; }
+            if (ch === "\\") { inEscape = true; continue; }
+            if (ch === inString) inString = undefined;
+            else if (ch === "\n") code += ch;
+            continue;
+        }
+        if (ch === "/" && next === "/") { inLineComment = true; i++; continue; }
+        if (ch === "/" && next === "*") { blockDepth = 1; i++; continue; }
+        if (ch === "\"" || ch === "'" || ch === "`") { inString = ch; continue; }
+        code += ch;
+    }
+    for (const rawLine of code.split("\n")) {
+        const line = rawLine.trim();
+        if (line === "") continue;
+        if (/^import\s+/.test(line)) continue;
+        return true;
+    }
+    return false;
+}
+
 /** Unused import suggestions inside the cursor line range: one action per
  * fully-unused import statement covering the whole line. */
 function unusedImportActions(document: vscode.TextDocument, range: vscode.Range | vscode.Selection): vscode.CodeAction[] {
     const text = document.getText();
     const actions: vscode.CodeAction[] = [];
+    if (!hasNonImportContent(text)) return actions;
     const startLine = range.start.line;
     const endLine = range.end.line;
     for (let line = 0; line < document.lineCount; line++) {
