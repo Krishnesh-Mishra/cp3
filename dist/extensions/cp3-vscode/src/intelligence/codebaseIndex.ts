@@ -47,7 +47,7 @@ interface FileRecord {
  * balance did not parse, and contributes nothing to the index. Handles the
  * common cases (line comments, block comments, quoted strings with escapes,
  * nested template strings are treated as opaque text for delimiter pairing). */
-function hasBalancedDelimiters(text: string): boolean {
+export function hasBalancedDelimiters(text: string): boolean {
     const stack: string[] = [];
     let quote: string | undefined;
     for (let i = 0; i < text.length; i++) {

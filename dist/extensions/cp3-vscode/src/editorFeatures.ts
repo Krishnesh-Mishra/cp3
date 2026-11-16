@@ -1,6 +1,8 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 
+import { hasBalancedDelimiters } from "./intelligence/codebaseIndex";
+
 interface ExportedSymbol {
     readonly name: string;
     readonly kind: vscode.CompletionItemKind;
@@ -51,6 +53,11 @@ function declarationDoc(text: string, declarationOffset: number): string {
 
 function parseExports(uri: vscode.Uri, text: string): ExportedSymbol[] {
     const entries: ExportedSymbol[] = [];
+    // A file that fails to parse contributes nothing: its declarations may
+    // be mid-sentence (an unterminated fixture, half-typed code), and
+    // suggesting an import against a module that cannot compile is a paper
+    // cut the user pays for with every accept.
+    if (!hasBalancedDelimiters(text)) return entries;
     exportPattern.lastIndex = 0;
     for (let match = exportPattern.exec(text); match; match = exportPattern.exec(text)) {
         const kind = match[1];
@@ -153,8 +160,10 @@ async function buildExportIndex(): Promise<void> {
             }
         }
         // A barrel re-exports another module: the names it exports are
-        // importable through the barrel itself.
+        // importable through the barrel itself. A barrel that does not parse
+        // re-exports nothing.
         for (const [key, text] of texts) {
+            if (!hasBalancedDelimiters(text)) continue;
             starExportPattern.lastIndex = 0;
             for (let match = starExportPattern.exec(text); match; match = starExportPattern.exec(text)) {
                 try {
