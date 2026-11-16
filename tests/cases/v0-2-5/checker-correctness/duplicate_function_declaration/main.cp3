@@ -1,14 +1,15 @@
 import console from "std/console";
 
-// Two declarations of the same name are not overloads here: cp3 has no
-// overloads for plain functions, so a second declaration is a duplicate
-// declaration, like a duplicate class.
+// Two declarations of the same function with the SAME parameter signature
+// are not viable overloads - that is a duplicate declaration, like a
+// duplicate class. Different parameter types would be an overload set (spec
+// §17) and are fine.
 function combine(a: number, b: number): number {
     return a + b;
 }
 
-function combine(a: string, b: string): string {
-    return a + b;
+function combine(c: number, d: number): number {
+    return c + d;
 }
 
 console.log(combine(1, 2));
