@@ -288,7 +288,7 @@ const char* name() noexcept {
 }
 
 std::string version() {
-    return "0.2.4";
+    return "0.2.5";
 }
 
 }  // namespace cp3::runtime
