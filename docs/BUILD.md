@@ -31,10 +31,11 @@ python vendor/tools/check-prerequisites.py --report   # findings only
 - Windows x64, PowerShell 5.1+
 - Python 3
 - CMake 3.20+ and Ninja
-- MinGW-w64 `g++` with C++20 (the WinLibs/UCRT g++ environment is what the
+- MinGW-w64 `g++` with C++23 (the WinLibs/UCRT g++ environment is what the
   canonical `windows-release` preset auto-detects)
-- Clang 16+ on `PATH` (or in a standard LLVM location) — cp3 programs are
-  compiled by Clang, independently of which compiler built `cp3c` itself
+- Clang with C++23 support on `PATH` (or in a standard LLVM location) — cp3
+  programs are compiled by Clang, independently of which compiler built
+  `cp3c` itself (the `std/json` surface requires C++23 since glaze landed)
 - For the MSI: .NET SDK with `dotnet` on `PATH` (WiX 5.0.2 is pinned in
   `dist/packaging/windows/.config/dotnet-tools.json` and restored
   automatically; the first MSI build needs network access)
@@ -43,8 +44,8 @@ python vendor/tools/check-prerequisites.py --report   # findings only
 
 - A WSL distro with a normal user toolchain (the release Linux build ran
   under WSL; paths such as `/mnt/c/Users/…/build/linux-release` are normal)
-- Python 3, CMake 3.20+, Ninja, `g++` or `clang++` with C++20
-- Clang 16+ for cp3 programs and the staged smoke test
+- Python 3, CMake 3.20+, Ninja, `g++` or `clang++` with C++23
+- Clang with C++23 support for cp3 programs and the staged smoke test
 - `sha256sum`, `tar`, `file` (only `file` is used just to warn about vendor
   archive formats)
 

@@ -47,7 +47,7 @@ A native call that blocks freezes its loop. Pure blocking libraries without a po
 - `request(v)` resolves with the next `Out` message; `terminate()` is idempotent and drops queued messages and pending requests.
 - The compiler rejects what it cannot transfer: wrong payload shapes, mismatched channel directions, and — for inline workers — any capture of an enclosing variable binding (CP3909). Top-level functions, imports, builtins, and types stay visible, because they are code, not state.
 
-The `parallel.*` API is a **hand-rolled fixed `std::thread` pool** — explicitly not TBB (the spec disallowed third-party libraries in that layer; `src/runtime/src/parallel/parallel.cpp`). It runs supported work decomposition (`parallel.for`, `parallel.reduce`, `parallel.run`) under checker-enforced rules about captures, accumulator types, and mutation: prefer returning a reduction value over mutating captured state, because a captured mutable reference is rejected or races.
+The `parallel.*` API is backed by **oneTBB** in the v0.2.6 change set — the vendored static `libtbb.a` linked into programs that use the parallel family (see [Runtime libraries](./05-runtime-libraries.md)). It runs supported work decomposition (`parallel.for`, `parallel.reduce`, `parallel.run`) under checker-enforced rules about captures, accumulator types, and mutation: prefer returning a reduction value over mutating captured state, because a captured mutable reference is rejected or races. Induction-variable widths and the first-error-wins error propagation are unchanged by the backend swap; the worker/Channel message-passing layer keeps its existing FIFO, drop-on-close mechanism.
 
 ## What the event loop never does
 
@@ -75,4 +75,4 @@ The `parallel.*` API is a **hand-rolled fixed `std::thread` pool** — explicitl
 - [No garbage collector](./02-no-garbage-collector.md) — lifetime across the loop boundary
 - [Async and concurrency, in the language](../language/99-global-builtins.md) — checked `parallel.*` signatures and diagnostics
 - [I/O readiness (std/io)](../standard-library/18-io.md) and [Network](../standard-library/13-network.md) — the user-facing APIs
-- [Runtime libraries](./05-runtime-libraries.md) — libuv and uWebSockets, the native substrate
+- [Runtime libraries](./05-runtime-libraries.md) — libuv, uWebSockets and the rest of the native substrate

@@ -9,7 +9,7 @@ title: JSON
 import JSON from "std/json";
 ```
 
-The reader/writer is hand-written and parses numbers with a vendored `fast_float`; duplicate keys in an object throw. Escapes are `\" \\ \/ \b \f \n \r \t \uXXXX` — anything else is an "unknown escape" error.
+The parse and stringify backends are vendored native libraries (simdjson for parsing, glaze for serialization in the v0.2.6 change set - see [Runtime libraries](../../internal-engineering/05-runtime-libraries.md)); the public API and error behavior are unchanged. Duplicate keys in an object throw. Escapes are `\" \\ \/ \b \f \n \r \t \uXXXX` — anything else is an "unknown escape" error.
 
 ## Members
 
