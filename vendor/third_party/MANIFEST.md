@@ -62,6 +62,8 @@ stored by target architecture under each vendor's `lib/linux-*/` directory.
 | libuv/lib/linux-arm64/libuv.a | 399602 | 82AC581C15C9C406662562F8686D1FE0C21D990FD0550EF8C065C20B2EE51C53 |
 | oneTBB/lib/libtbb.a (upstream name libtbb12.a) | 1107372 | 01F8BF7B97AE88C19BCC87B436ABB29C2E339BF6D6D3583BFC315D984A11A15A |
 | oneTBB/lib/libtbbmalloc.a | 245472 | 53AC7AAE285488384808E339854F795454046BD345D8B46AAA15AAE0016D08A0 |
+| oneTBB/lib/linux-x64/libtbb.a (GCC 15.2, Ninja, Release, static) | 955846 | 14584ecc065fc292ae2b8a9a9f75a92dcc5261e7bae36cc4fdfe87614882fd26 |
+| oneTBB/lib/linux-x64/libtbbmalloc.a (GCC 15.2, Ninja, Release, static) | 288878 | 72af41fc293ee36291f0dec1f8f78878b8b3f915eb07155eb0b362b5692761c3 |
 | uWebSockets/lib/libuSockets.a | 87038 | 74C01266147AEF7670A0EB88123570CFDEBB434508D9C2988734229724F00293 |
 | uWebSockets/lib/windows-x64/libuSockets.a | 87038 | 74C01266147AEF7670A0EB88123570CFDEBB434508D9C2988734229724F00293 |
 | uWebSockets/lib/linux-x64/libuSockets.a | 122710 | 06B3144E93C19B3323A931D09FFDFC1134FFEA2A07BD29896AFDF139EA7C60DC |
@@ -318,8 +320,8 @@ CMakeCache.txt):
 | --- | --- | --- |
 | std/crypto (libsodium) | -I vendor/third_party/libsodium/include | -L vendor/third_party/libsodium/lib -lsodium |
 | std/network (libuv) | -I vendor/third_party/libuv/include | -L vendor/third_party/libuv/lib -luv -lws2_32 -luserenv -liphlpapi -lole32 -ldbghelp -lsynchronization |
-| std/network (uWebSockets + uSockets) | -std=c++20 -DUWS_NO_ZLIB -I vendor/third_party/uWebSockets/include -I vendor/third_party/libuv/include | -L vendor/third_party/uWebSockets/lib -luSockets -L vendor/third_party/libuv/lib -luv -lws2_32 -luserenv -liphlpapi -lole32 -ldbghelp -lsynchronization (add -luWebSockets if desired; optional) |
-| parallel.* (oneTBB) | -std=c++20 -I vendor/third_party/oneTBB/include | -L vendor/third_party/oneTBB/lib -ltbb (add -ltbbmalloc for tbb::scalable_allocator) |
+| std/network (uWebSockets + uSockets) | -std=c++23 -DUWS_NO_ZLIB -I vendor/third_party/uWebSockets/include -I vendor/third_party/libuv/include | -L vendor/third_party/uWebSockets/lib -luSockets -L vendor/third_party/libuv/lib -luv -lws2_32 -luserenv -liphlpapi -lole32 -ldbghelp -lsynchronization (add -luWebSockets if desired; optional) |
+| parallel.* (oneTBB) | -std=c++23 -I vendor/third_party/oneTBB/include | -L vendor/third_party/oneTBB/lib -ltbb (add -ltbbmalloc for tbb::scalable_allocator) |
 | core/regex (PCRE2, static 8-bit) | -DPCRE2_STATIC=1 -DPCRE2_CODE_UNIT_WIDTH=8 -I vendor/third_party/pcre2/include | -L vendor/third_party/pcre2/lib -lpcre2-8 |
 
 Notes:
@@ -493,6 +495,53 @@ Constraints recorded for the future engine swap:
    * Apache-2.0 source only; no GPL-only simdjson derivatives.
    * `parseNumber` / `parseRecord` stay hand-written support; the
      engine only decides the scanner's cursor and the bytes of each scalar.
+
+Verified consumer flags (v0.2.6 integration, landed):
+
+* include: `vendor/third_party/simdjson/include` (consumer include root)
+* define: `SIMDJSON_MINUS_ZERO_AS_FLOAT=1` (bare `-0` tapes as DOUBLE so
+  `get_double()` preserves the sign)
+* TUs compiled per consumer program (the `std/json` native row,
+  `kJsonNativePackage` in `src/std/json/native.hpp`): `src/std/json/parse.cpp`
+  (CP3-owned; simdjson exceptions caught, on failure the legacy reader
+  re-parses to reproduce today's exact diagnostics/offsets) and
+  `vendor/third_party/simdjson/src/simdjson.cpp` (single amalgamated TU).
+* marker for both engine TUs: `::cp3::runtime::json::parse|::cp3::runtime::json::verify`;
+  stringify-only programs compile neither engine TU.
+* selection: content-driven in `applyNativePackages` (`src/cli/src/commands/build/build.cpp`):
+  generated text naming `cp3/std/json.hpp` selects the std/json row (facade for fetch/network paths).
+* `libcp3_runtime.a` deliberately not extended - consumer programs compile the
+  engine from source, once; the prebuilt library would double-compile it.
+
+### Ledger J — JSON stringify tier (VENDORED 2026-11-16, per lead decisions)
+
+> Status: 1 vendored (glaze, header-only). The std/json family's `stringify`
+> backend is proposed to route through this; the public API
+> (`JSON.stringify` / `stringifyToFile`) stays the same as the current
+> hand-written writer. `serialize` stays on exactly JSON — glaze's CSV and
+> other subsystems are not used and not wanted (binary size).
+
+| library | upstream | kind | status |
+| --- | --- | --- | --- |
+| glaze v9.1.0 | https://github.com/stephenberry/glaze | header-only (MIT); `vendor/third_party/glaze/include/glaze` (260 files, 4.9 MB); `src/` in upstream is only the glaze CLI, not a library | VENDORED (headers); not wired yet; parse stays on simdjson (Ledger H) |
+
+Wiring notes (do NOT land until the builder contract is chosen):
+
+```cmake
+# cp3_runtime or the std/json row - include path only,
+target_include_directories(cp3_runtime PRIVATE
+    "../../vendor/third_party/glaze/include"
+)
+# nothing to link; the serializer templates instantiate on demand.
+```
+
+Constraints recorded for the future engine swap:
+   * Public API shape unchanged (`JSON.stringify`, `stringifyToFile`).
+   * `stringify` path only; do not include `glaze/csv` or any non-JSON
+     serializer header.
+   * MIT source only, attribution kept via LICENSE + VERSION.txt.
+   * Consumer builds see glaze headers through the runtime mirror include
+     roots exactly like fast_float / moodycamel (header-only).
 
 ## Reproducing
 
