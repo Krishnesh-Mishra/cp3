@@ -68,13 +68,13 @@ while (iter < ITERATIONS) {
   field = field + p.numbers.length + p.tags.length;
 
   let j: i64 = 0;
-  while (j < p.numbers.length) {
+  while (j < parseTo<i64>(p.numbers.length)) {
     field = field + p.numbers[j];
     j = j + 1;
   }
 
   let k: i64 = 0;
-  while (k < p.tags.length) {
+  while (k < parseTo<i64>(p.tags.length)) {
     field = field + p.tags[k].length;
     k = k + 1;
   }

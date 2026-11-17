@@ -68,11 +68,11 @@ for (let i: i64 = 0; i < ITERATIONS; i++) {
   fieldValue = fieldValue + u.score * 10 + u.title.length + u.company.length;
   fieldValue = fieldValue + u.city.length + u.country.length;
   fieldValue = fieldValue + u.tags.length + u.samples.length;
-  for (let j: i64 = 0; j < u.tags.length; j++) {
+  for (let j: i64 = 0; j < parseTo<i64>(u.tags.length); j++) {
     let tag = u.tags[j];
     fieldValue = fieldValue + tag.length;
   }
-  for (let j: i64 = 0; j < u.samples.length; j++) {
+  for (let j: i64 = 0; j < parseTo<i64>(u.samples.length); j++) {
     fieldValue = fieldValue + u.samples[j];
   }
 
