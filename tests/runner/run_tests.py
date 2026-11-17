@@ -1123,8 +1123,23 @@ def main(argv: Optional[list[str]] = None) -> int:
         # still fails in all three tiers is deterministic.
         def wipe(case):
             shutil.rmtree(case.cp3_path.parent / ".cp3", ignore_errors=True)
+        # A case only gets retried when its failure could come from build,
+        # link or run load (stale intermediates, a mid-cleanup exe, an
+        # oversubscribed link flap) - i.e. a run-mode case that did NOT fail
+        # the C++ compile step. Check-mode failures (diagnostic assertions)
+        # and deterministic compile failures carry a compiler diagnostics
+        # signature and rebuild into the identical outcome, so retrying them
+        # three times with a wiped .cp3 is pure waste: each retry pays a full
+        # cold rebuild (PCH + runtime mirror), which is what made the corpus
+        # take hours with a handful of deterministically failing fixtures.
+        def retryable(o: Outcome) -> bool:
+            return o.case.spec.get("mode", "check") == "run" and (
+                "compilation failed" not in str(o.detail).lower()
+            )
+
         transient_indices = [
-            i for i, o in enumerate(outcomes) if o.status == "failed"
+            i for i, o in enumerate(outcomes)
+            if o.status == "failed" and retryable(o)
         ]
         if not transient_indices:
             return outcomes
