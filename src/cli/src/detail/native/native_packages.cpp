@@ -12,6 +12,7 @@
 
 #include <algorithm>
 
+#include "detail/native/native_parallel.hpp"
 #include "detail/native/native_regex.hpp"
 
 #include "../../../../std/buffer/native.hpp"
@@ -80,10 +81,11 @@ std::vector<const NativePackage*> selectNativePackages(
 }
 
 std::vector<const NativePackage*> selectCoreNativePackages(
-    bool usesRegex, bool usesCollections) {
+    bool usesRegex, bool usesCollections, bool usesParallel) {
     std::vector<const NativePackage*> selected;
     if (usesRegex) selected.push_back(&kRegexCoreNativePackage);
     if (usesCollections) selected.push_back(&kCollectionsNativePackage);
+    if (usesParallel) selected.push_back(&kParallelCoreNativePackage);
     return selected;
 }
 

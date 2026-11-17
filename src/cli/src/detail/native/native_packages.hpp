@@ -73,15 +73,18 @@ const std::vector<const NativePackage*>& nativePackages();
 std::vector<const NativePackage*> selectNativePackages(
     const std::vector<std::string>& importedStdSpecifiers);
 
-// Core-language backends (D48; detail/native_regex.hpp). These are not
-// import-driven: `usesRegex` is true when the generated C++ includes
-// cp3/core/regex.hpp, i.e. exactly when the program uses a regex literal or a
-// regex value. `usesCollections` is true when the generated C++ includes
-// cp3/std/collections.hpp without the program importing "std/collections"
-// (the global `Object.fromEntries` / `Object.groupBy` builtins lower onto
-// the collections runtime). Returns the selected rows in a stable order
-// (empty when none).
+// Core-language backends (D48; detail/native_regex.hpp; detail/
+// native_parallel.hpp). These are not import-driven: `usesRegex` is true
+// when the generated C++ includes cp3/core/regex.hpp, i.e. exactly when the
+// program uses a regex literal or a regex value. `usesCollections` is true
+// when the generated C++ includes cp3/std/collections.hpp without the
+// program importing "std/collections" (the global `Object.fromEntries` /
+// `Object.groupBy` builtins lower onto the collections runtime).
+// `usesParallel` is true when the generated C++ includes
+// cp3/parallel/parallel.hpp (the parallel.* family), which selects the
+// oneTBB headers + link for the parallel.* engine. Returns the selected
+// rows in a stable order (empty when none).
 std::vector<const NativePackage*> selectCoreNativePackages(
-    bool usesRegex, bool usesCollections);
+    bool usesRegex, bool usesCollections, bool usesParallel);
 
 }  // namespace cp3::cli::detail

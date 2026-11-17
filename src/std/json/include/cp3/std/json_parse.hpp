@@ -5,6 +5,23 @@
 // generated-code ABI (D14): all functions are `inline`, header-only. Included
 // by cp3/std/json.hpp, which owns the codegen contract comment.
 //
+// The JSON parse is two layers:
+//   * the conversion front-end (this header) - the typed surface codegen
+//     spells, unchanged;
+//   * the engine back-end - the vendored simdjson DOM parser, reached through
+//     `parse_detail::parseJsonDocument` (src/std/json/parse.cpp, the single
+//     engine TU - simdjson.h is deliberately not included here). The engine
+//     decides the bytes of each scalar and validates the structure; this
+//     header decides the cursor. Any engine failure (invalid document, a
+//     duplicate key, a shape the engine cannot reproduce exactly) re-runs the
+//     recursive-descent reader below, which throws the canonical ParseError
+//     (same message, same byte offset) - malformed input behaves exactly as
+//     it always has; valid input never touches it.
+//   * the recursive-descent reader - kept verbatim as the malformed-input
+//     diagnostic engine and as the fallback for values the engine cannot
+//     reproduce bit-exactly (duplicate keys are detected by the engine
+//     walker and re-thrown here for the canonical offset).
+//
 // The recursive-descent JSON reader plus the typed surface codegen spells:
 //   * `parseNumber` / `parseString` / `parseBoolean` for a primitive `T`,
 //   * `parseArray<T>` for `T[]` (the element conversion via `convertElement`),
@@ -38,6 +55,15 @@
 namespace cp3::runtime::json {
 
 namespace parse_detail {
+
+// Implemented in src/std/json/parse.cpp - the simdjson engine TU. Kept out of
+// every generated module on purpose: simdjson.h is a multi-thousand-line
+// amalgamation, and generated code never needs it directly. Returns the
+// parsed document, or std::nullopt on any engine failure (invalid document,
+// a duplicate key, an engine condition this code cannot reproduce exactly);
+// the caller then re-runs the hand-written reader for the canonical
+// diagnostic.
+std::optional<Value> parseJsonDocument(const std::string& text);
 
 inline bool isDigit(char c) { return c >= '0' && c <= '9'; }
 
@@ -286,6 +312,19 @@ private:
 };
 
 inline Value parseText(const std::string& text) {
+    // Fast path: the simdjson engine does the structural scan, the string
+    // decoding and the number tokenization in one pass. The engine is eager
+    // and total, so anything it accepts is byte-identical in shape to what
+    // the hand-written reader builds (the same Value tree, the same number
+    // doubles, the same decoded strings).
+    if (std::optional<Value> fast = parse_detail::parseJsonDocument(text)) {
+        return std::move(*fast);
+    }
+    // The engine refused (malformed input, a duplicate key, or an engine
+    // condition this code cannot reproduce exactly): the hand-written reader
+    // re-derives the same Value, or throws the canonical ParseError with the
+    // same message and the same byte offset as always. Error-path cost is
+    // the price of never having to map engine errors onto CP3 diagnostics.
     return Parser(text).parseDocument();
 }
 

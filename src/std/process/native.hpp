@@ -18,6 +18,7 @@ inline const NativePackage kProcessNativePackage{
     "std/process",
     {"src/std/process/include", "src/std/collections/include",
      "vendor/third_party/libuv/include", "vendor/third_party/unordered_dense/include",
+     "vendor/third_party/moodycamel/include",
      "vendor/third_party/libsodium/include", "vendor/third_party/xxhash/include"},
     {},
     {"src/std/process/child.cpp", "src/std/process/runtime.cpp",

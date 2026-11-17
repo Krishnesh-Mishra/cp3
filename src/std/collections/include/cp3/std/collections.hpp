@@ -47,12 +47,14 @@
 #pragma once
 
 #include <algorithm>
+#include <atomic>
 #include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <functional>
 #include <mutex>
+#include <new>
 #include <string>
 #include <string_view>
 #include <optional>
@@ -62,6 +64,7 @@
 #include <vector>
 
 #include "ankerl/unordered_dense.h"
+#include "concurrentqueue.h"
 #include "cp3/core/bucket_hash.hpp"
 #include "cp3/core/runtime.hpp"
 #include "cp3/core/value.hpp"
@@ -648,64 +651,160 @@ Map<K, Array<T>> groupBy(const Array<T>& list, F fn) {
 // Queue (folded in from the former queue module)
 // -----------------------------------------------------------------------------
 
-// The backing store of `Queue<T>`: a circular buffer over optional slots.
-// `head_` is the index of the front element; the live window is the `count_`
-// slots starting at `head_` (mod capacity). No equality, hashing or ordering
-// of `T` is required - a queue only stores and returns its elements in FIFO
-// order. FIFO (first in, first out): `enqueue` appends to the back,
-// `dequeue` removes and returns the front, `peek` returns the front without
-// removing it. `dequeue`/`peek` on an empty queue yield no value
-// (`std::nullopt`); they never throw or read out of bounds.
+// The backing store of `Queue<T>`: the vendored moodycamel `concurrentqueue`
+// (vendor/third_party/moodycamel, v1.0.4, header-only, BSD-2-Clause) -
+// `moodycamel::ConcurrentQueue<T>`, an MPMC lock-free queue. Elements are
+// stored and returned in FIFO order (first in, first out): `enqueue` appends
+// to the back, `dequeue` removes and returns the front, `peek` returns the
+// front without removing it. `dequeue`/`peek` on an empty queue yield no
+// value (`std::nullopt`); they never throw or read out of bounds. No
+// equality, hashing or ordering of `T` is required - a queue only stores and
+// returns its elements in FIFO order. `enqueue` on allocation failure throws
+// `std::bad_alloc` (the circular buffer it replaced threw the same type from
+// its `grow()` path); the element is never silently dropped.
+//
+// `concurrentqueue` has no front/`peek` and no exact size, so two adaptations
+// ride on top of it; both are invisible to the user-visible surface:
+//   * `size()`/`isEmpty()` are exact, never `size_approx()`: an atomic
+//     `count_` is maintained by the push/pop paths only. A push adds one
+//     BEFORE the element is enqueued (so the counter never wraps negative,
+//     and a concurrent pop can never drive it below the number of owned
+//     elements); a pop or a `clear()` subtracts one per element that leaves.
+//     Elements parked in the head cache count as owned by the queue.
+//     In sequential execution every read is exact; under concurrency the
+//     counter is exact at quiescence and can overcount (never undercount,
+//     never wrap) by at most the pushes in flight between an `enqueue` and
+//     the atomic increment.
+//   * `peek()` needs the front without removing it, but `concurrentqueue`
+//     hands elements out only by dequeuing: peek dequeues the front into
+//     `headCache_` (a single-slot cache) and `dequeue`/`clear`/`peek` all
+//     consume `headCache_` before touching the underlying queue. The cache
+//     check and the queue pop are serialized by `headMutex_`, so a peek
+//     racing a dequeue can never cause the cached front to be skipped (FIFO),
+//     lost or handed out twice. The mutex is uncontended on the owner thread;
+//     `enqueue` stays fully lock-free. After `clear()` drains the queue the
+//     cache is empty, so a fresh front element is visible immediately.
+//
+// Threading: enqueues from several threads are safe; every element is linked
+// exactly once and FIFO order is per producer (cross-producer order is
+// contention-arbitrated, exactly as it is for any MPMC queue; the queue this
+// replaced was not synchronized at all). The front-side handoff above is
+// serialized, so dequeues are linearizable. `clear()` removes every element
+// it observes (in sequential execution: everything, deterministically); an
+// element enqueued concurrently behind a drain in progress survives, which is
+// inherent to any multi-producer clear.
+//
+// Element semantics: elements are MOVED into the underlying storage where the
+// caller passes an rvalue (Ref handles are refcounted, so a move is a handle
+// copy with zero object traffic); lvalues are copied at the call site as
+// before. `peek()` returns a COPY of the front element (`Ref<T>` copies bump
+// the handle count and never steal ownership), matching the previous
+// circular-buffer behavior.
 template <class T>
 class QueueData {
 public:
-    void enqueue(const T& value) {
-        if (count_ == buffer_.size()) grow();
-        buffer_[(head_ + count_) % buffer_.size()] = value;
-        ++count_;
-    }
+    void enqueue(const T& value) { pushElement(value); }
+    void enqueue(T&& value) { pushElement(std::move(value)); }
 
     std::optional<T> dequeue() {
-        if (count_ == 0) return std::nullopt;
-        std::optional<T>& slot = buffer_[head_];
-        T value = std::move(*slot);
-        slot.reset();
-        head_ = (head_ + 1) % buffer_.size();
-        --count_;
-        if (count_ == 0) head_ = 0;
-        return value;
+        std::lock_guard<std::mutex> lock(headMutex_);
+        return popFront();
     }
 
     std::optional<T> peek() const {
-        if (count_ == 0) return std::nullopt;
-        return buffer_[head_];
+        std::lock_guard<std::mutex> lock(headMutex_);
+        if (headCache_) return *headCache_;
+        // Park the front in the head cache. The element does not leave the
+        // FIFO, so the exact counter stays unchanged. The `try_dequeue`
+        // receiver is the optional itself: `optional<T>::operator=(T&&)`
+        // move-constructs in place, so `T` needs no default constructor.
+        try {
+            if (!queue_.try_dequeue(headCache_)) return std::nullopt;
+        } catch (...) {
+            // A throwing move constructor destroyed the block element inside
+            // try_dequeue; fold it out of the exact counter before rethrowing.
+            count_.fetch_sub(1, std::memory_order_relaxed);
+            throw;
+        }
+        return *headCache_;
     }
 
     void clear() {
-        for (auto& slot : buffer_) slot.reset();
-        head_ = 0;
-        count_ = 0;
+        // Drain through dequeue() so the head-cache handoff stays in one
+        // place: every element is popped exactly once with exactly one
+        // decrement. No spin, no element recount. In sequential execution the
+        // queue is empty (count_ == 0, head cache empty) when this returns.
+        while (dequeue().has_value()) {
+        }
     }
 
-    bool isEmpty() const { return count_ == 0; }
+    bool isEmpty() const {
+        return count_.load(std::memory_order_relaxed) == 0;
+    }
 
-    std::uint64_t size() const { return static_cast<std::uint64_t>(count_); }
+    std::uint64_t size() const {
+        const std::int64_t n = count_.load(std::memory_order_relaxed);
+        return static_cast<std::uint64_t>(n > 0 ? n : 0);
+    }
 
 private:
-    void grow() {
-        const std::size_t capacity =
-            buffer_.empty() ? 8 : buffer_.size() * 2;
-        std::vector<std::optional<T>> grown(capacity);
-        for (std::size_t i = 0; i < count_; ++i) {
-            grown[i] = std::move(buffer_[(head_ + i) % buffer_.size()]);
+    template <class U>
+    void pushElement(U&& value) {
+        // Count before the element is linkable: a concurrent dequeue can
+        // never observe a count below the number of owned elements, and the
+        // counter never goes negative. Rolled back when the element does not
+        // make it into the queue.
+        count_.fetch_add(1, std::memory_order_relaxed);
+        bool linked = false;
+        try {
+            linked = queue_.enqueue(std::forward<U>(value));
+        } catch (...) {
+            count_.fetch_sub(1, std::memory_order_relaxed);
+            throw;
         }
-        buffer_.swap(grown);
-        head_ = 0;
+        if (!linked) {
+            count_.fetch_sub(1, std::memory_order_relaxed);
+            // moodycamel reports allocation failure (malloc failure / queue
+            // full traits) as `false`; the circular buffer threw std::bad_alloc
+            // from its grow path, so raise the same exception type rather
+            // than drop the element.
+            throw std::bad_alloc();
+        }
     }
 
-    std::vector<std::optional<T>> buffer_;
-    std::size_t head_ = 0;
-    std::size_t count_ = 0;
+    std::optional<T> popFront() {
+        if (headCache_) {
+            std::optional<T> front = std::move(headCache_);
+            count_.fetch_sub(1, std::memory_order_relaxed);
+            return front;
+        }
+        std::optional<T> out;
+        try {
+            if (!queue_.try_dequeue(out)) return std::nullopt;
+        } catch (...) {
+            // As in peek(): the element was destroyed inside try_dequeue.
+            count_.fetch_sub(1, std::memory_order_relaxed);
+            throw;
+        }
+        count_.fetch_sub(1, std::memory_order_relaxed);
+        return out;
+    }
+
+    // The front-side mutex: serializes the head-cache check/fill with the
+    // queue pop so a racing peek/dequeue/clear cannot skip the cached front
+    // (FIFO), duplicate it, or drop it. Enqueues never touch it.
+    mutable std::mutex headMutex_;
+    // The single parked front element (empty when no peek is outstanding).
+    mutable std::optional<T> headCache_;
+    // Exact element count (includes elements parked in headCache_). Never
+    // derived from size_approx(); see the notes above. Mutable so the const
+    // peek() path can fold out an element whose move destroyed it inside
+    // try_dequeue; every other path is non-const.
+    mutable std::atomic<std::int64_t> count_{0};
+    // Zero pre-allocated blocks: storage grows on demand, like the circular
+    // buffer's grow-from-empty policy (unbounded stays unbounded). Mutable
+    // because peek() (const) parks the front element from the queue.
+    mutable moodycamel::ConcurrentQueue<T> queue_{0};
 };
 
 template <class T>
@@ -865,8 +964,8 @@ PriorityQueue<T> makePriorityQueue(F comparator) {
 // -----------------------------------------------------------------------------
 
 // The backing store of `RingBuffer<T>`: a fixed-capacity FIFO ring in
-// overwrite mode. The same ring as `Queue` (one contiguous vector, head index
-// + live count) with the overwrite flag fixed on: `push` never grows or
+// overwrite mode. One contiguous vector with a head index and a live count,
+// with the overwrite flag fixed on: `push` never grows or
 // fails - on a full ring it overwrites the oldest element (the head advances
 // one slot and the count stays at capacity). `pop`/`peek` on an empty ring
 // yield no value (`std::nullopt`). Capacity zero is a degenerate ring: it

@@ -526,7 +526,7 @@ bool buildOrReusePch(BuildState& st, std::string& outPch) {
     std::vector<std::string> args;
     args.push_back(st.tc.program);
     for (const std::string& flag : st.tc.targetFlags) args.push_back(flag);
-    args.push_back("-std=c++20");
+    args.push_back("-std=c++23");
     for (const fs::path& inc : st.layout.includeDirs) {
         args.push_back("-I" + inc.string());
     }
@@ -923,6 +923,17 @@ std::optional<NativeBuildFlags> applyNativePackages(
             selectNativePackages({"std/hash"});
         natives.insert(natives.end(), row.begin(), row.end());
     }
+    // std/json: the family headers carry the parse/verify machinery into
+    // generated text whenever JSON is used, even without `import "std/json"`
+    // (e.g. `fetch<T>()` through std/network sets needsJson_). Select the
+    // row by content the same way; the engine TUs stay marker-gated to the
+    // parse/verify spellings (a stringify-only program adds include roots
+    // only and links neither engine TU).
+    if (programText.find("cp3/std/json.hpp") != std::string::npos) {
+        const std::vector<const NativePackage*> row =
+            selectNativePackages({"std/json"});
+        natives.insert(natives.end(), row.begin(), row.end());
+    }
     if (programText.find("cp3/std/network.hpp") != std::string::npos) {
         const std::vector<const NativePackage*> row =
             selectNativePackages({"std/network"});
@@ -930,8 +941,9 @@ std::optional<NativeBuildFlags> applyNativePackages(
     }
     std::sort(natives.begin(), natives.end());
     natives.erase(std::unique(natives.begin(), natives.end()), natives.end());
-    // Core-language backends (D48) join the same list; selected from the
-    // generated module's content, not the import graph. The network
+    // Core-language backends (D48, plus the spec-13 oneTBB parallel row)
+    // join the same list; selected from the generated module's content, not
+    // the import graph. The network
     // regex-routing TUs call `Regex::compile`/`exec` too; a regex-routed
     // program names `addRegexRoute(` / `PathSpec` instead of the header, so
     // both spellings select the regex backend.
@@ -947,8 +959,15 @@ std::optional<NativeBuildFlags> applyNativePackages(
     // link) the same content-driven way as the regex row.
     const bool usesCollections =
         programText.find("cp3/std/collections.hpp") != std::string::npos;
+    // `parallel.*` lowers onto the runtime's parallel.hpp surface (spec 13),
+    // which since the oneTBB wiring schedules its chunks through <tbb/
+    // parallel_for.h>; select the oneTBB row the same content-driven way as
+    // the regex/collections rows. A program that only uses `new Worker(...)`
+    // names worker.hpp, never parallel/parallel.hpp, and links nothing new.
+    const bool usesParallel =
+        programText.find("cp3/parallel/parallel.hpp") != std::string::npos;
     const std::vector<const NativePackage*> core =
-        selectCoreNativePackages(usesRegex, usesCollections);
+        selectCoreNativePackages(usesRegex, usesCollections, usesParallel);
     for (const NativePackage* row : core) {
         if (std::find(natives.begin(), natives.end(), row) == natives.end()) {
             natives.push_back(row);
@@ -1166,9 +1185,10 @@ void selectRuntimeSources(const CliOptions& opt, BuildLayout& layout,
 }
 
 // The toolchain probe plus the native-package flags the generated module
-// needs: the imported std backends (D68) and the core regex backend (D48),
-// selected from the module text. Reports and returns nullopt when the
-// toolchain is missing or a vendored backend is unusable.
+// needs: the imported std backends (D68) and the core backends selected from
+// the module text — the core regex backend (D48), the collections backend and
+// the core parallel backend (spec 13, oneTBB). Reports and returns nullopt
+// when the toolchain is missing or a vendored backend is unusable.
 std::optional<NativeBuildFlags> resolveNativeFlags(
     const CliOptions& opt, const BuildRequest& request,
     const GeneratedModule& mod, BuildLayout& layout, const Toolchain*& tcOut) {

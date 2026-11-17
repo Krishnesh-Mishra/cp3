@@ -53,13 +53,22 @@ target_include_directories(cp3_runtime PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/inclu
 target_include_directories(cp3_runtime PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/../../vendor/third_party/libsodium/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../vendor/third_party/unordered_dense/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../vendor/third_party/moodycamel/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../vendor/third_party/libuv/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../vendor/third_party/uWebSockets/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../vendor/third_party/pcre2/include"
+    # src/parallel/parallel.cpp includes <tbb/parallel_for.h> (the parallel.*
+    # scheduler; spec 13). Headers only; the per-program link line gets -ltbb
+    # from the core/parallel native row (src/cli/src/detail/native/
+    # native_parallel.hpp) when the program uses the parallel family.
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../vendor/third_party/oneTBB/include"
     # Header-only: cp3/std/json_parse.hpp converts JSON numbers with
     # fast_float::from_chars (no archive to link). Needed here because the
     # network TUs include cp3/std/json.hpp.
     "${CMAKE_CURRENT_SOURCE_DIR}/../../vendor/third_party/fast_float/include"
+    # Header-only: json.hpp's stringify path includes glaze headers
+    # (json_write.hpp). Needed for the same reason as fast_float.
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../vendor/third_party/glaze/include"
 )
 # PCRE2 is consumed as a static 8-bit library: pcre2.h needs both defines
 # before it is included (src/core/regex.cpp is the only TU that includes it).
@@ -73,6 +82,7 @@ target_compile_definitions(cp3_runtime PRIVATE
 target_include_directories(cp3_runtime PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/../std/buffer/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../std/collections/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../vendor/third_party/moodycamel/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../std/console/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../std/crypto/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../std/json/include"
@@ -92,6 +102,7 @@ target_include_directories(cp3_runtime PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/../std/network/webserver/regex-routing"
     "${CMAKE_CURRENT_SOURCE_DIR}/../std/process/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../std/collections/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../vendor/third_party/moodycamel/include"
 )
 target_compile_definitions(cp3_runtime PRIVATE UWS_NO_ZLIB)
 target_link_libraries(cp3_runtime PUBLIC cp3_common Threads::Threads)

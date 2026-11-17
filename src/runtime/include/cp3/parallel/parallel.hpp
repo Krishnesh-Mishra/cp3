@@ -31,20 +31,23 @@
 //   * Results combine DETERMINISTICALLY: each chunk writes its own slot, and
 //     the slots are combined in chunk-index order on the calling thread, so
 //     the result does not depend on the unordered task schedule.
-//   * Backed by a plain thread pool (spec names TBB; no third-party libraries
-//     are allowed here, so this is the equivalent structured surface).
+//   * Backed by the vendored oneTBB scheduler (spec names TBB; the hand-rolled
+//     std::thread pool is gone). Only src/runtime/src/parallel/parallel.cpp
+//     references oneTBB; this header stays TBB-free so the generated-code ABI
+//     is unchanged. `parallel.*` is still synchronous, the nested-region rule
+//     (an inner `parallel.*` runs inline on the calling thread) is preserved,
+//     and a `parallel.reduce` combines its chunk slots in chunk-index order on
+//     the calling thread exactly as before - floating-point results are
+//     bit-identical to the previous pool (no reassociation anywhere).
 // =============================================================================
 #pragma once
 
 #include <array>
 #include <atomic>
 #include <cmath>
-#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
-#include <mutex>
-#include <thread>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -54,50 +57,10 @@
 
 namespace cp3::runtime {
 
-// ---------------------------------------------------------------------------
-// The thread pool backing parallel.*
-// ---------------------------------------------------------------------------
-class ThreadPool {
-public:
-    // The process-wide pool. Created on first use with
-    // `std::thread::hardware_concurrency()` threads (at least 1).
-    static ThreadPool& global();
-
-    explicit ThreadPool(std::size_t threadCount);
-    ~ThreadPool();
-
-    ThreadPool(const ThreadPool&) = delete;
-    ThreadPool& operator=(const ThreadPool&) = delete;
-
-    std::size_t size() const noexcept { return threadCount_; }
-
-    // Queue work. Safe to call from any thread.
-    void enqueue(std::function<void()> task);
-
-    // Block until no queued or running work remains.
-    void waitIdle();
-
-    // Override the pool size for `global()` before first use (tests / env).
-    static void setGlobalSize(std::size_t threadCount);
-
-private:
-    void workerMain();
-
-    std::size_t threadCount_ = 1;
-    std::vector<std::thread> threads_;
-    std::vector<std::function<void()>> tasks_;  // FIFO
-    std::size_t nextTask_ = 0;
-    std::size_t active_ = 0;
-    bool stopping_ = false;
-    std::mutex mutex_;
-    std::condition_variable workCv_;
-    std::condition_variable idleCv_;
-};
-
 namespace detail {
 
-// Number of chunks to split a range of `total` elements into (pool size capped
-// by the element count; at least 1).
+// Number of chunks to split a range of `total` elements into (scheduler
+// concurrency capped by the element count; at least 1).
 std::size_t parallelChunkCount(std::uint64_t total);
 
 // The first element of chunk `chunk` for a range of `total` elements starting
@@ -158,11 +121,15 @@ inline bool parallelMultiplyPrefixFits(std::int64_t totalAbs,
     return totalAbs <= (kExactIntegerLimit - 1) / chunkAbs;
 }
 
-// Run `chunk(c)` for every c in [0, chunkCount) on the pool, then block until
-// all of them have finished. `chunk` is borrowed for the duration of the call.
+// Run `chunk(c)` for every c in [0, chunkCount) on the oneTBB scheduler, then
+// block until all of them have finished. `chunk` is borrowed for the duration
+// of the call. If an exception escapes a chunk, oneTBB captures it, cancels
+// the rest of the region, and rethrows it on the calling thread; this
+// function then terminates the process with it, which is what the previous
+// pool's uncaught-on-a-worker exception flow led to.
 void parallelChunks(std::size_t chunkCount, const std::function<void(std::size_t)>& chunk);
 
-// Enqueue every task and block until all have run.
+// Run every task to completion before returning (the parallel.run path).
 void parallelRunAll(const std::vector<std::function<void()>>& tasks);
 
 // Build and run one task per callable, storing each result in `results`.

@@ -41,3 +41,21 @@ if(TARGET io_test)
     target_link_directories(io_test PRIVATE "${CP3_TEST_UV_DIR}")
     target_link_libraries(io_test PRIVATE ${CP3_TEST_UV_LIBS})
 endif()
+
+# parallel_test drives parallel.for/reduce/run through the oneTBB scheduler
+# (src/parallel/parallel.cpp). The runtime archive leaves the vendored native
+# archives to the program link step, so the driver links the vendored libtbb
+# the same way. Windows links the original root copy; Linux uses per-arch
+# directories - the linux-x64 archive is staged by the maintainer
+# (vendor/third_party/oneTBB/lib/linux-x64).
+if(TARGET parallel_test)
+    if(WIN32)
+        set(CP3_TEST_TBB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../vendor/third_party/oneTBB/lib")
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
+        set(CP3_TEST_TBB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../vendor/third_party/oneTBB/lib/linux-arm64")
+    else()
+        set(CP3_TEST_TBB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../vendor/third_party/oneTBB/lib/linux-x64")
+    endif()
+    target_link_directories(parallel_test PRIVATE "${CP3_TEST_TBB_DIR}")
+    target_link_libraries(parallel_test PRIVATE tbb)
+endif()

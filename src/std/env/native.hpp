@@ -20,6 +20,7 @@ inline const NativePackage kEnvNativePackage{
     "std/env",
     {"src/std/env/include", "src/std/process/include",
      "src/std/collections/include", "vendor/third_party/unordered_dense/include",
+     "vendor/third_party/moodycamel/include",
      "vendor/third_party/libsodium/include", "vendor/third_party/xxhash/include"},
     {},
     // cp3/std/env.hpp composes the process family, whose header includes the

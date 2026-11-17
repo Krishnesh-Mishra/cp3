@@ -4,7 +4,8 @@
 // OWNERSHIP: the std/json family (src/std/json/**). Additive to the generated-code
 // ABI (D14): all functions are `inline`, header-only. This is the include the
 // generated C++ names (`#include "cp3/std/json.hpp"`); the dynamic value model
-// lives in cp3/std/json_value.hpp and the reader in cp3/std/json_parse.hpp.
+// lives in cp3/std/json_value.hpp, the reader in cp3/std/json_parse.hpp, and
+// the glaze-backed dynamic-value writer in cp3/std/json_write.hpp.
 //
 // -----------------------------------------------------------------------------
 // CODEGEN CONTRACT
@@ -81,6 +82,9 @@
 #include "cp3/core/runtime.hpp"
 #include "cp3/std/json_parse.hpp"
 #include "cp3/std/json_value.hpp"
+// The glaze-backed dynamic-value writer (Ledger J): escapeString lives there,
+// and the `Value` tree emits through `glz::to<JSON, Value>`.
+#include "cp3/std/json_write.hpp"
 // NOT included unconditionally: cp3/std/json_file.hpp pulls cp3/std/fs.hpp,
 // which only exists under src/std/fs/include. The five file API members add
 // the include through the module-writer when a program names them.
@@ -91,33 +95,6 @@ namespace cp3::runtime::json {
 // =============================================================================
 // stringify
 // =============================================================================
-inline std::string escapeString(const std::string& value) {
-    std::string out;
-    out.reserve(value.size() + 2);
-    for (char c : value) {
-        const unsigned char byte = static_cast<unsigned char>(c);
-        switch (c) {
-            case '"': out += "\\\""; continue;
-            case '\\': out += "\\\\"; continue;
-            case '\b': out += "\\b"; continue;
-            case '\f': out += "\\f"; continue;
-            case '\n': out += "\\n"; continue;
-            case '\r': out += "\\r"; continue;
-            case '\t': out += "\\t"; continue;
-            default: break;
-        }
-        if (byte < 0x20u) {
-            static const char* const kHex = "0123456789abcdef";
-            out += "\\u00";
-            out.push_back(kHex[(byte >> 4) & 0xFu]);
-            out.push_back(kHex[byte & 0xFu]);
-            continue;
-        }
-        out.push_back(c);
-    }
-    return out;
-}
-
 inline std::string stringify(const std::string& value) {
     return "\"" + escapeString(value) + "\"";
 }
@@ -132,67 +109,17 @@ inline std::string stringify(bool value) {
 
 inline std::string stringify(std::nullptr_t) { return std::string("null"); }
 
-inline void writeValue(const Value& v, std::string& out, int indent, int depth);
-
-// The `indent >= 0` layout: a newline plus `depth * indent` spaces before every
-// member and before the closing bracket; `depth` counts nesting levels.
-inline void writePad(std::string& out, int indent, int depth) {
-    if (indent < 0) return;
-    out.push_back('\n');
-    out.append(static_cast<std::size_t>(indent) * static_cast<std::size_t>(depth), ' ');
-}
-
-inline void writeArray(const Value& v, std::string& out, int indent, int depth) {
-    if (v.items.empty()) {
-        out += "[]";
-        return;
-    }
-    out.push_back('[');
-    for (std::size_t i = 0; i < v.items.size(); ++i) {
-        if (i != 0) out.push_back(',');
-        writePad(out, indent, depth + 1);
-        writeValue(v.items[i], out, indent, depth + 1);
-    }
-    writePad(out, indent, depth);
-    out.push_back(']');
-}
-
-inline void writeObject(const Value& v, std::string& out, int indent, int depth) {
-    if (v.fields.empty()) {
-        out += "{}";
-        return;
-    }
-    out.push_back('{');
-    for (std::size_t i = 0; i < v.fields.size(); ++i) {
-        if (i != 0) out.push_back(',');
-        writePad(out, indent, depth + 1);
-        out += stringify(v.fields[i].key);
-        out.push_back(':');
-        if (indent >= 0) out.push_back(' ');
-        writeValue(v.fields[i].value, out, indent, depth + 1);
-    }
-    writePad(out, indent, depth);
-    out.push_back('}');
-}
-
-inline void writeValue(const Value& v, std::string& out, int indent, int depth) {
-    switch (v.kind) {
-        case Value::Kind::Null: out += "null"; return;
-        case Value::Kind::Bool: out += stringify(v.boolean); return;
-        case Value::Kind::Number: out += stringify(v.number); return;
-        case Value::Kind::String: out += stringify(v.text); return;
-        case Value::Kind::Array: writeArray(v, out, indent, depth); return;
-        case Value::Kind::Object: writeObject(v, out, indent, depth); return;
-        case Value::Kind::Undefined: out += "undefined"; return;
-    }
-}
-
 // A negative `indent` is the compact form (no whitespace); 0 and positive
-// values pretty-print with that many spaces per nesting level.
+// values pretty-print with that many spaces per nesting level. `indent == 0`
+// still newline-separates with a zero-width gap, exactly like the historical
+// writer. The tree emit goes through glz::to<JSON, Value>.
 inline std::string stringify(const Value& v, int indent = -1) {
-    std::string out;
-    writeValue(v, out, indent < 0 ? -1 : indent, 0);
-    return out;
+    GlazeWriteContext context;
+    if (indent >= 0) {
+        context.pretty = true;
+        context.gap.assign(static_cast<std::size_t>(indent), ' ');
+    }
+    return writeGlazeValue(v, context);
 }
 
 // A whole `Array<E>` value (`JSON.stringify(a)` for `a: number[]`): the
@@ -242,70 +169,18 @@ inline std::string normalizeSpace(const std::string& space) {
     return space.size() > 10 ? space.substr(0, 10) : space;
 }
 
-// The gap-aware pretty writer used by the replacer/allowlist forms. `gap`
-// empty is the compact form; otherwise every member is preceded by a newline
-// plus `depth` copies of `gap` (ECMAScript SerializeJSONProperty).
-inline void writeGapPad(std::string& out, const std::string& gap, int depth) {
-    if (gap.empty()) return;
-    out.push_back('\n');
-    for (int i = 0; i < depth; ++i) out += gap;
-}
-
-inline void writeValueGap(const Value& v, std::string& out,
-                          const std::string& gap, int depth);
-
-inline void writeArrayGap(const Value& v, std::string& out,
-                          const std::string& gap, int depth) {
-    if (v.items.empty()) {
-        out += "[]";
-        return;
-    }
-    out.push_back('[');
-    for (std::size_t i = 0; i < v.items.size(); ++i) {
-        if (i != 0) out.push_back(',');
-        writeGapPad(out, gap, depth + 1);
-        writeValueGap(v.items[i], out, gap, depth + 1);
-    }
-    writeGapPad(out, gap, depth);
-    out.push_back(']');
-}
-
-inline void writeObjectGap(const Value& v, std::string& out,
-                           const std::string& gap, int depth) {
-    if (v.fields.empty()) {
-        out += "{}";
-        return;
-    }
-    out.push_back('{');
-    for (std::size_t i = 0; i < v.fields.size(); ++i) {
-        if (i != 0) out.push_back(',');
-        writeGapPad(out, gap, depth + 1);
-        out += stringify(v.fields[i].key);
-        out.push_back(':');
-        if (!gap.empty()) out.push_back(' ');
-        writeValueGap(v.fields[i].value, out, gap, depth + 1);
-    }
-    writeGapPad(out, gap, depth);
-    out.push_back('}');
-}
-
-inline void writeValueGap(const Value& v, std::string& out,
-                          const std::string& gap, int depth) {
-    switch (v.kind) {
-        case Value::Kind::Null: out += "null"; return;
-        case Value::Kind::Bool: out += stringify(v.boolean); return;
-        case Value::Kind::Number: out += stringify(v.number); return;
-        case Value::Kind::String: out += stringify(v.text); return;
-        case Value::Kind::Array: writeArrayGap(v, out, gap, depth); return;
-        case Value::Kind::Object: writeObjectGap(v, out, gap, depth); return;
-        case Value::Kind::Undefined: out += "undefined"; return;
-    }
-}
-
+// The gap-aware form: the normalized gap (empty = compact). The newline plus
+// `depth` copies of the gap and the post-colon space are emitted by the
+// glaze-backed writer (cp3/std/json_write.hpp), byte-identically to the
+// historical writeGapPad walker.
 inline std::string stringify(const Value& v, const std::string& gap) {
-    std::string out;
-    writeValueGap(v, out, normalizeSpace(gap), 0);
-    return out;
+    GlazeWriteContext context;
+    std::string normalized = normalizeSpace(gap);
+    if (!normalized.empty()) {
+        context.pretty = true;
+        context.gap = std::move(normalized);
+    }
+    return writeGlazeValue(v, context);
 }
 
 // Forward declarations: the replacer forms below call these.

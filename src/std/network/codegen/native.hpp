@@ -47,7 +47,7 @@ inline const NativePackage kNetworkNativePackage{
      "src/std/network/webserver/settings/include",
      "src/std/network/webserver/regex-routing",
      "vendor/third_party/uWebSockets/include", "vendor/third_party/libuv/include",
-     "vendor/third_party/unordered_dense/include", "vendor/third_party/fast_float/include",
+     "vendor/third_party/unordered_dense/include", "vendor/third_party/moodycamel/include", "vendor/third_party/fast_float/include", "vendor/third_party/glaze/include",
      "vendor/third_party/libsodium/include", "vendor/third_party/xxhash/include",
      "vendor/third_party/openssl/include"},
     {"-DUWS_NO_ZLIB", "-DCP3_TLS_OPENSSL", "-DCP3_UWS_SSL"},

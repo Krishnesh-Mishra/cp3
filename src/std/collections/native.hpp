@@ -25,7 +25,8 @@ namespace cp3::cli::detail {
 inline const NativePackage kCollectionsNativePackage{
     "std/collections",
     {"src/std/collections/include", "vendor/third_party/libsodium/include",
-     "vendor/third_party/xxhash/include", "vendor/third_party/unordered_dense/include"},
+     "vendor/third_party/xxhash/include", "vendor/third_party/unordered_dense/include",
+     "vendor/third_party/moodycamel/include"},
     {},
     {"src/runtime/src/core/bucket_hash.cpp"},
     {},
