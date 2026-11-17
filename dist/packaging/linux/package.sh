@@ -239,19 +239,26 @@ done
 info "std runtime units: $family_source_count files"
 
 # Core-language backends live in the CLI tree, not src/std: native_regex.hpp
-# selects PCRE2. Its runtime unit (src/runtime/src/core/regex.cpp) is already
-# staged with src/runtime/src above; collect the vendored tree it links.
-core_row="$ROOT/src/cli/src/detail/native/native_regex.hpp"
-[ -f "$core_row" ] || fail "missing core native row '$core_row'"
-while IFS= read -r ref; do
-    case "$ref" in
-        vendor/third_party/*)
-            lib=${ref#vendor/third_party/}
-            lib=${lib%%/*}
-            third_party_trees="$third_party_trees $lib"
-            ;;
-    esac
-done < <(grep -oE '"vendor/third_party/[^"]+"' "$core_row" | tr -d '"' | sort -u)
+# selects PCRE2 and native_parallel.hpp selects oneTBB. Their runtime units
+# (src/runtime/src/core/regex.cpp, src/runtime/src/parallel/parallel.cpp) are
+# already staged with src/runtime/src above; collect the vendored trees they
+# link.
+core_rows=(
+    "$ROOT/src/cli/src/detail/native/native_regex.hpp"
+    "$ROOT/src/cli/src/detail/native/native_parallel.hpp"
+)
+for core_row in "${core_rows[@]}"; do
+    [ -f "$core_row" ] || fail "missing core native row '$core_row'"
+    while IFS= read -r ref; do
+        case "$ref" in
+            vendor/third_party/*)
+                lib=${ref#vendor/third_party/}
+                lib=${lib%%/*}
+                third_party_trees="$third_party_trees $lib"
+                ;;
+        esac
+    done < <(grep -oE '"vendor/third_party/[^"]+"' "$core_row" | tr -d '"' | sort -u)
+done
 
 # --- third_party -------------------------------------------------------------
 if [ -z "$third_party_trees" ]; then
@@ -273,6 +280,7 @@ for archive in \
     "$THIRD_PARTY/xxhash/lib/linux-$ARCH/libxxhash.a" \
     "$THIRD_PARTY/simdutf/lib/linux-$ARCH/libsimdutf.a" \
     "$THIRD_PARTY/pcre2/lib/linux-$ARCH/libpcre2-8.a" \
+    "$THIRD_PARTY/oneTBB/lib/linux-$ARCH/libtbb.a" \
     "$THIRD_PARTY/openssl/lib/linux-$ARCH/libssl.a" \
     "$THIRD_PARTY/openssl/lib/linux-$ARCH/libcrypto.a"; do
     if [ ! -f "$archive" ]; then
@@ -282,7 +290,7 @@ for archive in \
 done
 # Drop every other platform's archives (and the Windows COFF archives kept at
 # the vendor lib root for Windows builds): the package is for linux-$ARCH only.
-for vendor in libsodium libuv uWebSockets xxhash simdutf pcre2 openssl; do
+for vendor in libsodium libuv uWebSockets xxhash simdutf pcre2 oneTBB openssl; do
     libdir="$STAGE/vendor/third_party/$vendor/lib"
     [ -d "$libdir" ] || continue
     find "$libdir" -mindepth 1 -maxdepth 1 -type d \

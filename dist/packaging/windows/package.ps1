@@ -258,13 +258,16 @@ foreach ($family in (Get-ChildItem -LiteralPath $stdDir -Directory | Sort-Object
 }
 if ($thirdPartyTrees.Count -eq 0) { Fail "no third_party tree referenced by any native row; the rows were probably not read" }
 # Core-language backends live in the CLI tree, not src/std: native_regex.hpp
-# selects PCRE2. Its runtime unit (src/runtime/src/core/regex.cpp) is already
-# staged with src\runtime above; only the vendored tree needs collecting.
-$coreRow = Join-Path $RepoRoot "src\cli\src\detail\native\native_regex.hpp"
-if (-not (Test-Path -LiteralPath $coreRow)) { Fail "core native row missing: $coreRow" }
-$coreText = Get-Content -LiteralPath $coreRow -Raw
-foreach ($match in [regex]::Matches($coreText, '"vendor/third_party/([^"/]+)[^"]*"')) {
-    $thirdPartyTrees.Add("vendor\third_party\" + $match.Groups[1].Value) | Out-Null
+# selects PCRE2 and native_parallel.hpp selects oneTBB. Their runtime units
+# (src\runtime\src\core\regex.cpp, src\runtime\src\parallel\parallel.cpp) are
+# already staged with src\runtime above; only the vendored trees need collecting.
+foreach ($coreRowName in @("native_regex.hpp", "native_parallel.hpp")) {
+    $coreRow = Join-Path $RepoRoot ("src\cli\src\detail\native\" + $coreRowName)
+    if (-not (Test-Path -LiteralPath $coreRow)) { Fail "core native row missing: $coreRow" }
+    $coreText = Get-Content -LiteralPath $coreRow -Raw
+    foreach ($match in [regex]::Matches($coreText, '"vendor/third_party/([^"/]+)[^"]*"')) {
+        $thirdPartyTrees.Add("vendor\third_party\" + $match.Groups[1].Value) | Out-Null
+    }
 }
 foreach ($tree in $thirdPartyTrees) {
     Copy-Tree (Join-Path $RepoRoot $tree) (Join-Path $stage $tree) ("vendored tree " + $tree)
@@ -274,6 +277,7 @@ foreach ($relative in @(
     'vendor\third_party\uWebSockets\include\App.h',
     'vendor\third_party\libuv\include\uv.h',
     'vendor\third_party\pcre2\include\pcre2.h',
+    'vendor\third_party\oneTBB\include\tbb\parallel_for.h',
     'vendor\third_party\openssl\include\openssl\ssl.h',
     'vendor\third_party\openssl\cacert.pem'
 )) {
@@ -288,7 +292,7 @@ if (Test-Path -LiteralPath $caSrc) {
     Copy-Item -LiteralPath $caSrc -Destination (Join-Path $stage "share\openssl\cacert.pem") -Force
     Info "CA bundle -> share\openssl\cacert.pem"
 }
-foreach ($vendor in @("libsodium", "libuv", "uWebSockets", "xxhash", "simdutf", "pcre2", "openssl")) {
+foreach ($vendor in @("libsodium", "libuv", "uWebSockets", "xxhash", "simdutf", "pcre2", "oneTBB", "openssl")) {
     $libDir = Join-Path $stage "vendor\third_party\$vendor\lib"
     if (Test-Path -LiteralPath $libDir) {
         # Keep only this package's windows-<Arch> archives; drop other platforms.
