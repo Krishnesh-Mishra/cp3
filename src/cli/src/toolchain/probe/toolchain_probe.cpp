@@ -324,7 +324,7 @@ bool validateProgram(const std::string& program, std::string& reason) {
     for (const std::string& flag : toolchainTargetFlags(program)) {
         args.push_back(flag);
     }
-    args.push_back("-std=c++20");
+    args.push_back("-std=c++23");
     args.push_back(cpp.string());
     args.push_back("-o");
     args.push_back(exe.string());

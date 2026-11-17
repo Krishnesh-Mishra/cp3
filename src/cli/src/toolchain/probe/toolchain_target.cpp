@@ -233,7 +233,7 @@ bool compilesWith(const std::string& program,
     if (!writeTextFile(paths.cpp, source, nullptr)) return false;
     std::vector<std::string> args{program};
     for (const std::string& flag : targetFlags) args.push_back(flag);
-    args.push_back("-std=c++20");
+    args.push_back("-std=c++23");
     args.push_back(paths.cpp.string());
     args.push_back("-o");
     args.push_back(paths.exe.string());

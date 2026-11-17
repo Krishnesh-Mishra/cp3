@@ -106,6 +106,10 @@ std::string toolchainCacheKey(const Toolchain& tc) {
     std::string key = "clang|" +
                       (tc.version.empty() ? "unknown" : tc.version) + "|" +
                       tc.program;
+    // The language standard is part of every compile line and of the PCH's
+    // identity: clang refuses a .pch built with a different -std, so it must
+    // be part of the key, or stale PCHs get accepted and clang errors out.
+    key += "|std:c++23";
     // The target is part of the compiler identity: the same driver under a
     // different target produces different objects.
     for (const std::string& flag : tc.targetFlags) key += "|" + flag;
@@ -118,7 +122,7 @@ std::vector<std::string> compileArgs(const Toolchain& tc, BuildProfile profile,
     std::vector<std::string> args;
     args.push_back(tc.program);
     for (const std::string& flag : tc.targetFlags) args.push_back(flag);
-    args.push_back("-std=c++20");
+    args.push_back("-std=c++23");
     // Generated code may throw (cp3/Error derives from std::exception), so
     // exceptions stay enabled - that is the default for clang++, and we
     // deliberately do not pass -fno-exceptions.
