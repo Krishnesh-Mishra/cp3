@@ -86,6 +86,24 @@ std::string literalText(const ObjectModel& om) {
     return out;
 }
 
+// A handle-typed field (`Array<E>`, a class/interface wrapper, a nullable
+// handle) is a reference-counted box: returning it by value costs an atomic
+// increment plus decrement on every read. Reading through a const reference
+// hands back the same value (the box is shared, never copied) without touching
+// the count - the difference between one member read and a locked instruction
+// pair per iteration of a hot loop over a large array. Value-typed fields
+// (`number`, `string`, `boolean`) keep returning by value.
+bool handleField(const ObjectFieldModel& f) {
+    const Type t = stripNullish(f.type);
+    return t.kind == TypeKind::Object || t.kind == TypeKind::Array;
+}
+
+// The C++ return type of the field thunk / wrapper accessor.
+std::string fieldReadType(const ObjectFieldModel& f) {
+    const std::string type = objectFieldCpp(f);
+    return handleField(f) ? "const " + type + "&" : type;
+}
+
 // One ctor-init entry per member: the field thunk reads the implementing
 // object's field, the method thunk calls its method.
 std::string wrapperThunkInit(const ObjectFieldModel& f) {
@@ -102,7 +120,7 @@ std::string wrapperThunkInit(const ObjectFieldModel& f) {
         return "cp3_m_" + fn + "(" + sig + ") -> " + fnReturnCpp(f.type) +
                " { return " + call + "; })";
     }
-    return "cp3_f_" + fn + "([](const void* p) -> " + objectFieldCpp(f) +
+    return "cp3_f_" + fn + "([](const void* p) -> " + fieldReadType(f) +
            " { return static_cast<const T*>(p)->" + fn + "; })";
 }
 
@@ -117,7 +135,7 @@ std::string wrapperText(const ObjectModel& om) {
         const std::string fn = mapIdent(f.name);
         if (!f.isMethod) {
             const std::string type = objectFieldCpp(f);
-            line(out, 1, type + " (*cp3_f_" + fn +
+            line(out, 1, fieldReadType(f) + " (*cp3_f_" + fn +
                              ")(const void*) = nullptr;");
             line(out, 1, "void (*cp3_s_" + fn + ")(void*, " + type +
                              ") = nullptr;");
@@ -163,7 +181,7 @@ std::string wrapperText(const ObjectModel& om) {
         if (f.isMethod) continue;
         const std::string fn = mapIdent(f.name);
         const std::string type = objectFieldCpp(f);
-        line(out, 1, type + " " + fn + "() const { return cp3_f_" + fn +
+        line(out, 1, fieldReadType(f) + " " + fn + "() const { return cp3_f_" + fn +
                          "(cp3_obj.get()); }");
         line(out, 1, "void set_" + fn + "(" + type +
                          " v) { cp3_s_" + fn + "(cp3_obj.get(), std::move(v)); }");

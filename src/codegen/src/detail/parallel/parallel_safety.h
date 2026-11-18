@@ -54,10 +54,17 @@ namespace detail {
 // and `sema` supplies resolved parameter/return types. `typeSystem` resolves a
 // plain native annotation (`i64`) that sema did not publish. Division is
 // accepted only when the numerator is a proved multiple of the divisor.
+//
+// `allowIdentityConversions` additionally accepts `parseTo<T>(x)` when T and x
+// are the same native integer. Only the exact integer reduce passes it: that
+// lowering evaluates the emitted conversion per element and reruns the
+// sequential loop on any exception, so a conversion that traps at the double
+// round-trip boundary cannot change the observable result.
 bool parallelPureIntegerExpr(
     const Expr& e, const std::unordered_set<std::string>& integerNames,
     const std::unordered_map<std::string, const FunctionDeclaration*>& functions,
-    const SemaResult& sema, TypeSystem typeSystem);
+    const SemaResult& sema, TypeSystem typeSystem,
+    bool allowIdentityConversions = false);
 
 }  // namespace detail
 }  // namespace cp3

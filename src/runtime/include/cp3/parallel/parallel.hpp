@@ -12,6 +12,8 @@
 //   cp3 `parallel.reduce(0..n, init, (acc, i) => acc)`
 //        -> with a synthesized combine op:
 //           `::cp3::runtime::parallelReduce(0, n, init, body, [](Acc a, Acc b){...})`
+//        -> for the exact native-integer `acc + rhs` form:
+//           `::cp3::runtime::parallelReduceIntegerAdd(0, n, init, rhsBody)`
 //        -> without one (sequential, still correct):
 //           `::cp3::runtime::parallelReduce(0, n, init, body)`
 //   cp3 `parallel.run(f1, f2, f3)`
@@ -48,12 +50,14 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <tuple>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
 #include "cp3/core/runtime.hpp"
+#include "cp3/core/checked.hpp"
 
 namespace cp3::runtime {
 
@@ -119,6 +123,22 @@ inline bool parallelMultiplyPrefixFits(std::int64_t totalAbs,
     constexpr std::int64_t kExactIntegerLimit = 9007199254740992LL;  // 2^53
     if (chunkAbs == 0) return true;
     return totalAbs <= (kExactIntegerLimit - 1) / chunkAbs;
+}
+
+// The integer-addition prefix proof: true when the exact sum `a + b` is
+// representable in T. The caller applies it to the ordered prefix and each
+// chunk's local extrema, which covers every intermediate of the sequential
+// left-to-right fold. Written without the overflowing intermediate.
+template <class T>
+bool parallelIntegerSumFits(T a, T b) noexcept {
+    static_assert(std::is_integral_v<T>,
+                  "the exact integer reduce folds an integer accumulator");
+    if constexpr (std::is_signed_v<T>) {
+        if (b > 0) return a <= std::numeric_limits<T>::max() - b;
+        return a >= std::numeric_limits<T>::min() - b;
+    } else {
+        return a <= std::numeric_limits<T>::max() - b;
+    }
 }
 
 // Run `chunk(c)` for every c in [0, chunkCount) on the oneTBB scheduler, then
@@ -293,6 +313,76 @@ Acc parallelReduce(std::int64_t begin, std::int64_t end, Acc init, F body,
                    Combine combine) {
     (void)combine;
     return parallelReduce<Acc, F>(begin, end, std::move(init), std::move(body));
+}
+
+// ---------------------------------------------------------------------------
+// parallel.reduce(range, init, body)  - exact native-integer fold.
+//
+// Codegen emits this form for `acc + rhs` over a native integer when rhs is
+// proved pure: the closure yields the per-element addend only. Each chunk sums
+// its addends from zero with the ordinary checked add, then the calling thread
+// folds the chunk totals into `init` in index order. A chunk total is only
+// used when the ordered prefix plus the chunk's local extrema stays inside the
+// accumulator type - exactly the condition under which every intermediate of
+// the sequential left-to-right loop also fits - so then the chunked total is
+// the sequential total. Any local overflow, unprovable prefix, or exception
+// discards the chunk work and reruns the exact sequential loop (including its
+// overflow trap), so the observable result never changes.
+// ---------------------------------------------------------------------------
+template <class Acc, class F>
+Acc parallelReduceIntegerAdd(std::int64_t begin, std::int64_t end, Acc init,
+                             F body) {
+    static_assert(std::is_integral_v<Acc>,
+                  "the exact integer reduce folds an integer accumulator");
+    auto sequential = [&]() -> Acc {
+        Acc acc = init;
+        for (std::int64_t i = begin; i < end; ++i) {
+            acc = checked::add<Acc>(acc, body(i));
+        }
+        return acc;
+    };
+    if (end <= begin) return init;
+    const std::uint64_t total =
+        static_cast<std::uint64_t>(end) - static_cast<std::uint64_t>(begin);
+    const std::size_t chunks = detail::parallelChunkCount(total);
+    if (chunks <= 1) return sequential();
+
+    std::vector<Acc> slots(chunks, Acc{});
+    std::vector<Acc> low(chunks, Acc{});
+    std::vector<Acc> high(chunks, Acc{});
+    std::atomic<bool> exact{true};
+    detail::parallelChunks(chunks, [&](std::size_t c) {
+        const std::int64_t lo =
+            detail::parallelChunkBoundary(begin, total, c, chunks);
+        const std::int64_t hi =
+            detail::parallelChunkBoundary(begin, total, c + 1, chunks);
+        Acc acc{};
+        Acc chunkLow{};
+        Acc chunkHigh{};
+        try {
+            for (std::int64_t i = lo; i < hi; ++i) {
+                acc = checked::add<Acc>(acc, body(i));
+                if (acc < chunkLow) chunkLow = acc;
+                if (acc > chunkHigh) chunkHigh = acc;
+            }
+        } catch (...) {
+            exact.store(false, std::memory_order_relaxed);
+            return;
+        }
+        slots[c] = acc;
+        low[c] = chunkLow;
+        high[c] = chunkHigh;
+    });
+    if (!exact.load(std::memory_order_relaxed)) return sequential();
+    Acc acc = init;
+    for (std::size_t c = 0; c < chunks; ++c) {
+        if (!detail::parallelIntegerSumFits(acc, low[c]) ||
+            !detail::parallelIntegerSumFits(acc, high[c])) {
+            return sequential();
+        }
+        acc = checked::add<Acc>(acc, slots[c]);
+    }
+    return acc;
 }
 
 template <ParallelCombineKind Kind, class Acc, class F, class Combine>

@@ -17,6 +17,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 #include "cp3/core/analysis.hpp"
 #include "cp3/core/ast.hpp"
@@ -32,9 +33,24 @@ namespace detail {
 // maps a declared function name to its declaration
 // (Generator::functionDecls_), and `sema` supplies the resolved
 // parameter/return types.
+//
+// `integerAdd` selects the exact native-integer fold instead: the body is
+// `acc + rhs` over a native integer accumulator and `lambda` is empty. `rhs`
+// borrows the per-element expression (the emitter lowers it as an index-only
+// closure) and `indexParam` is its only free name. The runtime applies the
+// ordinary checked add per element and proves the ordered prefix before using
+// its chunk totals, so any start value is exact and any overflow or exception
+// reruns the sequential loop.
 struct ParallelCombine {
     std::string lambda;
     const char* kind;
+    bool integerAdd = false;
+    const Expr* rhs = nullptr;
+    std::string indexParam;
+
+    ParallelCombine() = default;
+    ParallelCombine(std::string combine, const char* combineKind)
+        : lambda(std::move(combine)), kind(combineKind) {}
 };
 
 std::optional<ParallelCombine> parallelReduceCombine(

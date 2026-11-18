@@ -4,10 +4,11 @@
 //
 // `parallel.reduce(range, init, body)` keeps the sequential 4-argument runtime
 // lowering unless the body is `acc + rhs` with init 0, `acc * rhs` with init 1,
-// or the max/min conditional shape, and the per-element expression is proved
-// pure and integer exact by parallel_safety.cpp. The runtime schedules chunks
-// in an unordered order and combines the per-chunk partials in index order, so
-// an impure expression or a floating-point addition order would change the
+// the max/min conditional shape, or the exact integer form (`acc + rhs` over a
+// native integer accumulator), and the per-element expression is proved pure
+// and integer exact by parallel_safety.cpp. The runtime schedules chunks in an
+// unordered order and combines the per-chunk partials in index order, so an
+// impure expression or a floating-point addition order would change the
 // observable result.
 //
 // The proof is shape-directed: the accumulator may appear only as the left
@@ -189,6 +190,35 @@ std::optional<ParallelCombine> conditionalCombine(const ConditionalExpr& c,
     return std::nullopt;
 }
 
+// The exact integer-add shape: a native-integer accumulator whose fold also
+// resolves to the same C++ spelling. The runtime applies the ordinary checked
+// add in the accumulator type, so a fold that promotes (or narrows) to a
+// different integer type keeps the sequential lowering. `rhs` and the purity
+// verdict are filled in by the caller.
+std::optional<ParallelCombine> integerAddShape(const Expr& init,
+                                               const ArrowFunction& body,
+                                               const std::string& indexParam,
+                                               const SemaResult& sema) {
+    const Type* initType = sema.typeOf(init.nodeId);
+    if (initType == nullptr || !isNativeInteger(*initType)) {
+        return std::nullopt;
+    }
+    const auto fn = sema.functions.find(body.nodeId);
+    if (fn == sema.functions.end() || !isNativeInteger(fn->second.returnType)) {
+        return std::nullopt;
+    }
+    const CppInfo acc = classify(*initType);
+    const CppInfo result = classify(fn->second.returnType);
+    if (!acc.representable || !result.representable || acc.cpp != result.cpp) {
+        return std::nullopt;
+    }
+    ParallelCombine out;
+    out.kind = "Add";
+    out.integerAdd = true;
+    out.indexParam = indexParam;
+    return out;
+}
+
 }  // namespace
 
 std::optional<ParallelCombine> parallelReduceCombine(
@@ -208,10 +238,9 @@ std::optional<ParallelCombine> parallelReduceCombine(
     const Expr* value = dynamic_cast<const Expr*>(body.body.get());
     if (value == nullptr) return std::nullopt;
     const std::optional<std::int64_t> identity = integralLiteralValue(init);
-    if (!identity) return std::nullopt;
-    if (!(std::fabs(static_cast<double>(*identity)) < kExactIntegerLimit)) {
-        return std::nullopt;
-    }
+    const bool exactIdentity =
+        identity &&
+        std::fabs(static_cast<double>(*identity)) < kExactIntegerLimit;
 
     const std::unordered_set<std::string> indexOnly{indexParam};
 
@@ -220,19 +249,37 @@ std::optional<ParallelCombine> parallelReduceCombine(
         if (!b.left || !b.right) return std::nullopt;
         if (!isNamed(b.left.get(), accParam)) return std::nullopt;
         if (mentionsName(*b.right, accParam)) return std::nullopt;
-        if (!parallelPureIntegerExpr(*b.right, indexOnly, functions, sema,
-                                     typeSystem)) {
+        const bool pure = parallelPureIntegerExpr(*b.right, indexOnly, functions,
+                                                  sema, typeSystem);
+        if (b.op == BinaryOp::Add) {
+            if (exactIdentity && *identity == 0 && pure) {
+                return ParallelCombine{combineOpText("+"), "Add"};
+            }
+            // The exact integer form needs no literal identity: the runtime
+            // folds every chunk from zero, checks the ordered prefix against
+            // the accumulator's bounds, and reruns the sequential loop when
+            // that proof fails, so any starting value stays exact. A
+            // same-native `parseTo` conversion is pure here because the
+            // runtime also reruns on any exception it raises.
+            if (auto integer = integerAddShape(init, body, indexParam, sema)) {
+                if (pure ||
+                    parallelPureIntegerExpr(
+                        *b.right, indexOnly, functions, sema, typeSystem,
+                        /*allowIdentityConversions=*/true)) {
+                    integer->rhs = b.right.get();
+                    return integer;
+                }
+            }
             return std::nullopt;
         }
-        if (b.op == BinaryOp::Add && *identity == 0) {
-            return ParallelCombine{combineOpText("+"), "Add"};
-        }
-        if (b.op == BinaryOp::Multiply && *identity == 1) {
+        if (b.op == BinaryOp::Multiply && exactIdentity && *identity == 1 &&
+            pure) {
             return ParallelCombine{combineOpText("*"), "Multiply"};
         }
         return std::nullopt;
     }
     if (value->kind == NodeKind::ConditionalExpr) {
+        if (!exactIdentity) return std::nullopt;
         const auto& c = static_cast<const ConditionalExpr&>(*value);
         const std::unordered_set<std::string> both{accParam, indexParam};
         if (!c.condition ||

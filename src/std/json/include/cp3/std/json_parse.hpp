@@ -65,6 +65,35 @@ namespace parse_detail {
 // diagnostic.
 std::optional<Value> parseJsonDocument(const std::string& text);
 
+// One JSON object inside the engine's DOM. Opaque here: the engine TU decides
+// what it is. A view, not an owner - it lives until the next
+// `parseJsonObject` on the same thread.
+struct DomObject;
+
+// The typed record fast path: the document's root as an object view, or
+// std::nullopt when the engine refused the text (malformed input, a duplicate
+// key, a shape it cannot reproduce exactly) or the root is not an object. The
+// caller then re-runs the hand-written reader, which throws the canonical
+// ParseError (same message, same byte offset).
+//
+// The readers below are the DOM siblings of `numberField` / `stringField` /
+// `boolField` / `numberArrayField` / `stringArrayField` / `boolArrayField` /
+// `recordField` / `requireField` / `findField`: they throw the same ParseError
+// messages and return the same values, but convert straight out of the DOM
+// instead of materialising a `Value` node per element. A JSON array of 50,000
+// numbers therefore costs one `std::vector<double>`, not 50,000 fat nodes.
+std::optional<const DomObject*> parseJsonObject(const std::string& text);
+double domNumber(const DomObject& object, const char* name);
+std::string domString(const DomObject& object, const char* name);
+bool domBool(const DomObject& object, const char* name);
+std::vector<double> domNumberArray(const DomObject& object, const char* name);
+std::vector<std::string> domStringArray(const DomObject& object,
+                                        const char* name);
+std::vector<bool> domBoolArray(const DomObject& object, const char* name);
+const DomObject* domRecord(const DomObject& object, const char* name);
+const Value& domRequire(const DomObject& object, const char* name);
+const Value* domFind(const DomObject& object, const char* name);
+
 inline bool isDigit(char c) { return c >= '0' && c <= '9'; }
 
 inline int hexDigit(char c) {
@@ -392,33 +421,72 @@ Array<T> parseArray(const std::string& text) {
 // =============================================================================
 // Record shapes (the generated `JSON.parse<T>` builder surface)
 // =============================================================================
-inline const Value& requireField(const Fields& fields, const char* name) {
-    for (const auto& entry : fields) {
+
+// The object a generated record builder reads. Two flavours, same contract:
+//   * a node of the materialised `Value` tree (`Fields`) - the untyped
+//     reader, a nested value the builder already holds, and `verify`;
+//   * a borrowed view of the engine's DOM (`parse_detail::DomObject`) - the
+//     typed `JSON.parse<T>` fast path, which reads the declared fields
+//     straight out of the engine and never materialises the tree. A 50,000
+//     element number array costs one `std::vector<double>` instead of 50,000
+//     `Value` nodes.
+// A view, not an owner: it stays valid for the builder call that receives it.
+class Record {
+public:
+    Record() = default;
+    Record(const Fields& fields) : fields_(&fields) {}
+    explicit Record(const parse_detail::DomObject* dom) : dom_(dom) {}
+
+    const Fields* tree() const { return fields_; }
+    const parse_detail::DomObject* dom() const { return dom_; }
+
+private:
+    const Fields* fields_ = nullptr;
+    const parse_detail::DomObject* dom_ = nullptr;
+};
+
+inline const Value& requireField(const Record& record, const char* name) {
+    if (const parse_detail::DomObject* dom = record.dom()) {
+        return parse_detail::domRequire(*dom, name);
+    }
+    for (const auto& entry : *record.tree()) {
         if (entry.key == name) return entry.value;
     }
     throw ParseError(std::string("missing field '") + name + "'");
 }
 
-inline double numberField(const Fields& fields, const char* name) {
-    const Value& v = requireField(fields, name);
+inline double numberField(const Record& record, const char* name) {
+    if (const parse_detail::DomObject* dom = record.dom()) {
+        return parse_detail::domNumber(*dom, name);
+    }
+    const Value& v = requireField(record, name);
     requireKind(v, Value::Kind::Number, "a number");
     return v.number;
 }
 
-inline std::string stringField(const Fields& fields, const char* name) {
-    const Value& v = requireField(fields, name);
+inline std::string stringField(const Record& record, const char* name) {
+    if (const parse_detail::DomObject* dom = record.dom()) {
+        return parse_detail::domString(*dom, name);
+    }
+    const Value& v = requireField(record, name);
     requireKind(v, Value::Kind::String, "a string");
     return v.text;
 }
 
-inline bool boolField(const Fields& fields, const char* name) {
-    const Value& v = requireField(fields, name);
+inline bool boolField(const Record& record, const char* name) {
+    if (const parse_detail::DomObject* dom = record.dom()) {
+        return parse_detail::domBool(*dom, name);
+    }
+    const Value& v = requireField(record, name);
     requireKind(v, Value::Kind::Bool, "a boolean");
     return v.boolean;
 }
 
-inline Array<double> numberArrayField(const Fields& fields, const char* name) {
-    const Value& v = requireField(fields, name);
+inline Array<double> numberArrayField(const Record& record, const char* name) {
+    if (const parse_detail::DomObject* dom = record.dom()) {
+        return makeArray<double>(parse_detail::domNumberArray(*dom, name));
+    }
+    const Value& v = requireField(record, name);
     requireKind(v, Value::Kind::Array, "an array");
     std::vector<double> out;
     out.reserve(v.items.size());
@@ -426,8 +494,12 @@ inline Array<double> numberArrayField(const Fields& fields, const char* name) {
     return makeArray<double>(std::move(out));
 }
 
-inline Array<std::string> stringArrayField(const Fields& fields, const char* name) {
-    const Value& v = requireField(fields, name);
+inline Array<std::string> stringArrayField(const Record& record,
+                                           const char* name) {
+    if (const parse_detail::DomObject* dom = record.dom()) {
+        return makeArray<std::string>(parse_detail::domStringArray(*dom, name));
+    }
+    const Value& v = requireField(record, name);
     requireKind(v, Value::Kind::Array, "an array");
     std::vector<std::string> out;
     out.reserve(v.items.size());
@@ -435,8 +507,11 @@ inline Array<std::string> stringArrayField(const Fields& fields, const char* nam
     return makeArray<std::string>(std::move(out));
 }
 
-inline Array<bool> boolArrayField(const Fields& fields, const char* name) {
-    const Value& v = requireField(fields, name);
+inline Array<bool> boolArrayField(const Record& record, const char* name) {
+    if (const parse_detail::DomObject* dom = record.dom()) {
+        return makeArray<bool>(parse_detail::domBoolArray(*dom, name));
+    }
+    const Value& v = requireField(record, name);
     requireKind(v, Value::Kind::Array, "an array");
     std::vector<bool> out;
     out.reserve(v.items.size());
@@ -451,11 +526,11 @@ inline Array<bool> boolArrayField(const Fields& fields, const char* name) {
 // mistyped field, duplicate key) is `false`, never a throw.
 template <class F>
 auto verifyRecord(const std::string& text, F build)
-    -> std::optional<decltype(build(std::declval<const Fields&>()))> {
+    -> std::optional<decltype(build(std::declval<const Record&>()))> {
     try {
         const Value root = parseText(text);
         requireKind(root, Value::Kind::Object, "an object");
-        return build(root.fields);
+        return build(Record(root.fields));
     } catch (const std::exception&) {
         return std::nullopt;
     } catch (...) {
@@ -504,10 +579,13 @@ inline bool verifyArray(const std::string& text) {
 // builder reads it with the same surface as parseRecord. The builder
 // receives the object's fields and returns the constructed value.
 template <class F>
-auto recordField(const Fields& fields, const char* name, F build) {
-    const Value& v = requireField(fields, name);
+auto recordField(const Record& record, const char* name, F build) {
+    if (const parse_detail::DomObject* dom = record.dom()) {
+        return build(Record(parse_detail::domRecord(*dom, name)));
+    }
+    const Value& v = requireField(record, name);
     requireKind(v, Value::Kind::Object, "an object");
-    return build(v.fields);
+    return build(Record(v.fields));
 }
 
 // One nested record value: the same contract as recordField, for a value the
@@ -515,14 +593,17 @@ auto recordField(const Fields& fields, const char* name, F build) {
 template <class F>
 auto recordValue(const Value& v, F build) {
     requireKind(v, Value::Kind::Object, "an object");
-    return build(v.fields);
+    return build(Record(v.fields));
 }
 
 // The named field of an object, or nullptr when absent. An absent declared
 // optional field is represented as `undefined`; a present one still runs
 // through the ordinary kind check (a kind mismatch throws).
-inline const Value* findField(const Fields& fields, const char* name) {
-    for (const auto& entry : fields) {
+inline const Value* findField(const Record& record, const char* name) {
+    if (const parse_detail::DomObject* dom = record.dom()) {
+        return parse_detail::domFind(*dom, name);
+    }
+    for (const auto& entry : *record.tree()) {
         if (entry.key == name) return &entry.value;
     }
     return nullptr;
@@ -530,11 +611,22 @@ inline const Value* findField(const Fields& fields, const char* name) {
 
 // The validated parse: the text must be an object; the generated builder then
 // extracts every declared field (and throws on a missing/mistyped one).
+//
+// Fast path: the engine validates the text and the builder reads the declared
+// fields straight out of the DOM (no `Value` tree - see `Record`). Anything
+// the engine refuses (malformed input, a duplicate key anywhere in the
+// document, a root that is not an object) re-runs the hand-written reader on
+// the same text, which throws the canonical ParseError with the same message
+// and byte offset as always. Valid input never reaches it.
 template <class F>
 auto parseRecord(const std::string& text, F build) {
-    const Value root = parseText(text);
+    if (const std::optional<const parse_detail::DomObject*> dom =
+            parse_detail::parseJsonObject(text)) {
+        return build(Record(*dom));
+    }
+    const Value root = Parser(text).parseDocument();
     requireKind(root, Value::Kind::Object, "an object");
-    return build(root.fields);
+    return build(Record(root.fields));
 }
 
 }  // namespace cp3::runtime::json

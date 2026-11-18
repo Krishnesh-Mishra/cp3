@@ -17,11 +17,14 @@
 // a native i64 index otherwise; the accumulator's type for a reduce) before
 // lowering the arrow itself. A reduce body that is one
 // of the associative shapes (`acc + <expr>` from 0 where the expression never
-// reads the accumulator, `acc * <expr>` from 1, the max/min conditional) gets
-// the chunked 5-argument lowering with a synthesized combine op, but only when
-// support/parallel_combine.cpp proves the expression pure and integer exact;
-// every other reduce keeps the sequential 4-argument form, which is still
-// exact.
+// reads the accumulator, `acc * <expr>` from 1, the max/min conditional, or
+// `acc + <expr>` over a native integer accumulator) gets a chunked lowering
+// with a synthesized combine op, but only when support/parallel_combine.cpp
+// proves the expression pure and integer exact; every other reduce keeps the
+// sequential 4-argument form, which is still exact. The native-integer form
+// calls `parallelReduceIntegerAdd` with an index-only closure: the runtime
+// folds checked adds per chunk and proves the sequential prefix, rerunning the
+// sequential loop whenever that proof (or any exception) says otherwise.
 //
 // The surface itself is closed (spec 13): `parallel` has exactly the members
 // `for`, `reduce` and `run`, and each takes the argument list above. A call
@@ -39,6 +42,7 @@
 
 #include "cp3/diag/diagnostic_codes.hpp"
 #include "detail/generator/cpp_writer.h"
+#include "detail/generator/mangle.h"
 #include "detail/parallel/parallel.h"
 #include "detail/parallel/parallel_combine.h"
 #include "detail/generator/type_map.h"
@@ -318,12 +322,39 @@ std::string Generator::emitParallelReduce(const CallExpr& c) {
     }
     const std::string init = expr(*c.arguments[1]);
     const ParallelIndexParam index = parallelIndexParam(options_.typeSystem);
+    const auto combine = parallelReduceCombine(body, *c.arguments[1],
+                                               functionDecls_, sema_,
+                                               options_.typeSystem);
+    if (combine && combine->integerAdd) {
+        // The exact native-integer fold: the gate proved the body is
+        // `acc + rhs` with a pure rhs that never reads `acc`, so the closure
+        // only needs the index and the runtime applies the checked add. The
+        // return spelling is the accumulator's: the gate required the fold to
+        // resolve to the same native type.
+        if (intOn()) intFail();
+        ++nestingDepth_;
+        pushScope();
+        declare(combine->indexParam, index.type);
+        // The old 4/5-argument closure emitted the fold as an arrow body with
+        // `expected_` set to the arrow's return type. Reproduce that here: a
+        // native return type makes integer literals emit as native tokens
+        // (`5LL`, not `5.0`), so the addends stay exactly the sequential ones.
+        const std::optional<Type> savedExpected = expected_;
+        expected_ = arrowReturnCpType(body, std::nullopt);
+        const std::string rhs = expr(*combine->rhs);
+        expected_ = savedExpected;
+        popScope();
+        --nestingDepth_;
+        const std::string rhsClosure =
+            "[&](" + index.cpp + " " + mapIdent(combine->indexParam) + ") -> " +
+            initInfo.cpp + " {\nreturn " + rhs + ";\n}";
+        return "::cp3::runtime::parallelReduceIntegerAdd(" + begin + ", " +
+               end + ", " + init + ", " + rhsClosure + ")";
+    }
     const std::string closure = emitParallelClosure(
         body, {initInfo.type, index.type}, {initInfo.cpp, index.cpp});
     std::string out = "::cp3::runtime::parallelReduce";
-    if (auto combine = parallelReduceCombine(body, *c.arguments[1],
-                                             functionDecls_, sema_,
-                                             options_.typeSystem)) {
+    if (combine) {
         out += std::string("<::cp3::runtime::ParallelCombineKind::") +
                combine->kind + ">";
         out += "(" + begin + ", " + end + ", " + init + ", " + closure + ", " +

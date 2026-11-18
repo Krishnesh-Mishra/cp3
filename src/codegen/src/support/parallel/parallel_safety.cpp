@@ -135,8 +135,10 @@ public:
     Classifier(
         const std::unordered_map<std::string, const FunctionDeclaration*>&
             functions,
-        const SemaResult& sema, TypeSystem typeSystem)
-        : functions_(functions), sema_(sema), typeSystem_(typeSystem) {}
+        const SemaResult& sema, TypeSystem typeSystem,
+        bool allowIdentityConversions)
+        : functions_(functions), sema_(sema), typeSystem_(typeSystem),
+          allowIdentityConversions_(allowIdentityConversions) {}
 
     bool expression(const Expr& e, const std::unordered_set<std::string>& names,
                     const DivFacts& facts) {
@@ -235,10 +237,13 @@ private:
     bool callExpr(const CallExpr& c, const std::unordered_set<std::string>& names,
                   const DivFacts& facts) {
         if (!c.callee || c.callee->kind != NodeKind::Identifier) return false;
-        if (!c.typeArgs.empty()) return false;
         const std::string& callee = static_cast<const Identifier&>(*c.callee).name;
         // A parameter/local with the same spelling shadows the declaration.
         if (names.count(callee) != 0) return false;
+        if (!c.typeArgs.empty()) {
+            return allowIdentityConversions_ &&
+                   identityConversion(c, callee, names, facts);
+        }
         const auto decl = functions_.find(callee);
         if (decl == functions_.end() || decl->second == nullptr) return false;
         if (c.arguments.size() != decl->second->params.size()) return false;
@@ -246,6 +251,29 @@ private:
             if (!arg || !expression(*arg, names, facts)) return false;
         }
         return function(callee);
+    }
+
+    // `parseTo<T>(x)` where T and x are the same native integer: a pure scalar
+    // read that neither mutates nor observes anything. The accepted route is
+    // only enabled for the exact integer reduce, whose runtime reruns the
+    // sequential loop whenever the emitted conversion raises, so even the
+    // 2^53 double round-trip edge cannot change the observable result.
+    bool identityConversion(const CallExpr& c, const std::string& callee,
+                            const std::unordered_set<std::string>& names,
+                            const DivFacts& facts) {
+        if (callee != "parseTo" || c.typeArgs.size() != 1 ||
+            c.arguments.size() != 1 || !c.arguments.front()) {
+            return false;
+        }
+        // A program function with the same spelling shadows the builtin.
+        if (functions_.count(callee) != 0) return false;
+        const Type* target = sema_.typeOf(c.nodeId);
+        if (target == nullptr || !isNativeInteger(*target)) return false;
+        const Expr& arg = *c.arguments.front();
+        if (!expression(arg, names, facts)) return false;
+        const Type* source = sema_.typeOf(arg.nodeId);
+        return source != nullptr && isNativeInteger(*source) &&
+               source->name == target->name;
     }
 
     bool function(const std::string& name) {
@@ -502,6 +530,7 @@ private:
         functions_;
     const SemaResult& sema_;
     TypeSystem typeSystem_;
+    bool allowIdentityConversions_ = false;
     std::unordered_map<std::string, Verdict> states_;
 };
 
@@ -510,8 +539,10 @@ private:
 bool parallelPureIntegerExpr(
     const Expr& e, const std::unordered_set<std::string>& integerNames,
     const std::unordered_map<std::string, const FunctionDeclaration*>& functions,
-    const SemaResult& sema, TypeSystem typeSystem) {
-    Classifier classifier(functions, sema, typeSystem);
+    const SemaResult& sema, TypeSystem typeSystem,
+    bool allowIdentityConversions) {
+    Classifier classifier(functions, sema, typeSystem,
+                          allowIdentityConversions);
     return classifier.expression(e, integerNames, {});
 }
 

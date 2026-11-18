@@ -970,7 +970,7 @@ std::string Generator::networkJsonRecord(const MemberExpr& m, const CallExpr& c)
     // `JSON.parse<T>` path: the builder produces the field struct and the
     // reference model wraps it before it reaches an interface binding.
     return "(" + expr(*m.object) + ").json<::cp3::runtime::Ref<" + mapIdent(name) +
-           ">>([](const ::cp3::runtime::json::Fields& cp3_f) { auto cp3_value = [&]() { " +
+           ">>([](const ::cp3::runtime::json::Record& cp3_f) { auto cp3_value = [&]() { " +
            builderIt->second + " }(); return ::cp3::runtime::makeRef<" + mapIdent(name) +
            ">(cp3_value); })";
 }

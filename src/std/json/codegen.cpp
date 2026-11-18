@@ -286,7 +286,7 @@ std::string emitNestedRecord(const Type& nestedType, int fdepth,
     } else {
         read += "recordField(" + fvar + ", " + name + ", ";
     }
-    read += "[](const ::cp3::runtime::json::Fields& " + inner +
+    read += "[](const ::cp3::runtime::json::Record& " + inner +
             ") { " + nested->structName + " cp3_in{}; " + *body +
             "return cp3_in; })";
     std::string call =
@@ -431,10 +431,10 @@ std::optional<RecordBuild> inlineRecordBuild(const Type& t) {
     return out;
 }
 
-// The `[](const Fields& cp3_f) { ... }` suffix for a record build: the
+// The `[](const Record& cp3_f) { ... }` suffix for a record build: the
 // builder lambda that parses the fields into the plain field struct.
 std::string recordBuilderLambdaText(const std::string& builderText) {
-    return "[](const ::cp3::runtime::json::Fields& cp3_f) { " + builderText +
+    return "[](const ::cp3::runtime::json::Record& cp3_f) { " + builderText +
            " }";
 }
 
@@ -1179,7 +1179,7 @@ std::string Generator::jsonRecordParse(const std::string& shape,
     // the interface wrapper (`cp3_iface_<T>`) and reads through the handle.
     return "::cp3::runtime::makeRef<" + mapIdent(shape) +
            ">(::cp3::runtime::json::parseRecord(" + text +
-           ", [](const ::cp3::runtime::json::Fields& cp3_f) { " +
+           ", [](const ::cp3::runtime::json::Record& cp3_f) { " +
            jsonShapeBuilders_[shape] + " }))";
 }
 
