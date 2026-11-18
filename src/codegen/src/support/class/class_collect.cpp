@@ -18,6 +18,7 @@
 #include "cp3/diag/diagnostic_codes.hpp"
 #include "detail/class/class_model.h"
 #include "detail/class/class_walk.h"
+#include "detail/generator/mangle.h"
 #include "detail/generator/type_map.h"
 
 namespace cp3 {
@@ -31,13 +32,30 @@ void Generator::collectModels(const Program& program) {
         if (s) collectClassNames(*s);
     }
     // Imported (from another unit) top-level classes: register the same TU-scope
-    // model so emitModelMember / new / class-ref can find them. The TU of
-    // the owning module emits the struct itself; the consumer TU re-emits
-    // its own class under its own namespace. Same-named classes in
-    // different namespaces are distinct types at the C++ level, which
-    // matches cp3's per-unit ABI contract.
-    for (const ClassDeclaration* c : options_.importedClasses) {
-        if (c != nullptr) collectClassNames(*c);
+    // model so emitModelMember / new / class-ref can find them. The declaring
+    // unit's namespace is the one the consumer references: the struct lives
+    // there (the shared header/phase-1 sections carry it), and a dependency
+    // whose emit was skipped (the fragment cache) never ran its own model
+    // walk in this process. Registering under the consumer's namespace would
+    // spell a class the consumer TU never emits.
+    for (const ImportedClass& imported : options_.importedClasses) {
+        if (imported.decl == nullptr) continue;
+        const ClassDeclaration& c = *imported.decl;
+        // The name is shared with every earlier registration (this unit's own
+        // class, or the owning unit's walk in the fresh whole-program order):
+        // keep it. Only a model this consumer never saw gets the owner's
+        // qualified spelling.
+        const bool fresh = ModelRegistry::get().classByName(c.name) == nullptr;
+        ClassModel& cm = ModelRegistry::get().addClass(c.name, false, &c);
+        if (cm.typeParams.empty()) {
+            for (const auto& tp : c.typeParams) {
+                if (tp) cm.typeParams.push_back(tp->name);
+            }
+        }
+        if (fresh || cm.decl == &c) {
+            cm.cpp = "::" + suggestNamespace(imported.moduleName) + "::" +
+                     cm.structName;
+        }
     }
     // Imported interfaces: register the model in this TU too, so a type
     // annotation like `Tab` has a wrapper here as well as in the owning

@@ -156,6 +156,11 @@ private:
         const ModuleGraph& graph, const std::vector<CheckedModuleUnit>& units);
     void runUnit(const Program& program, std::string& decls, std::string& defs,
                  std::string& mainBody, std::string& globals);
+    // A reused fragment contributes no emit walk; its top-level declarations
+    // still have to be spellable by the units emitted after it (the shared
+    // registry is what every unit's `classify` reads). Registers exactly
+    // those names, under the reused unit's own namespace.
+    void registerFragmentUnitModels(const CompilationUnit& unit);
     void emitProgramUnit(const detail::ProgramLink& link,
                          const CompilationUnit& unit,
                          detail::ProgramAssembly& assembly,

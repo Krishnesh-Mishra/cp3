@@ -32,7 +32,12 @@ namespace {
 // (the namespace-import case: fragments from the pre-CP3304 compiler replayed
 // with no diagnostics and exit 0, oscillating with cache presence). Bump this
 // constant on any commit that changes sema or codegen diagnostics.
-constexpr unsigned kIncrementalSemanticsEpoch = 2;
+// 3: the reused-unit model-registry fix (the consumer of an incremental-reuse
+// build spelled imported pak classes in its own namespace, e.g.
+// `cp3_mod_index::RedisClient`), plus the whole-program Ref<T> helper block
+// unconditionality; reusing a pre-fix consumer-entry fragment replays the old
+// wrong spelling verbatim, so the epoch must move.
+constexpr unsigned kIncrementalSemanticsEpoch = 3;
 
 // Length-prefixed field writer/reader: "<len>:<bytes>".
 void putStr(std::string& out, const std::string& text) {

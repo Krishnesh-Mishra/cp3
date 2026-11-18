@@ -307,12 +307,20 @@ std::string needsIncludes(const ProgramNeeds& n) {
 
 // The helper blocks for every generated TU of a program, in the fixed order
 // both pipelines emit them (the helper block first, then the family blocks).
+// kRefHelperBlock is always on here: the ref usages are spelled by the units'
+// fragments, which carry no needs bits (there is none for the ref surface),
+// and a stale-cache hit must still find the overloads the forward declarations
+// promise. kCollectionsHelperBlock stays gated on n.collections: the block
+// names `cp3::runtime::collections::Map`, which exists only with the family's
+// include, and n.collections is what selects both.
 std::string helperBlocks(const ProgramNeeds& n) {
     std::string out;
     out += kHelperBlock;
     if (n.typedArray) out += kTypedArrayHelperBlock;
     if (n.buffer) out += kBufferHelperBlock;
     if (n.eventEmitter) out += kEventEmitterHelperBlock;
+    out += kRefHelperBlock;
+    if (n.collections) out += kCollectionsHelperBlock;
     if (n.unionValue) out += unionHelperBlock();
     if (n.objectValue) out += objectHelperBlock();
     out += "\n";
@@ -586,6 +594,48 @@ GeneratedProgramModules Generator::runProgramModules(
     return assembleProgramModules(assembly, moduleName_);
 }
 
+// A reused fragment never runs its own model walk in this process: it does
+// not emit, so collectModels is never called. Without this, a unit emitted
+// after the reused one would resolve one of that unit's imported classes to
+// the importer's namespace (where no struct exists) instead of the declaring
+// unit's. Top-level declarations only: an imported class is spelled through
+// its declaring unit, and an interface's spelling comes from its registered
+// shape label.
+void Generator::registerFragmentUnitModels(const CompilationUnit& unit) {
+    if (unit.ast == nullptr) return;
+    ModelRegistry& reg = ModelRegistry::get();
+    const std::string previous = reg.namesp();
+    const std::string ns = suggestNamespace(unit.moduleName);
+    reg.setNamespace(ns);
+    for (const auto& stmtPtr : unit.ast->body) {
+        if (!stmtPtr) continue;
+        const Stmt* target = stmtPtr.get();
+        if (target->kind == NodeKind::ExportDeclaration) {
+            const auto& ed = static_cast<const ExportDeclaration&>(*target);
+            target = ed.declaration.get();
+        }
+        if (target == nullptr) continue;
+        if (target->kind == NodeKind::ClassDeclaration) {
+            const auto& c = static_cast<const ClassDeclaration&>(*target);
+            const bool fresh = reg.classByName(c.name) == nullptr;
+            ClassModel& cm = reg.addClass(c.name, false, &c);
+            if (cm.typeParams.empty()) {
+                for (const auto& tp : c.typeParams) {
+                    if (tp) cm.typeParams.push_back(tp->name);
+                }
+            }
+            if (fresh || cm.decl == &c) {
+                cm.cpp = "::" + ns + "::" + cm.structName;
+            }
+            continue;
+        }
+        if (target->kind == NodeKind::InterfaceDeclaration) {
+            registerInterface(static_cast<const InterfaceDeclaration&>(*target));
+        }
+    }
+    reg.setNamespace(previous);
+}
+
 void Generator::emitProgramUnit(const ProgramLink& link,
                                 const CompilationUnit& unit,
                                 ProgramAssembly& assembly,
@@ -602,6 +652,11 @@ void Generator::emitProgramUnit(const ProgramLink& link,
             if (rec.sourceHash == hex64u(detail::fragmentSourceHashOf(unit)) &&
                 rec.isEntry == unit.isEntry &&
                 rec.isPackage == unit.isPackage) {
+                // The reused unit's emit walk is skipped entirely, so its
+                // declarations never reach the shared model registry. Register
+                // just the top-level names (under its own namespace) so units
+                // emitted after it spell them correctly.
+                registerFragmentUnitModels(unit);
                 if (const char* dbg = std::getenv("CP3_INCREMENTAL_DEBUG");
                     dbg != nullptr && *dbg != '\0') {
                     std::fprintf(stderr,

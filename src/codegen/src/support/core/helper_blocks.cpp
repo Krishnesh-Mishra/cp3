@@ -214,6 +214,69 @@ inline bool cp3_truthy(const ::cp3::runtime::buffer::Buffer&) { return true; }
 
 )CP3HELPERS";
 
+// std/collections' per-TU helpers (added only when the unit uses the module):
+// without them `console.log(map)` has no `cp3_ts` overload for the handle and
+// `if (map)` finds no `cp3_truthy` either (the handle's bool is explicit).
+const char* const kCollectionsHelperBlock = R"CP3HELPERS(namespace {
+
+// ----- std/collections (D44): Map / Set ---------------------------------------
+// A `Map`/`Set` handle printed by console.log, in insertion order; values are
+// rendered the same way regular arrays render their elements.
+//   Map(2) { name => mira, count => 1 }
+//   Set(2) { mira, count }
+//   Map(0) {} / Set(0) {}
+template <class K, class V>
+inline std::string cp3_ts(const ::cp3::runtime::collections::Map<K, V>& m) {
+    const std::size_t n = m ? static_cast<std::size_t>(m->size()) : 0;
+    std::string out = "Map(";
+    out += std::to_string(n);
+    out += ") {";
+    if (n != 0) {
+        const auto keys = m->keys();
+        const auto values = m->values();
+        bool first = true;
+        for (std::size_t i = 0; i < keys->size(); ++i) {
+            out += first ? " " : ", ";
+            first = false;
+            out += cp3_ts((*keys)[i]);
+            out += " => ";
+            out += cp3_ts((*values)[i]);
+        }
+    }
+    out += " }";
+    return out;
+}
+template <class T>
+inline std::string cp3_ts(const ::cp3::runtime::collections::Set<T>& s) {
+    const std::size_t n = s ? static_cast<std::size_t>(s->size()) : 0;
+    std::string out = "Set(";
+    out += std::to_string(n);
+    out += ") {";
+    if (n != 0) {
+        const auto values = s->values();
+        bool first = true;
+        for (std::size_t i = 0; i < values->size(); ++i) {
+            out += first ? " " : ", ";
+            first = false;
+            out += cp3_ts((*values)[i]);
+        }
+    }
+    out += " }";
+    return out;
+}
+template <class K, class V>
+inline bool cp3_truthy(const ::cp3::runtime::collections::Map<K, V>&) {
+    return true;
+}
+template <class T>
+inline bool cp3_truthy(const ::cp3::runtime::collections::Set<T>&) {
+    return true;
+}
+
+}  // namespace
+
+)CP3HELPERS";
+
 // The builtin EventEmitter's per-TU helpers (D74), added only when the unit
 // uses the builtin: `EventValue` exists only with the cp3/async/emitter.hpp
 // include, and a listener parameter arrives as one.

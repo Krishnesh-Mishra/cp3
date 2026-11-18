@@ -219,6 +219,7 @@ std::string Generator::buildSource(const std::string& decls, const std::string& 
     if (needsBuffer_) out += kBufferHelperBlock;
     if (needsEventEmitter_) out += kEventEmitterHelperBlock;
     if (needsRef_) out += kRefHelperBlock;
+    if (needsCollections_) out += kCollectionsHelperBlock;
     if (needsUnion_) out += unionHelperBlock();
     if (needsObject_) out += objectHelperBlock();
     out += "\nnamespace " + namesp_ + " {\n\n";

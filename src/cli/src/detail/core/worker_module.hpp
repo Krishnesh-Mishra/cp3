@@ -82,11 +82,11 @@ std::vector<const EnumDeclaration*> importedEnumsFor(const ModuleGraph& graph,
 // local import, including one reached through another import). The CLI hands
 // these to codegen as `CodegenOptions::importedClasses`: an imported class is
 // usable as a member-read and `new` target in consuming units, where the
-// local `collectModels` cannot see the declaration; codegen re-registers the
-// model so the C++ references line up
-// with the emitted struct of the owning unit, or duplicate it when the owner
-// does not need the class re-spelled.
-std::vector<const ClassDeclaration*> importedClassesFor(
+// local `collectModels` cannot see the declaration; codegen registers the
+// model with the DECLARING unit's namespace so the shared header/phase-1
+// sections are what the consumer references (a dependency whose emit is
+// skipped never runs its own model walk in this process).
+std::vector<ImportedClass> importedClassesFor(
     const ModuleGraph& graph, const CompilationUnit& unit);
 
 // Every top-level interface declared in a unit of `graph` other than `unit`.

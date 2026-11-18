@@ -99,26 +99,22 @@ gate: BIG WARN (fix this): compute-single-int: cp3 456 ms is 1.22x java (374 ms)
 
 <!-- test:compute-multi:start -->
 ### compute-multi
-_Updated 2026-11-17T22:16:34 by `python benchmarks/runner/run_benchmark.py --only compute-multi --reps 15`._
+_Updated 2026-11-18T07:33:59 by `python benchmarks/runner/run_benchmark.py --only compute-multi --reps 15 --cp3c build\windows-release\bin\cp3c.exe`._
 
 ```text
   ◆ compute-multi  expected = 131434424 (same total split across all cores) | median/best/p95 ms; CV = variation %
-  lang    median ms  best ms  p95 ms   CV%         vs cp3  RSS MiB  bin KiB
-  ─────────────────────────────────────────────────────────────────────────
-  rust        29.96    27.46   35.64  17.3  15.49x faster      4.8      849
-  cpp         41.98    39.46   45.88  10.8  11.05x faster      5.0       24
-  go          47.07    43.84   54.55  13.7   9.86x faster      6.9     1759
-  java        141.5    124.5   156.6   9.9   3.28x faster     41.7        1
-  js          339.4    322.8   350.0   2.6   1.37x faster    283.5        -
-  cp3         463.9    452.8   636.9  14.4       baseline      6.1      705
-  python     1694.3   1567.0  1911.4   6.8   3.65x slower     19.8        -
+  lang    median ms  best ms  p95 ms    CV%         vs cp3  RSS MiB  bin KiB
+  ──────────────────────────────────────────────────────────────────────────
+  rust        24.51    22.78   26.75  143.2   1.58x faster      4.9      849
+  cp3         38.63    35.38   179.8   88.1       baseline      7.4      711
+  go          40.37    37.39   44.69  141.8   1.05x slower      6.9     1759
+  cpp         40.54    35.08   53.27   22.8   1.05x slower      5.1       24
+  java        157.1    145.0   201.3   19.8   4.07x slower     41.7        1
+  js          364.5    333.8   381.3    4.1   9.44x slower    283.5        -
+  python     2024.0   1923.6  2238.5    5.4  52.39x slower     19.9        -
     ✓  output verified: 7/7 match oracle '131434424'
 
-gate: BIG WARN (fix this) multi-core compute-multi: cp3 464 ms is 11.05x cpp (42 ms); multi-core rows must be faster than cpp (target < 1.00x)
-gate: BIG WARN (fix this): compute-multi: cp3 464 ms is 15.49x rust (30 ms), tripwire 1.20x
-gate: BIG WARN (fix this): compute-multi: cp3 464 ms is 9.86x go (47 ms), tripwire 1.00x
-gate: BIG WARN (fix this): compute-multi: cp3 464 ms is 1.37x js (339 ms), tripwire 1.00x
-gate: BIG WARN (fix this): compute-multi: cp3 464 ms is 3.28x java (142 ms), tripwire 1.00x
+gate: BIG WARN (fix this): compute-multi: cp3 39 ms is 1.58x rust (25 ms), tripwire 1.20x
 ```
 <!-- test:compute-multi:end -->
 
@@ -429,21 +425,20 @@ gate: BIG WARN (fix this): generics-mono: cp3 370 ms is 2.94x java (126 ms), tri
 
 <!-- test:json-roundtrip:start -->
 ### json-roundtrip
-_Updated 2026-11-17T21:07:58 by `python benchmarks/runner/run_benchmark.py --only json-parse-large,json-roundtrip,compute-multi --reps 5 --cp3c build\windows-release\bin\cp3c.exe`._
+_Updated 2026-11-18T10:38:09 by `python benchmarks/runner/run_benchmark.py --only json-parse-large,json-roundtrip --reps 10`._
 
 ```text
   ◆ json-roundtrip  expected = 664346 | 20,000 parse+stringify round trips of one 310-byte record | median/best/p95 ms; CV = var…
   lang    median ms  best ms  p95 ms   CV%        vs cp3  RSS MiB  bin KiB
   ────────────────────────────────────────────────────────────────────────
-  js          106.0    101.8   115.2   4.7  1.55x faster     39.7        -
-  go          142.1    141.2   584.3  85.8  1.16x faster     12.6     2154
-  cp3         164.5    162.2   564.1  63.1      baseline      5.8      768
-  java        221.3    208.5   238.7   4.8  1.34x slower    151.4        4
-  python      276.7    267.9   296.6   4.8  1.68x slower     12.7        -
+  js          109.2    104.0   130.3   6.8  1.10x faster     40.8        -
+  cp3         120.0    110.3   337.2  52.2      baseline      5.4      772
+  go          151.5    141.3   178.2   7.5  1.26x slower     14.3     2154
+  python      284.5    276.5   289.6   1.8  2.37x slower     12.6        -
+  java        312.8    229.0   344.7  15.1  2.61x slower    155.1        4
     ✓  output verified: 5/5 match oracle '664346'
 
-gate: BIG WARN (fix this): json-roundtrip: cp3 165 ms is 1.16x go (142 ms), tripwire 1.00x
-gate: BIG WARN (fix this): json-roundtrip: cp3 165 ms is 1.55x js (106 ms), tripwire 1.00x
+gate: BIG WARN (fix this): json-roundtrip: cp3 120 ms is 1.10x js (109 ms), tripwire 1.00x
 ```
 <!-- test:json-roundtrip:end -->
 
@@ -665,23 +660,18 @@ _Updated 2026-11-17T10:42:12 by `python benchmarks/runner/run_benchmark.py`._
 
 <!-- test:json-parse-large:start -->
 ### json-parse-large
-_Updated 2026-11-17T21:08:12 by `python benchmarks/runner/run_benchmark.py --only json-parse-large,json-roundtrip,compute-multi --reps 5 --cp3c build\windows-release\bin\cp3c.exe`._
+_Updated 2026-11-18T10:38:30 by `python benchmarks/runner/run_benchmark.py --only json-parse-large,json-roundtrip --reps 10`._
 
 ```text
   ◆ json-parse-large  expected = 613781 | 204,472-byte JSON record, 20 parse rounds | median/best/p95 ms; CV = variation %
-  lang    median ms  best ms  p95 ms   CV%        vs cp3  RSS MiB  bin KiB
-  ────────────────────────────────────────────────────────────────────────
-  js          87.11    82.64   102.2   8.8  2.41x faster     52.0        -
-  go          121.9    118.3   521.4  88.9  1.72x faster     12.7     2154
-  python      124.9    122.9   161.1  12.0  1.68x faster     16.6        -
-  java        184.3    175.3   199.5   5.0  1.14x faster    131.6        3
-  cp3         209.6    193.0   655.1  59.9      baseline     16.1      748
+  lang    median ms  best ms  p95 ms    CV%        vs cp3  RSS MiB  bin KiB
+  ─────────────────────────────────────────────────────────────────────────
+  cp3         30.87    30.10   228.6  111.7      baseline      8.9      752
+  js          131.0    124.7   138.4    3.3  4.24x slower     52.0        -
+  go          143.4    138.0   148.0    2.4  4.64x slower     16.8     2154
+  python      203.2    194.4   215.3    3.3  6.58x slower     16.5        -
+  java        291.2    276.4   303.6    2.6  9.43x slower    132.3        3
     ✓  output verified: 5/5 match oracle '613781'
-
-gate: BIG WARN (fix this): json-parse-large: cp3 210 ms is 1.72x go (122 ms), tripwire 1.00x
-gate: BIG WARN (fix this): json-parse-large: cp3 210 ms is 2.41x js (87 ms), tripwire 1.00x
-gate: BIG WARN (fix this): json-parse-large: cp3 210 ms is 1.68x python (125 ms), tripwire 1.00x
-gate: BIG WARN (fix this): json-parse-large: cp3 210 ms is 1.14x java (184 ms), tripwire 1.00x
 ```
 <!-- test:json-parse-large:end -->
 

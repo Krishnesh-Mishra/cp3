@@ -267,15 +267,17 @@ const ClassDeclaration* topLevelClass(const Stmt& s) {
     return nullptr;
 }
 
-std::vector<const ClassDeclaration*> importedClassesFor(
+std::vector<ImportedClass> importedClassesFor(
     const ModuleGraph& graph, const CompilationUnit& unit) {
-    std::vector<const ClassDeclaration*> out;
+    std::vector<ImportedClass> out;
     for (const CompilationUnit* other : graph.units()) {
         if (other == nullptr || other == &unit || !other->ast) continue;
         for (const auto& stmtPtr : other->ast->body) {
             if (!stmtPtr) continue;
             const ClassDeclaration* c = topLevelClass(*stmtPtr);
-            if (c != nullptr && !c->name.empty()) out.push_back(c);
+            if (c != nullptr && !c->name.empty()) {
+                out.push_back(ImportedClass{c, other->moduleName});
+            }
         }
     }
     return out;

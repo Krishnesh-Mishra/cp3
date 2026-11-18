@@ -24,6 +24,8 @@ extern const char* const kBufferHelperBlock;
 extern const char* const kEventEmitterHelperBlock;
 // spec 15 handles: `Ref<T>` / optional truthiness (cp3/core/value.hpp).
 extern const char* const kRefHelperBlock;
+// std/collections (D44): `console.log(Map/Set)` formatting and truthiness.
+extern const char* const kCollectionsHelperBlock;
 
 // The primitive-union helpers (`cp3_ts`/`cp3_truthy` over a `std::variant`).
 const char* unionHelperBlock();

@@ -50,6 +50,17 @@ struct WorkerSite {
     bool inlineSite = false;   // the inline arrow form (defined in this unit)
 };
 
+// One top-level class declared in another unit, plus the module name of the
+// unit that declares it. The namespace a consumer spells the class in always
+// comes from the DECLARING unit (`cp3_mod_<moduleName>`), never from the
+// consumer: the owning unit's generated declarations are what the shared
+// header/phase-1 sections carry, and a reused (fragment-cached) dependency
+// never runs its own model walk in this process.
+struct ImportedClass {
+    const ClassDeclaration* decl = nullptr;
+    std::string moduleName;
+};
+
 // Per-unit codegen options outside the AST/sema side tables. All-default for
 // every ordinary unit; the CLI fills `workers` for an entry unit that starts
 // workers and sets `workerModule` while generating a worker unit itself.
@@ -61,13 +72,10 @@ struct CodegenOptions {
     // re-emits the names it imported as its own `enum class`, and same-named
     // enums are structurally compatible at the channel boundary (D80).
     std::vector<const EnumDeclaration*> importedEnums;
-    // Top-level classes declared in the unit's local imports. Each unit
-    // re-emits the class names it imports inside its own namespace so the
-    // consumer's expression lowering can find them (type spelling, dll
-    // bytes, member access). Same-named classes in different namespaces are
-    // distinct types, so a consumer using one sees only the dep's or local
-    // struct, not a duplicate.
-    std::vector<const ClassDeclaration*> importedClasses;
+    // Top-level classes declared in other units. Each is registered under its
+    // DECLARING unit's namespace so the shared header/phase-1 sections are what
+    // the consumer references; the consumer TU never emits the struct itself.
+    std::vector<ImportedClass> importedClasses;
     // Top-level interfaces declared in the unit's local imports. Each unit
     // re-emits the interface names it imports inside its own namespace so
     // annotation positions get the dep's by-value wrapper struct.
